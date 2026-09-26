@@ -1,5 +1,6 @@
 #include "Dev/FTOSmokeTest.h"
 #include "City/FTOCityGenerator.h"
+#include "City/FTOTrafficCar.h"
 #include "Core/FTOGameMode.h"
 #include "Core/FTOGameState.h"
 #include "Crime/FTOCrimeDirector.h"
@@ -21,7 +22,7 @@
 namespace
 {
 	// Seconds to wait after each step before running the next one.
-	const float StepDelays[] = { 1.f, 1.5f, 0.5f, 0.8f, 0.5f, 0.5f, 4.f, 1.f, 3.f, 1.f, 3.f, 1.f, 3.f, 2.f, 1.5f, 1.f, 2.f, 1.f, 0.f };
+	const float StepDelays[] = { 1.f, 1.5f, 0.5f, 0.8f, 0.5f, 0.5f, 4.f, 1.f, 3.f, 1.f, 3.f, 1.f, 3.f, 2.f, 1.5f, 1.f, 2.f, 1.f, 0.05f, 1.f, 0.f };
 }
 
 AFTOSmokeTest::AFTOSmokeTest()
@@ -71,6 +72,11 @@ void AFTOSmokeTest::Tick(float DeltaSeconds)
 		}
 		ReadyTime = Now;
 		NextStepTime = Now + 2.f;
+		// Crisp stills.
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			PC->ConsoleCommand(TEXT("r.MotionBlurQuality 0"));
+		}
 		UE_LOG(LogFTO, Display, TEXT("SMOKE: world ready, starting tour."));
 	}
 
@@ -296,6 +302,21 @@ void AFTOSmokeTest::RunStep(int32 Step)
 		break;
 
 	case 18:
+		// Side-on look at a passing car.
+		for (TActorIterator<AFTOTrafficCar> It(World); It; ++It)
+		{
+			const FVector CarLoc = It->GetActorLocation();
+			const FVector Side = It->GetActorRightVector();
+			ViewFrom(CarLoc + Side * 700.f + It->GetActorForwardVector() * 250.f + FVector(0.f, 0.f, 150.f), CarLoc);
+			break;
+		}
+		break;
+
+	case 19:
+		Shot(TEXT("08_traffic"), false);
+		break;
+
+	case 20:
 		if (PC && Officer)
 		{
 			PC->SetViewTargetWithBlend(Officer, 0.f);

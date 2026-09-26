@@ -27,6 +27,14 @@ CHARACTERS = [
      "clips": [], "dest": "/Game/FTO/Characters/Civilians", "skeleton": OFFICER_SKELETON},
 ]
 
+# Static meshes (vehicles, props): folder, names, destination.
+STATICS = [
+    {"folder": "Vehicles",
+     "meshes": ["SM_Car_Sedan", "SM_Car_Hatchback", "SM_Car_Van", "SM_Car_Pickup", "SM_Car_Taxi",
+                "SM_Car_IceCream", "SM_Car_Cruiser", "SM_Wheel"],
+     "dest": "/Game/FTO/Vehicles"},
+]
+
 eal = unreal.EditorAssetLibrary
 tools = unreal.AssetToolsHelpers.get_asset_tools()
 
@@ -100,6 +108,56 @@ def animation_options(skeleton):
     return ui
 
 
+def static_options():
+    ui = unreal.FbxImportUI()
+    ui.set_editor_property("automated_import_should_detect_type", False)
+    ui.set_editor_property("import_mesh", True)
+    ui.set_editor_property("import_as_skeletal", False)
+    ui.set_editor_property("import_animations", False)
+    ui.set_editor_property("import_materials", False)
+    ui.set_editor_property("import_textures", False)
+    ui.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_STATIC_MESH)
+    data = ui.get_editor_property("static_mesh_import_data")
+    data.set_editor_property("import_uniform_scale", METRES_TO_CM)
+    data.set_editor_property("vertex_color_import_option", unreal.VertexColorImportOption.REPLACE)
+    data.set_editor_property("combine_meshes", True)
+    data.set_editor_property("auto_generate_collision", False)
+    data.set_editor_property("build_nanite", False)
+    data.set_editor_property("convert_scene", True)
+    return ui
+
+
+def import_statics(group):
+    source = os.path.join(ART, group["folder"])
+    destination = group["dest"]
+    base = eal.load_asset(BASE_MATERIAL)
+    for name in group["meshes"]:
+        remove_if_wrong_type(f"{destination}/{name}", "StaticMesh")
+        run_import(os.path.join(source, name + ".fbx"), destination, name, static_options())
+        mesh = eal.load_asset(f"{destination}/{name}")
+        if not mesh:
+            unreal.log_error(f"FTO: missing {destination}/{name} after import")
+            continue
+        for index in range(len(mesh.get_editor_property("static_materials"))):
+            mesh.set_material(index, base)
+        eal.save_loaded_asset(mesh)
+        bounds = mesh.get_bounds()
+        sockets = []
+        for socket_name in ("Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"):
+            socket = mesh.find_socket(socket_name)
+            if socket:
+                # The import scale leaks into socket scale; wheels must attach at 1:1.
+                scale = socket.get_editor_property("relative_scale")
+                if abs(scale.x - 1.0) > 1e-3 or abs(scale.y - 1.0) > 1e-3 or abs(scale.z - 1.0) > 1e-3:
+                    unreal.log(f"FTO: {name}.{socket_name} scale {scale.x:.1f} reset to 1")
+                    socket.set_editor_property("relative_scale", unreal.Vector(1.0, 1.0, 1.0))
+                loc = socket.get_editor_property("relative_location")
+                sockets.append(f"{socket_name}=({loc.x:.0f},{loc.y:.0f},{loc.z:.0f})")
+        unreal.log(f"FTO: {name} extent {bounds.box_extent} sockets {sockets}")
+        eal.save_loaded_asset(mesh)
+    eal.save_directory(destination, only_if_is_dirty=False, recursive=True)
+
+
 def apply_base_material(mesh):
     base = eal.load_asset(BASE_MATERIAL)
     # Iterating an unreal.Array of structs yields copies, so build a new list.
@@ -157,5 +215,13 @@ def import_group(group):
         unreal.log(f"FTO: asset {path}")
 
 
-for character_group in CHARACTERS:
-    import_group(character_group)
+# FTO_IMPORT=characters|statics limits the run (default: everything).
+ONLY = os.environ.get("FTO_IMPORT", "").lower()
+
+if ONLY in ("", "characters"):
+    for character_group in CHARACTERS:
+        import_group(character_group)
+
+if ONLY in ("", "statics"):
+    for static_group in STATICS:
+        import_statics(static_group)
