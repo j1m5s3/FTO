@@ -38,7 +38,7 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	const float RunLength = Run ? Run->GetPlayLength() : 1.f;
 	const float CycleLength = FMath::Lerp(WalkLength, RunLength, RunAlpha);
 	const float ReferenceSpeed = FMath::Lerp(WalkReferenceSpeed, RunReferenceSpeed, RunAlpha);
-	const float PlayRate = FMath::Clamp(SmoothedSpeed / FMath::Max(1.f, ReferenceSpeed), 0.4f, 1.6f);
+	const float PlayRate = FMath::Clamp(SmoothedSpeed / FMath::Max(1.f, ReferenceSpeed), 0.4f, 1.9f);
 	LocoPhase = FMath::Fmod(LocoPhase + DeltaSeconds * PlayRate / FMath::Max(0.05f, CycleLength), 1.f);
 
 	AirWeight = FMath::FInterpTo(AirWeight, bInAir ? 1.f : 0.f, DeltaSeconds, 12.f);
@@ -161,14 +161,6 @@ void UFTOCharacterAnimInstance::NativeInitializeAnimation()
 	Proxy.Jump = JumpClip;
 	Proxy.Interact = InteractClip;
 	Proxy.Cheer = CheerClip;
-
-	if (const ACharacter* Character = Cast<ACharacter>(TryGetPawnOwner()))
-	{
-		if (const UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
-		{
-			Proxy.WalkReferenceSpeed = FMath::Max(100.f, Movement->MaxWalkSpeed);
-		}
-	}
 }
 
 void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)

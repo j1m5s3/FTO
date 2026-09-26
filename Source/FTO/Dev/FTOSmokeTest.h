@@ -35,6 +35,7 @@ protected:
 
 	float ReadyTime = -1.f;
 	float StableSince = -1.f;
+	int32 FramesSinceReady = 0;
 	int32 NextStep = 0;
 	float NextStepTime = 0.f;
 	FVector IncidentSpot = FVector::ZeroVector;

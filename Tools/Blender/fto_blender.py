@@ -80,7 +80,7 @@ def _transform(loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
 
 
 def make_part(kind, color, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), bone=None,
-              tint=False, bevel=0.0, smooth=True, segments=16, rings=10):
+              tint=False, bevel=0.0, smooth=True, segments=16, rings=10, stripes=None):
     """
     kind: 'sphere' | 'cube' | 'cylinder' | 'cone'. Unit-sized (1 m) before `scale`.
     color: sRGB tuple (0-1). tint=True sets vertex alpha 1 so the game can recolour it.
@@ -107,11 +107,17 @@ def make_part(kind, color, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), bone=N
                         affect='EDGES', profile=0.5, clamp_overlap=True)
 
     col_layer = bm.loops.layers.color.new("Col")
-    rgba = (color[0], color[1], color[2], 1.0 if tint else 0.0)
+    alpha = 1.0 if tint else 0.0
+    rgba = (color[0], color[1], color[2], alpha)
     for face in bm.faces:
         face.smooth = smooth
+        face_rgba = rgba
+        if stripes:
+            band = int(math.floor(face.calc_center_median().z / stripes[1]))
+            if band % 2:
+                face_rgba = (stripes[0][0], stripes[0][1], stripes[0][2], alpha)
         for loop in face.loops:
-            loop[col_layer] = rgba
+            loop[col_layer] = face_rgba
     return Part(bm, bone)
 
 

@@ -24,8 +24,10 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	UPROPERTY(EditAnywhere, Category="Population") int32 PedestrianCount = 70;
-	UPROPERTY(EditAnywhere, Category="Population") int32 CarCount = 26;
+	UPROPERTY(EditAnywhere, Category="Population") int32 PedestrianCount = 120;
+	/** Share of pedestrians that start downtown, where the crowds are. */
+	UPROPERTY(EditAnywhere, Category="Population") float DowntownShare = 0.55f;
+	UPROPERTY(EditAnywhere, Category="Population") int32 CarCount = 34;
 
 protected:
 	void SpawnPedestrian();

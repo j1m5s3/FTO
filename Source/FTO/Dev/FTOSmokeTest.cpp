@@ -21,7 +21,7 @@
 namespace
 {
 	// Seconds to wait after each step before running the next one.
-	const float StepDelays[] = { 1.f, 1.5f, 0.5f, 0.8f, 0.5f, 0.5f, 4.f, 1.f, 3.f, 1.f, 3.f, 1.f, 3.f, 2.f, 1.5f, 1.f, 0.f };
+	const float StepDelays[] = { 1.f, 1.5f, 0.5f, 0.8f, 0.5f, 0.5f, 4.f, 1.f, 3.f, 1.f, 3.f, 1.f, 3.f, 2.f, 1.5f, 1.f, 2.f, 1.f, 0.f };
 }
 
 AFTOSmokeTest::AFTOSmokeTest()
@@ -84,6 +84,8 @@ void AFTOSmokeTest::Tick(float DeltaSeconds)
 			}
 		}
 	}
+
+	++FramesSinceReady;
 
 	// One step per frame, and never while shaders are still compiling (the shot would be grey).
 	if (NextStep < int32(UE_ARRAY_COUNT(StepDelays)) && Now >= NextStepTime && AreShadersReady())
@@ -241,7 +243,9 @@ void AFTOSmokeTest::RunStep(int32 Step)
 	case 12:
 		if (!IncidentSpot.IsZero())
 		{
-			ViewFrom(IncidentSpot + FVector(-900.f, -600.f, 500.f), IncidentSpot + FVector(0.f, 0.f, 150.f));
+			// From the officer's side of the scene, raised so buildings don't get in the way.
+			const FVector Dir = Officer ? (IncidentSpot - Officer->GetActorLocation()).GetSafeNormal2D() : FVector::ForwardVector;
+			ViewFrom(IncidentSpot - Dir * 750.f + FVector(0.f, 0.f, 420.f), IncidentSpot + FVector(0.f, 0.f, 100.f));
 		}
 		break;
 
@@ -267,11 +271,37 @@ void AFTOSmokeTest::RunStep(int32 Step)
 		break;
 
 	case 16:
+		// Eye level on a busy downtown sidewalk.
+		if (PC && PC->GetHUD())
+		{
+			PC->GetHUD()->bShowHUD = false;
+		}
+		if (City)
+		{
+			for (const FFTOCityBlock& Block : City->GetBlocks())
+			{
+				if (Block.District == EFTODistrict::Downtown && !Block.bPrecinct && !Block.bBank)
+				{
+					const FVector From = City->GetSidewalkCorner(Block.X, Block.Y, 0) + FVector(0.f, 0.f, 170.f);
+					const FVector To = City->GetSidewalkCorner(Block.X, Block.Y, 1) + FVector(0.f, 0.f, 120.f);
+					ViewFrom(From, To);
+					break;
+				}
+			}
+		}
+		break;
+
+	case 17:
+		Shot(TEXT("07_sidewalk"));
+		break;
+
+	case 18:
 		if (PC && Officer)
 		{
 			PC->SetViewTargetWithBlend(Officer, 0.f);
 		}
-		UE_LOG(LogFTO, Display, TEXT("SMOKE: tour complete."));
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: tour complete. Average %.1f fps over %.1f s."),
+			FramesSinceReady / FMath::Max(0.01f, GetWorld()->GetRealTimeSeconds() - ReadyTime), GetWorld()->GetRealTimeSeconds() - ReadyTime);
 		if (FParse::Param(FCommandLine::Get(), TEXT("FTOSmokeTestQuit")))
 		{
 			FPlatformMisc::RequestExit(false, TEXT("FTOSmokeTest"));

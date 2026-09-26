@@ -3,10 +3,12 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Crime/FTOCrimeTypes.h"
+#include "Animation/FTOAnimatedActor.h"
 #include "FTOIncident.generated.h"
 
 class USceneComponent;
 class UStaticMeshComponent;
+class USkeletalMeshComponent;
 class UTextRenderComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
@@ -20,7 +22,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FFTOIncidentEvent, AFTOIncident*);
  * resolves/escalates. Clients only render the replicated state.
  */
 UCLASS()
-class FTO_API AFTOIncident : public AActor
+class FTO_API AFTOIncident : public AActor, public IFTOAnimatedActor
 {
 	GENERATED_BODY()
 
@@ -53,6 +55,10 @@ public:
 
 	/** Server: a citizen tip or radio call puts this on the board right now. */
 	void ForceReport();
+
+	// IFTOAnimatedActor: the suspect acts shifty, then puts their hands up when officers arrive.
+	virtual EFTOAnimAction GetAnimAction() const override;
+	virtual float GetAnimSpeed() const override { return 0.f; }
 
 	/** Current chaos per second this incident is pushing into the city (server). */
 	float GetChaosRate() const;
@@ -90,7 +96,7 @@ protected:
 	/** Placeholder "something is happening here" beacon. */
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Beacon;
 	/** Placeholder suspect. */
-	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Suspect;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USkeletalMeshComponent> Suspect;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Label;
 
 	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;

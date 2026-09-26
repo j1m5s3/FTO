@@ -237,4 +237,5 @@ def main():
     print(f"FTO: saved {blend_path}")
 
 
-main()
+if __name__ == "__main__":
+    main()
