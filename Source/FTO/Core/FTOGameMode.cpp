@@ -1,9 +1,12 @@
 #include "Core/FTOGameMode.h"
+#include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Core/FTOPlayerState.h"
 #include "Crime/FTOCrimeDirector.h"
+#include "EngineUtils.h"
+#include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
 #include "FTO.h"
 
@@ -20,15 +23,34 @@ AFTOGameMode::AFTOGameMode()
 void AFTOGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
-	RequestedSeed = UGameplayStatics::GetIntOption(Options, TEXT("Seed"), 0);
+
+	ShiftSeed = UGameplayStatics::GetIntOption(Options, TEXT("Seed"), 0);
+	if (ShiftSeed == 0)
+	{
+		ShiftSeed = FMath::RandRange(1, MAX_int32 - 1);
+	}
+
+	// Use a hand-built city if the level has one, otherwise generate one now so the
+	// precinct player starts exist before anyone spawns.
+	for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
+	{
+		CityGenerator = *It;
+		break;
+	}
+	if (!CityGenerator)
+	{
+		CityGenerator = GetWorld()->SpawnActor<AFTOCityGenerator>(AFTOCityGenerator::StaticClass(), FTransform::Identity);
+	}
+	if (CityGenerator)
+	{
+		CityGenerator->ServerGenerate(ShiftSeed);
+	}
 }
 
 void AFTOGameMode::StartPlay()
 {
 	Super::StartPlay();
-
-	const int32 Seed = RequestedSeed != 0 ? RequestedSeed : FMath::Rand();
-	CrimeDirector->BeginShift(Seed);
+	CrimeDirector->BeginShift(ShiftSeed);
 }
 
 void AFTOGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
@@ -41,17 +63,62 @@ void AFTOGameMode::PreLogin(const FString& Options, const FString& Address, cons
 	}
 }
 
+int32 AFTOGameMode::PickFreeBadge(const APlayerController* ForPlayer) const
+{
+	TSet<int32> Taken;
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* PC = It->Get();
+		if (PC && PC != ForPlayer)
+		{
+			if (const AFTOPlayerState* PS = PC->GetPlayerState<AFTOPlayerState>())
+			{
+				Taken.Add(PS->GetBadgeIndex());
+			}
+		}
+	}
+	for (int32 Badge = 0; Badge < MaxOfficers; ++Badge)
+	{
+		if (!Taken.Contains(Badge))
+		{
+			return Badge;
+		}
+	}
+	return 0;
+}
+
 void AFTOGameMode::PostLogin(APlayerController* NewPlayer)
 {
-	Super::PostLogin(NewPlayer);
-
+	// Assign the badge before Super spawns the pawn, so the officer picks the right start and colour.
 	if (AFTOPlayerState* PS = NewPlayer ? NewPlayer->GetPlayerState<AFTOPlayerState>() : nullptr)
 	{
-		// Badge numbers double as the officer's colour slot.
-		PS->SetBadgeIndex(FMath::Clamp(GetNumPlayers() - 1, 0, MaxOfficers - 1));
+		PS->SetBadgeIndex(PickFreeBadge(NewPlayer));
 	}
 
+	Super::PostLogin(NewPlayer);
+
 	UE_LOG(LogFTO, Log, TEXT("Officer joined: %s (%d/%d)"), *GetNameSafe(NewPlayer), GetNumPlayers(), MaxOfficers);
+}
+
+AActor* AFTOGameMode::ChoosePlayerStart_Implementation(AController* Player)
+{
+	TArray<APlayerStart*> PrecinctStarts;
+	for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+	{
+		if (It->PlayerStartTag == TEXT("Precinct"))
+		{
+			PrecinctStarts.Add(*It);
+		}
+	}
+
+	if (PrecinctStarts.Num() > 0)
+	{
+		const AFTOPlayerState* PS = Player ? Player->GetPlayerState<AFTOPlayerState>() : nullptr;
+		const int32 Badge = PS ? PS->GetBadgeIndex() : 0;
+		return PrecinctStarts[Badge % PrecinctStarts.Num()];
+	}
+
+	return Super::ChoosePlayerStart_Implementation(Player);
 }
 
 void AFTOGameMode::FTOSpawnCrime(FName TemplateId)
