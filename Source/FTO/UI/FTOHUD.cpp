@@ -500,7 +500,13 @@ void AFTOHUD::DrawInteractPrompt()
 
 void AFTOHUD::DrawCruiserPanel()
 {
+	// At the wheel, or riding shotgun.
 	const AFTOCruiser* Cruiser = Cast<AFTOCruiser>(GetOwningPawn());
+	const bool bDriving = Cruiser != nullptr;
+	if (const AFTOCharacter* Officer = bDriving ? nullptr : Cast<AFTOCharacter>(GetOwningPawn()))
+	{
+		Cruiser = Cast<AFTOCruiser>(Officer->GetCurrentVehicle());
+	}
 	if (!Cruiser)
 	{
 		return;
@@ -511,7 +517,7 @@ void AFTOHUD::DrawCruiserPanel()
 	const float Y = Canvas->ClipY - 120.f * S;
 	const int32 Kmh = FMath::RoundToInt(FMath::Abs(Cruiser->GetSpeed()) * 0.036f);
 
-	DrawPanel(CX - 230.f * S, Y - 10.f * S, 460.f * S, 100.f * S);
+	DrawPanel(CX - 300.f * S, Y - 10.f * S, 600.f * S, 100.f * S);
 	DrawCenteredText(FString::Printf(TEXT("%d km/h"), Kmh), CX, Y, FLinearColor::White, GEngine->GetLargeFont(), S * 1.4f);
 
 	if (Cruiser->IsSirenOn())
@@ -520,7 +526,9 @@ void AFTOHUD::DrawCruiserPanel()
 		DrawCenteredText(TEXT("SIREN"), CX + 160.f * S, Y + 8.f * S, bRed ? FLinearColor(1.f, 0.2f, 0.2f) : FLinearColor(0.3f, 0.5f, 1.f), GEngine->GetMediumFont(), S);
 	}
 
-	DrawCenteredText(TEXT("W/S drive  |  A/D steer  |  Space handbrake  |  Q siren  |  E get out"),
+	DrawCenteredText(bDriving
+		? TEXT("W/S drive  |  A/D steer  |  Space handbrake  |  Q siren  |  H horn  |  C camera  |  E get out")
+		: TEXT("Riding shotgun  |  Mouse to look  |  Q lights and siren  |  C camera  |  E get out"),
 		CX, Y + 55.f * S, FLinearColor(0.75f, 0.75f, 0.75f), GEngine->GetSmallFont(), S * 1.1f);
 }
 

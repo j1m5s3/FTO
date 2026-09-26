@@ -16,7 +16,11 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Animation/FTOCharacterAnimInstance.h"
 #include "Art/FTOArt.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "Vehicles/FTOVehicleSeats.h"
 
 namespace
 {
@@ -73,6 +77,31 @@ AFTOTrafficCar::AFTOTrafficCar()
 		Wheels.Add(Wheel);
 	}
 
+	// Citizens in the seats (Seat_* sockets on every body; see Tools/Blender/build_vehicles.py).
+	for (int32 Index = 1; Index <= 8; ++Index)
+	{
+		const FString Path = FString::Printf(TEXT("/Game/FTO/Characters/Civilians/SK_Civilian_%02d.SK_Civilian_%02d"), Index, Index);
+		ConstructorHelpers::FObjectFinder<USkeletalMesh> Look(*Path);
+		if (Look.Succeeded())
+		{
+			OccupantLooks.Add(Look.Object);
+		}
+	}
+	for (const EFTOSeat Seat : { EFTOSeat::Driver, EFTOSeat::Passenger, EFTOSeat::RearLeft, EFTOSeat::RearRight })
+	{
+		USkeletalMeshComponent* Occupant = CreateDefaultSubobject<USkeletalMeshComponent>(*FString::Printf(TEXT("Occupant%d"), int32(Seat)));
+		Occupant->SetupAttachment(Body, FTOSeats::SeatSocket(Seat));
+		Occupant->SetRelativeRotation(FRotator(0.f, -90.f, 0.f)); // Blender characters face +Y
+		Occupant->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Occupant->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		Occupant->SetAnimInstanceClass(UFTOCharacterAnimInstance::StaticClass());
+		Occupant->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+		Occupant->bEnableUpdateRateOptimizations = true;
+		Occupant->SetCastShadow(false); // they're in the car's shadow anyway
+		Occupant->SetVisibility(false);
+		Occupants.Add(Occupant);
+	}
+
 	Indicator = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Indicator"));
 	Indicator->SetupAttachment(Collision);
 	Indicator->SetRelativeLocation(FVector(0.f, 0.f, 260.f));
@@ -124,9 +153,62 @@ void AFTOTrafficCar::OnRep_Look()
 	const FLinearColor Paint = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 190, 240);
 	if (!PaintMaterial)
 	{
-		PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Paint);
+		PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Paint, 0.f, FTOArt::BodySlot(Body));
 	}
 	FTOArt::SetColor(PaintMaterial, Paint);
+
+	SeatOccupants(LookRng, Style);
+}
+
+void AFTOTrafficCar::SeatOccupants(FRandomStream& LookRng, int32 Style)
+{
+	// Everyone has a driver and some bring company; taxi fares ride in the back.
+	const bool bTaxi = Style == 4;
+	const bool bIceCream = Style == 5;
+	for (int32 i = 0; i < Occupants.Num(); ++i)
+	{
+		USkeletalMeshComponent* Occupant = Occupants[i];
+		const EFTOSeat Seat = static_cast<EFTOSeat>(i + 1);
+		float Chance = 0.f;
+		switch (Seat)
+		{
+		case EFTOSeat::Driver:    Chance = 1.f; break;
+		case EFTOSeat::Passenger: Chance = bTaxi ? 0.f : (bIceCream ? 0.2f : 0.35f); break;
+		case EFTOSeat::RearLeft:  Chance = bTaxi ? 0.2f : 0.12f; break;
+		case EFTOSeat::RearRight: Chance = bTaxi ? 0.75f : 0.15f; break;
+		default: break;
+		}
+
+		// Same draws whatever the outcome, so every machine seats the same people.
+		const float Roll = LookRng.FRand();
+		const int32 Look = LookRng.RandRange(0, FMath::Max(0, OccupantLooks.Num() - 1));
+		const uint8 Hue = uint8(LookRng.RandRange(0, 255));
+
+		const bool bPresent = OccupantLooks.IsValidIndex(Look) && Roll < Chance && Body->DoesSocketExist(FTOSeats::SeatSocket(Seat));
+		Occupant->SetVisibility(bPresent);
+		Occupant->SetComponentTickEnabled(bPresent);
+		if (!bPresent)
+		{
+			Occupant->SetSkeletalMeshAsset(nullptr);
+			continue;
+		}
+
+		Occupant->SetSkeletalMeshAsset(OccupantLooks[Look]);
+		UMaterialInstanceDynamic* Shirt = FTOArt::ApplyColor(Occupant, BaseMaterial, FLinearColor::MakeFromHSV8(Hue, 170, 235));
+		for (int32 Slot = 1; Slot < Occupant->GetNumMaterials(); ++Slot)
+		{
+			Occupant->SetMaterial(Slot, Shirt);
+		}
+	}
+}
+
+EFTOAnimAction AFTOTrafficCar::GetAnimActionFor(const USkeletalMeshComponent* Mesh) const
+{
+	if (CarState == EFTOCarState::Busted)
+	{
+		return EFTOAnimAction::SitHandsUp;
+	}
+	return Occupants.Num() > 0 && Mesh == Occupants[0] ? EFTOAnimAction::Drive : EFTOAnimAction::Ride;
 }
 
 void AFTOTrafficCar::OnRep_CarState()

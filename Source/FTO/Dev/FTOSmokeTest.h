@@ -5,6 +5,7 @@
 #include "FTOSmokeTest.generated.h"
 
 class ACameraActor;
+class AFTOCharacter;
 class AFTOCityGenerator;
 class AFTOCruiser;
 class AFTOGameMode;
@@ -15,7 +16,8 @@ class APlayerController;
  * Development-only scripted tour for quick visual checks without a human at the keyboard.
  *
  * Launch the game with -FTOSmokeTest to take a set of screenshots (menu, lobby, officer,
- * whistle, on duty, aerial city, street, incident, report card, sidewalk, traffic, driving)
+ * whistle, on duty, aerial city, street, incident, report card, sidewalk, traffic and its
+ * drivers, driving with a suspect in the back, the seat view, riding shotgun)
  * into Saved/Screenshots/SmokeTest and log the average FPS.
  * Add -FTOSmokeTestQuit to exit when done, and -FTOSmokeTag=name to prefix the shots when
  * running several instances (host + client).
@@ -61,6 +63,8 @@ protected:
 
 	UPROPERTY(Transient) TObjectPtr<ACameraActor> Camera;
 	UPROPERTY(Transient) TObjectPtr<AFTOCruiser> TestCruiser;
+	/** A stand-in second officer riding shotgun (standalone/host only). */
+	UPROPERTY(Transient) TObjectPtr<AFTOCharacter> TestPassenger;
 
 	float ReadyTime = -1.f;
 	float StableSince = -1.f;

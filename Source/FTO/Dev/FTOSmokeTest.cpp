@@ -6,6 +6,7 @@
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Dev/FTOAnimDummy.h"
+#include "Crime/FTOArrestee.h"
 #include "Crime/FTOCrimeDirector.h"
 #include "Vehicles/FTOCruiser.h"
 #include "Camera/CameraActor.h"
@@ -361,7 +362,20 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddShot(TEXT("08_traffic"), 1.f, false);
 
-	// Drive: the host takes the nearest cruiser; a client asks the server for one and drives it itself.
+	// Close on a car coming our way: someone's at the wheel behind the glass.
+	AddStep(TEXT("traffic driver"), 0.05f, [this]()
+	{
+		for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It; ++It)
+		{
+			const FVector CarLoc = It->GetActorLocation();
+			ViewFrom(CarLoc + It->GetActorForwardVector() * 430.f - It->GetActorRightVector() * 250.f + FVector(0.f, 0.f, 80.f), CarLoc + FVector(0.f, 0.f, 70.f));
+			break;
+		}
+	});
+	AddShot(TEXT("08b_traffic_driver"), 1.f, false);
+
+	// Drive: the host takes a cruiser out on patrol with a suspect in the back; a client asks the
+	// server for a cruiser and drives it itself.
 	AddStep(TEXT("get in"), 2.5f, [this]()
 	{
 		SetHUDVisible(true);
@@ -371,6 +385,7 @@ void AFTOSmokeTest::BuildSteps()
 		{
 			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>()) { GS->SetShiftPhase(EFTOShiftPhase::OnDuty); }
 			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOCityGenerator* City = GetCity();
 			AFTOCruiser* Nearest = nullptr;
 			for (TActorIterator<AFTOCruiser> It(GetWorld()); It && Cop; ++It)
 			{
@@ -379,11 +394,37 @@ void AFTOSmokeTest::BuildSteps()
 					Nearest = *It;
 				}
 			}
-			if (Nearest && Cop)
+			if (Nearest && Cop && City)
 			{
+				// Across town (so the suspect isn't booked the moment they sit down), on a street that
+				// runs back toward the middle rather than off the edge of the map.
+				const int32 NX = City->NumIntersectionsX();
+				const int32 NY = City->NumIntersectionsY();
+				FIntPoint Far(1, 1);
+				for (int32 I = 1; I < NX - 1; ++I)
+				{
+					for (int32 J = 1; J < NY - 1; ++J)
+					{
+						if (FVector::DistSquared2D(City->GetIntersection(I, J), City->GetPrecinctLocation()) >
+							FVector::DistSquared2D(City->GetIntersection(Far.X, Far.Y), City->GetPrecinctLocation()))
+						{
+							Far = FIntPoint(I, J);
+						}
+					}
+				}
+				const FRotator Heading(0.f, Far.X < NX / 2 ? 0.f : 180.f, 0.f);
+				const FVector Fwd = Heading.Vector();
+				const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+				const FVector Street = City->GetIntersection(Far.X, Far.Y) + Fwd * 700.f + Right * City->GetRoadWidth() * 0.25f;
+				Nearest->SetActorLocationAndRotation(Street + FVector(0.f, 0.f, AFTOCruiser::RideHeight), Heading);
+				Cop->TeleportTo(Street + Right * 260.f + FVector(0.f, 0.f, 100.f), Heading);
+				if (AFTOArrestee* Suspect = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), Street + Right * 260.f - Fwd * 200.f + FVector(0.f, 0.f, 92.f), Heading))
+				{
+					Suspect->Init(Cop, 4.f, INVTEXT("Loitering with intent to loiter"));
+				}
 				Nearest->Interact(Cop);
 				Nearest->SetSiren(true);
-				Nearest->SetAutopilot(true, 1.f, 0.35f);
+				Nearest->SetAutopilot(true, 0.7f, 0.f);
 				TestCruiser = Nearest;
 			}
 		}
@@ -404,15 +445,139 @@ void AFTOSmokeTest::BuildSteps()
 		}
 		Shot(TEXT("09_driving"));
 	});
+	AddStep(TEXT("seat view"), 1.2f, [this]()
+	{
+		if (TestCruiser) { TestCruiser->SetInteriorView(true); }
+	});
+	AddShot(TEXT("09b_interior"), 0.5f);
+	AddStep(TEXT("chase view"), 0.5f, [this]()
+	{
+		if (TestCruiser) { TestCruiser->SetInteriorView(false); }
+	});
+
+	// A second officer hops in beside the driver (a stand-in, as there's only one player here).
+	AddStep(TEXT("ride shotgun"), 1.5f, [this]()
+	{
+		if (!GetAuthGameMode() || !TestCruiser)
+		{
+			return;
+		}
+		TestCruiser->SetAutopilot(true, 0.f, 0.f);
+		TestCruiser->StopDead(); // hold still for the photo
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		TestPassenger = GetWorld()->SpawnActor<AFTOCharacter>(AFTOCharacter::StaticClass(), TestCruiser->GetActorLocation() + TestCruiser->GetActorRightVector() * 250.f, TestCruiser->GetActorRotation(), Params);
+		if (TestPassenger)
+		{
+			TestCruiser->Interact(TestPassenger);
+		}
+	});
+	AddStep(TEXT("look inside"), 1.f, [this]()
+	{
+		if (!GetAuthGameMode() || !TestCruiser)
+		{
+			return;
+		}
+		SetHUDVisible(false);
+		const FVector Car = TestCruiser->GetActorLocation();
+		ViewFrom(Car + TestCruiser->GetActorRightVector() * 430.f + TestCruiser->GetActorForwardVector() * 120.f + FVector(0.f, 0.f, 110.f), Car + FVector(0.f, 0.f, 70.f));
+	});
+	AddShot(TEXT("09c_shotgun"), 0.5f, false);
+
+	// Leave from the seat view: the driver's hidden head must come back once they're out.
+	AddStep(TEXT("seat view again"), 0.4f, [this]()
+	{
+		if (TestCruiser) { TestCruiser->SetInteriorView(true); }
+	});
 	AddStep(TEXT("get out"), 1.2f, [this]()
 	{
+		SetHUDVisible(true);
 		if (TestCruiser)
 		{
 			TestCruiser->SetAutopilot(false);
+			if (TestPassenger)
+			{
+				TestCruiser->LetOut(TestPassenger);
+				TestPassenger->Destroy();
+			}
 			TestCruiser->RequestExit();
+		}
+		if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+	});
+	AddStep(TEXT("check head"), 0.f, [this]()
+	{
+		if (const AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn()))
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: officer's head %s after getting out."),
+				Me->GetMesh()->IsBoneHiddenByName(TEXT("head")) ? TEXT("STILL HIDDEN") : TEXT("visible"));
 		}
 	});
 	AddShot(TEXT("10_got_out"), 1.f);
+
+	// Two players (-FTOSmokeRideAlong): the host parks in a cruiser and waits; the client (whose tour
+	// runs ~20 s behind) hops in beside them, looks around from both cameras, and gets out again.
+	if (FParse::Param(FCommandLine::Get(), TEXT("FTOSmokeRideAlong")))
+	{
+		if (GetNetMode() != NM_Client)
+		{
+			AddStep(TEXT("wait for a rider"), 22.f, [this]()
+			{
+				AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+				AFTOCityGenerator* City = GetCity();
+				AFTOCruiser* Parked = nullptr;
+				for (TActorIterator<AFTOCruiser> It(GetWorld()); It && City; ++It)
+				{
+					if (!It->HasDriver() && (!Parked ||
+						FVector::DistSquared(It->GetActorLocation(), City->GetPrecinctLocation()) < FVector::DistSquared(Parked->GetActorLocation(), City->GetPrecinctLocation())))
+					{
+						Parked = *It;
+					}
+				}
+				if (Cop && Parked)
+				{
+					Parked->Interact(Cop);
+					Parked->SetInteriorView(false);
+					TestCruiser = Parked;
+					SetHUDVisible(false);
+					ViewFrom(Parked->GetActorLocation() + Parked->GetActorRightVector() * 430.f + Parked->GetActorForwardVector() * 120.f + FVector(0.f, 0.f, 110.f),
+						Parked->GetActorLocation() + FVector(0.f, 0.f, 70.f));
+				}
+			});
+			AddShot(TEXT("11_host_rider"), 2.f, false);
+			AddShot(TEXT("11b_host_rider"), 1.f, false);
+		}
+		else
+		{
+			AddStep(TEXT("ride along"), 3.f, [this]()
+			{
+				if (AFTOPlayerController* FTOPC = Cast<AFTOPlayerController>(GetPC()))
+				{
+					FTOPC->bPreferInteriorView = false; // start from the chase camera
+					FTOPC->ServerRideAlong();
+				}
+			});
+			AddShot(TEXT("11_riding"), 0.5f);
+			AddStep(TEXT("seat view"), 1.f, [this]()
+			{
+				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn())) { Me->ToggleSeatView(); }
+			});
+			AddShot(TEXT("11b_seat_view"), 0.5f);
+			AddStep(TEXT("look at the driver"), 0.6f, [this]()
+			{
+				if (APlayerController* PC = GetPC()) { PC->SetControlRotation(PC->GetControlRotation() + FRotator(-5.f, -75.f, 0.f)); }
+			});
+			AddShot(TEXT("11b2_seat_view_driver"), 0.5f);
+			AddStep(TEXT("chase view"), 0.5f, [this]()
+			{
+				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn())) { Me->ToggleSeatView(); }
+			});
+			AddStep(TEXT("hop out"), 1.5f, [this]()
+			{
+				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn())) { Me->LeaveVehicle(); }
+			});
+			AddShot(TEXT("11c_out"), 0.5f);
+		}
+	}
 
 	AddStep(TEXT("done"), 0.f, [this]()
 	{

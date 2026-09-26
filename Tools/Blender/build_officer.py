@@ -229,8 +229,22 @@ def sit(t):
     return pose
 
 
+def car_legs():
+    # Car seat: knees up a touch and feet forward on the pedals, which keeps a seated cartoon
+    # (big head, 1.3 m from seat to hat) low enough to fit in a car. Feet stay flat on the floor.
+    return {
+        "pelvis": {"loc": (0, -0.26, -0.02)},
+        "thigh_l": {"rot": (-95, 0, 0)},
+        "thigh_r": {"rot": (-95, 0, 0)},
+        "calf_l": {"rot": (50, 0, 0)},
+        "calf_r": {"rot": (50, 0, 0)},
+        "foot_l": {"rot": (38, 0, 0)},
+        "foot_r": {"rot": (38, 0, 0)},
+    }
+
+
 def drive(t):
-    pose = seated_legs(knee=75)
+    pose = car_legs()
     steer = 4 * s(t)
     pose.update({
         "spine": {"rot": (-6, 0, 0)},
@@ -239,6 +253,50 @@ def drive(t):
         "upperarm_r": {"rot": (-65 - steer, 0, -12)},
         "lowerarm_l": {"rot": (-35, 0, 0)},
         "lowerarm_r": {"rot": (-35, 0, 0)},
+    })
+    return pose
+
+
+def ride(t):
+    # Passenger: hands in the lap, watching the world go by.
+    pose = car_legs()
+    pose.update({
+        "spine": {"rot": (-7, 0, 0)},
+        "head": {"rot": (-2 + 3 * s(t, 2), 22 * s(t), 0)},
+        "upperarm_l": {"rot": (-42, 0, 10)},
+        "upperarm_r": {"rot": (-42, 0, -10)},
+        "lowerarm_l": {"rot": (-42, 0, 0)},
+        "lowerarm_r": {"rot": (-42, 0, 0)},
+    })
+    return pose
+
+
+def sit_cuffed(t):
+    # Back seat of the cruiser: hands cuffed behind, hunched and sulking.
+    pose = car_legs()
+    pose.update({
+        "spine": {"rot": (14, 0, 2 * s(t))},
+        "head": {"rot": (16 + 5 * s(t), 10 * s(t), 0)},
+        "upperarm_l": {"rot": (38, 0, 18)},
+        "upperarm_r": {"rot": (38, 0, -18)},
+        "lowerarm_l": {"rot": (-60, 0, 0)},
+        "lowerarm_r": {"rot": (-60, 0, 0)},
+    })
+    return pose
+
+
+def sit_hands_up(t):
+    # Busted at the wheel.
+    pose = car_legs()
+    shake = 2 * s(t, 3)
+    pose.update({
+        "spine": {"rot": (-4, 0, shake)},
+        "head": {"rot": (-6, 0, 0)},
+        # Arms past vertical, so +Z now swings them out into a V (clear of the head and the roof).
+        "upperarm_l": {"rot": (-160, 0, 22 + shake)},
+        "upperarm_r": {"rot": (-160, 0, -22 - shake)},
+        "lowerarm_l": {"rot": (-25, 0, 0)},
+        "lowerarm_r": {"rot": (-25, 0, 0)},
     })
     return pose
 
@@ -497,6 +555,9 @@ CLIPS = [
     ("Dance", 30, dance),
     ("Slump", 60, slump),
     ("Dazed", 45, dazed),
+    ("Ride", 90, ride),
+    ("SitCuffed", 60, sit_cuffed),
+    ("SitHandsUp", 30, sit_hands_up),
 ]
 
 

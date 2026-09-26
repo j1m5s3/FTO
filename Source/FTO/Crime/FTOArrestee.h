@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Animation/FTOAnimatedActor.h"
+#include "Vehicles/FTOVehicleSeats.h"
 #include "FTOArrestee.generated.h"
 
 class AFTOCharacter;
@@ -20,9 +21,9 @@ enum class EFTOArresteeState : uint8
 };
 
 /**
- * A cuffed suspect. Follows the arresting officer; ride along in their cruiser; book them at
- * the precinct for bonus chaos relief. Left alone too long, they wander off.
- * Server-driven; clients interpolate a replicated position.
+ * A cuffed suspect. Follows the arresting officer; rides in the back of their cruiser (visibly,
+ * behind the cage); book them at the precinct for bonus chaos relief. Left alone too long, they
+ * wander off. Server-driven; clients interpolate a replicated position.
  */
 UCLASS()
 class FTO_API AFTOArrestee : public AActor, public IFTOAnimatedActor
@@ -42,7 +43,11 @@ public:
 	UFUNCTION(BlueprintPure, Category="Arrest") EFTOArresteeState GetArrestState() const { return State; }
 	FText GetCrime() const { return Crime; }
 
-	// IFTOAnimatedActor: trot along, hands up whenever we stop (it's a fair cop).
+	/** The vehicle and back seat this suspect is sat in, if any. */
+	AActor* GetRideVehicle() const { return RideVehicle; }
+	EFTOSeat GetRideSeat() const { return RideSeat; }
+
+	// IFTOAnimatedActor: trot along, hands up whenever we stop (it's a fair cop), sulk in the back seat.
 	virtual EFTOAnimAction GetAnimAction() const override;
 	virtual float GetAnimSpeed() const override { return AnimSpeed; }
 
@@ -58,6 +63,9 @@ protected:
 	void Book();
 	void Escape();
 	void SetInCruiser(AActor* Cruiser);
+	void LeaveCruiser();
+	/** Sits in (or climbs out of) the back seat to match the replicated state, on every machine. */
+	void ApplyRide();
 
 	UFUNCTION() void OnRep_State();
 
@@ -67,6 +75,8 @@ protected:
 
 	UPROPERTY(Replicated) TObjectPtr<AFTOCharacter> Escort;
 	UPROPERTY(ReplicatedUsing=OnRep_State) EFTOArresteeState State = EFTOArresteeState::Escorted;
+	UPROPERTY(ReplicatedUsing=OnRep_State) TObjectPtr<AActor> RideVehicle;
+	UPROPERTY(ReplicatedUsing=OnRep_State) EFTOSeat RideSeat = EFTOSeat::None;
 	UPROPERTY(Replicated) FVector_NetQuantize10 NetLocation;
 	UPROPERTY(Replicated) float NetYaw = 0.f;
 	UPROPERTY(Replicated) float AnimSpeed = 0.f;

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Animation/FTOAnimatedActor.h"
+#include "Vehicles/FTOVehicleSeats.h"
 #include "FTOCharacter.generated.h"
 
 class USpringArmComponent;
@@ -33,14 +34,25 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** Server: climb into a vehicle (hidden and carried along until ExitVehicle). */
-	void EnterVehicle(AActor* Vehicle);
+	/** Server: sit in a vehicle seat, visibly, riding along until ExitVehicle. */
+	void EnterVehicle(AActor* Vehicle, EFTOSeat Seat);
 
 	/** Server: climb out at the given spot. */
 	void ExitVehicle(const FVector& Location, float Yaw);
 
 	UFUNCTION(BlueprintPure, Category="FTO")
 	AActor* GetCurrentVehicle() const { return CurrentVehicle; }
+
+	EFTOSeat GetCurrentSeat() const { return CurrentSeat; }
+
+	/** Hides this officer's head on this machine only, so a seat-view camera isn't inside it. */
+	void SetHeadHidden(bool bHide);
+
+	/** Local player riding along: get out (what E does in a seat). */
+	void LeaveVehicle() { ServerLeaveVehicle(); }
+
+	/** Local player riding along: chase camera or the view from the seat (what C does). */
+	void ToggleSeatView() { ToggleCamera(); }
 
 	UFTOKnockdownComponent* GetKnockdown() const { return Knockdown; }
 
@@ -105,14 +117,39 @@ protected:
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> HeadMaterial;
 
-	/** The vehicle this officer is riding in, if any. */
+	/** The vehicle this officer is riding in, if any, and where they sit. */
 	UPROPERTY(ReplicatedUsing=OnRep_CurrentVehicle)
 	TObjectPtr<AActor> CurrentVehicle;
+
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentVehicle)
+	EFTOSeat CurrentSeat = EFTOSeat::None;
 
 	UFUNCTION()
 	void OnRep_CurrentVehicle();
 
 	void ApplyVehicleState();
+
+	/** Chase camera, or the view from the seat (C) while riding along. */
+	void ApplyCameraMode();
+	void ToggleCamera();
+
+	/** The server moved us out of a car: land there now rather than wait for a movement correction. */
+	UFUNCTION(Client, Reliable)
+	void ClientExitedVehicle(FVector_NetQuantize Location, float Yaw);
+
+	/** Riding shotgun: E gets out, Q works the lights. */
+	UFUNCTION(Server, Reliable)
+	void ServerLeaveVehicle();
+
+	UFUNCTION(Server, Reliable)
+	void ServerToggleVehicleSiren();
+
+	/** A passenger's view turns with the car. */
+	float LastVehicleYaw = 0.f;
+	bool bTrackVehicleYaw = false;
+
+	/** Whether this machine has us set up in a seat (attached, movement and collision off). */
+	bool bSeated = false;
 
 	/** Short replicated full-body action (e.g. writing a ticket) everyone should see. */
 	UPROPERTY(Replicated)

@@ -31,6 +31,8 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> Whistle;
 	UPROPERTY() TObjectPtr<UInputAction> Menu;
 	UPROPERTY() TObjectPtr<UInputAction> Horn;
+	/** In a vehicle: swap between the chase camera and the view from the seat. */
+	UPROPERTY() TObjectPtr<UInputAction> Camera;
 
 private:
 	UInputAction* MakeAction(FName Name, int32 ValueType);
