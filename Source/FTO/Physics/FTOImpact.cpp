@@ -7,6 +7,7 @@
 #include "Crime/FTOPerp.h"
 #include "Engine/World.h"
 #include "Physics/FTOKnockdownComponent.h"
+#include "Scoring/FTOScoring.h"
 
 namespace
 {
@@ -51,6 +52,7 @@ namespace
 		}
 		GS->AddChaos(Chaos);
 		++GS->CiviliansBowledOver;
+		FTOScoring::Award(Police, EFTOScore::Collateral, Victim->GetActorLocation() + FVector(0.f, 0.f, 120.f));
 		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(Police))
 		{
 			PC->ClientToast(FText::Format(INVTEXT("{0} (+{1} chaos)"), Scolding, FText::AsNumber(FMath::RoundToInt(Chaos))), FLinearColor(1.f, 0.45f, 0.3f));
@@ -106,6 +108,7 @@ bool FTOImpact::Shot(AActor* Victim, const FVector& Velocity, EFTOWeapon Weapon,
 		{
 			PC->ClientToast(INVTEXT("Friendly fire! Check your target."), FLinearColor(1.f, 0.45f, 0.3f));
 			PC->ClientHitMarker(true);
+			FTOScoring::Award(PC, EFTOScore::FriendlyFire, Officer->GetActorLocation() + FVector(0.f, 0.f, 120.f));
 		}
 		else if (AFTOGameState* GS = Victim->GetWorld()->GetGameState<AFTOGameState>())
 		{

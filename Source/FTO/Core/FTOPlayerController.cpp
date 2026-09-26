@@ -8,7 +8,9 @@
 #include "Vehicles/FTOCruiser.h"
 #include "Core/FTOGameMode.h"
 #include "UI/FTOMenuWidget.h"
+#include "Camera/CameraActor.h"
 #include "EngineUtils.h"
+#include "Scoring/FTOScoring.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -414,4 +416,33 @@ void AFTOPlayerController::ServerEnterNearestCruiser_Implementation()
 	{
 		Nearest->Interact(Officer);
 	}
+}
+
+void AFTOPlayerController::ShowDebrief()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+	// Mid-callout or transmission: let go.
+	RadioReleased();
+	if (bWheelOpen)
+	{
+		WheelAim = FVector2D::ZeroVector;
+		WheelClosed();
+	}
+	TArray<FTransform> Spots;
+	FTransform Eye;
+	if (!FTOScoring::DebriefSpots(GetWorld(), 4, Spots, Eye))
+	{
+		return;
+	}
+	FActorSpawnParameters Params;
+	Params.ObjectFlags |= RF_Transient;
+	if (ACameraActor* Camera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Eye, Params))
+	{
+		SetViewTargetWithBlend(Camera, 1.2f, VTBlend_EaseInOut, 2.f);
+	}
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
 }

@@ -1,5 +1,6 @@
 #include "Core/FTOPlayerState.h"
 #include "Core/FTOCharacter.h"
+#include "Core/FTOGameState.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/PlayerController.h"
@@ -14,6 +15,9 @@ void AFTOPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AFTOPlayerState, BadgeIndex);
 	DOREPLIFETIME(AFTOPlayerState, bOnRadio);
 	DOREPLIFETIME(AFTOPlayerState, Callout);
+	DOREPLIFETIME(AFTOPlayerState, Stats);
+	DOREPLIFETIME(AFTOPlayerState, Combo);
+	DOREPLIFETIME(AFTOPlayerState, ComboTime);
 }
 
 void AFTOPlayerState::SetBadgeIndex(int32 NewIndex)
@@ -172,4 +176,77 @@ void AFTOPlayerState::AnnounceCallout() const
 		HUD->AddToast(FText::FromString(Line), FTORadio::CalloutColor(Callout.Callout));
 	}
 	UGameplayStatics::PlaySound2D(this, FTORadio::CalloutChirp(), 0.8f);
+}
+
+// ------------------------------------------------------------------------------------------
+// Scoring
+// ------------------------------------------------------------------------------------------
+
+int32 AFTOPlayerState::GetCombo() const
+{
+	const AGameStateBase* GS = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const float Now = GS ? GS->GetServerWorldTimeSeconds() : 0.f;
+	return Now - ComboTime <= FTOScoring::ComboWindow ? Combo : 1;
+}
+
+int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector& Where)
+{
+	check(HasAuthority());
+	// Only the shift itself counts (not the lobby, and not after the whistle).
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	if (!GS || GS->GetShiftPhase() != EFTOShiftPhase::OnDuty || BasePoints == 0)
+	{
+		return 0;
+	}
+
+	int32 Points = BasePoints;
+	if (FTOScoring::IsPenalty(Event))
+	{
+		Combo = 1; // that's the streak over
+		ComboTime = -100.f;
+	}
+	else
+	{
+		// Quick work builds the combo; the bonuses that come with an arrest ride on the same step.
+		const float Now = GS->GetServerWorldTimeSeconds();
+		const bool bFollowUp = Event == EFTOScore::CaughtInAct || Event == EFTOScore::Assist;
+		if (!bFollowUp)
+		{
+			Combo = Now - ComboTime <= FTOScoring::ComboWindow ? FMath::Min<int32>(Combo + 1, FTOScoring::MaxCombo) : 1;
+			ComboTime = Now;
+		}
+		Points = FMath::RoundToInt(BasePoints * FTOScoring::ComboMultiplier(GetCombo()));
+		Stats.BestCombo = FMath::Max<int32>(Stats.BestCombo, GetCombo());
+	}
+
+	Stats.Score += Points;
+	switch (Event)
+	{
+	case EFTOScore::Arrest:       ++Stats.Arrests; break;
+	case EFTOScore::Bust:         ++Stats.Busts; break;
+	case EFTOScore::CallHandled:  ++Stats.CallsHandled; break;
+	case EFTOScore::CaughtInAct:  ++Stats.CaughtInAct; break;
+	case EFTOScore::Booked:       ++Stats.Booked; break;
+	case EFTOScore::Ticket:       ++Stats.Tickets; break;
+	case EFTOScore::Revive:       ++Stats.Revives; break;
+	case EFTOScore::Collateral:   ++Stats.Collateral; break;
+	case EFTOScore::FriendlyFire: ++Stats.FriendlyFire; break;
+	default: break;
+	}
+	ForceNetUpdate();
+	MulticastScorePopup(Points, Event, Where, uint8(FTOScoring::IsPenalty(Event) ? 1 : GetCombo()));
+	return Points;
+}
+
+void AFTOPlayerState::MulticastScorePopup_Implementation(int32 Points, EFTOScore Event, FVector_NetQuantize Where, uint8 InCombo)
+{
+	if (GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	APlayerController* Local = GetWorld()->GetFirstPlayerController();
+	if (AFTOHUD* HUD = Local ? Local->GetHUD<AFTOHUD>() : nullptr)
+	{
+		HUD->AddScorePopup(this, Points, Event, Where, InCombo);
+	}
 }

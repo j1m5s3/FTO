@@ -96,6 +96,7 @@ void AFTOHUD::DrawHUD()
 		DrawEscortPanel();
 		DrawWeaponPanel();
 		DrawArrestPanel(GS);
+		DrawScoreTicker();
 		break;
 
 	default:
@@ -103,6 +104,7 @@ void AFTOHUD::DrawHUD()
 		break;
 	}
 
+	DrawScorePopups();
 	DrawRadio(GS);
 	DrawToasts();
 }
@@ -582,47 +584,7 @@ void AFTOHUD::DrawBriefing(const AFTOGameState* GS)
 
 void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 {
-	const float S = UIScale();
-	const float CX = Canvas->ClipX * 0.5f;
-	const float CY = Canvas->ClipY * 0.25f;
-	const bool bSurvived = GS->GetShiftPhase() == EFTOShiftPhase::Survived;
-
-	static const TCHAR* WinHeadlines[] =
-	{
-		TEXT("LOCAL COPS ONLY MILDLY RESPONSIBLE FOR MAYHEM"),
-		TEXT("CITY SURVIVES ANOTHER DAY, SOMEHOW"),
-		TEXT("CRIME DOWN, DONUT SALES UP"),
-	};
-	static const TCHAR* LoseHeadlines[] =
-	{
-		TEXT("CITY DESCENDS INTO CHAOS; PRECINCT 'ON BREAK'"),
-		TEXT("MAYOR HIDES UNDER DESK, CITES 'VIBES'"),
-		TEXT("GOOSE NOW EFFECTIVELY IN CHARGE OF DOWNTOWN"),
-	};
-	const int32 Pick = FMath::Abs(GS->ShiftSeed) % 3;
-
-	DrawPanel(CX - 460.f * S, CY - 30.f * S, 920.f * S, 440.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
-	DrawCenteredText(bSurvived ? TEXT("SHIFT SURVIVED!") : TEXT("THE CITY FELL INTO CHAOS"), CX, CY - 20.f * S,
-		bSurvived ? FLinearColor(0.3f, 1.f, 0.4f) : FLinearColor(1.f, 0.25f, 0.25f), GEngine->GetLargeFont(), S * 1.6f);
-	DrawCenteredText(FString::Printf(TEXT("\"%s\""), bSurvived ? WinHeadlines[Pick] : LoseHeadlines[Pick]), CX, CY + 40.f * S,
-		FLinearColor(1.f, 0.9f, 0.6f), GEngine->GetMediumFont(), S);
-
-	const FString Lines[] =
-	{
-		FString::Printf(TEXT("Incidents handled:     %d"), GS->IncidentsResolved),
-		FString::Printf(TEXT("Caught in the act:     %d"), GS->IncidentsWitnessed),
-		FString::Printf(TEXT("Traffic stops:         %d"), GS->TrafficStops),
-		FString::Printf(TEXT("Suspects booked:       %d"), GS->SuspectsBooked),
-		FString::Printf(TEXT("Went cold / escalated: %d"), GS->IncidentsFailed),
-		FString::Printf(TEXT("Citizens bowled over:  %d"), GS->CiviliansBowledOver),
-		FString::Printf(TEXT("Peak chaos:            %d%%"), FMath::RoundToInt(GS->PeakChaos)),
-	};
-	float Y = CY + 100.f * S;
-	for (const FString& Line : Lines)
-	{
-		DrawCenteredText(Line, CX, Y, FLinearColor::White, GEngine->GetMediumFont(), S * 1.1f);
-		Y += 40.f * S;
-	}
+	DrawScoreboard(GS); // FTOHUDScore.cpp
 }
 
 void AFTOHUD::AddToast(const FText& Message, const FLinearColor& Color)

@@ -79,7 +79,8 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 ## Smoke test
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
-Along the way it books a suspect into the cells, looks inside every kind of building (with their people), stages a
+Along the way it books a suspect into the cells (and checks they scored), ends the shift to the scoreboard with the
+squad lined up dancing outside the precinct, looks inside every kind of building (with their people), stages a
 hold-up and a bar brawl, questions a crook, walks through front doors, checks that shop windows let sight through,
 drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (then
 cuffs them where they fell), has a downed officer helped up (the radio calls it in), makes the arrests that don't go

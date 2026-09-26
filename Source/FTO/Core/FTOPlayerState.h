@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
 #include "Radio/FTORadio.h"
+#include "Scoring/FTOScoring.h"
 #include "FTOPlayerState.generated.h"
 
 class UVOIPTalker;
@@ -47,6 +48,23 @@ public:
 	/** Their voice plays through the radio filter here. */
 	bool HasRadioVoice() const { return VoiceTalker != nullptr; }
 
+	// ---- Scoring (see FTOScoring.h) ----
+	const FFTOOfficerStats& GetStats() const { return Stats; }
+	int32 GetShiftScore() const { return Stats.Score; }
+	/**
+	 * Server: Event is worth BasePoints (negative for penalties). Good work within FTOScoring::ComboWindow of the last
+	 * builds the combo (and its multiplier); a penalty breaks it. Everyone sees the popup at Where. Returns the points.
+	 */
+	int32 AddScore(EFTOScore Event, int32 BasePoints, const FVector& Where);
+	/** The combo building right now (1 = none), by the server's clock. */
+	int32 GetCombo() const;
+	/** Server time the combo last grew (it lapses FTOScoring::ComboWindow later). */
+	float GetComboTime() const { return ComboTime; }
+
+	/** Every machine: the "+250 ARREST! x2" popup. */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastScorePopup(int32 Points, EFTOScore Event, FVector_NetQuantize Where, uint8 InCombo);
+
 protected:
 	virtual void BeginPlay() override;
 	/** Every machine, whenever we learn who this officer is (the server sets it, clients get it replicated). */
@@ -72,4 +90,9 @@ protected:
 
 	UPROPERTY(Transient) TObjectPtr<UVOIPTalker> VoiceTalker;
 	float LastCalloutTime = -100.f;
+
+	UPROPERTY(Replicated) FFTOOfficerStats Stats;
+	UPROPERTY(Replicated) uint8 Combo = 1;
+	/** Server time of the last award that built the combo. */
+	UPROPERTY(Replicated) float ComboTime = -100.f;
 };

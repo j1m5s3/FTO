@@ -72,6 +72,9 @@ public:
 	/** Where on the wheel the stick or mouse points (unit circle). */
 	FVector2D GetWheelAim() const { return WheelAim; }
 
+	/** Local: the shift's over: watch the squad line up outside the precinct (and stand still for the photo). */
+	void ShowDebrief();
+
 	/** Make a callout by name: Backup, Fleeing, OfficerDown or Copy. */
 	UFUNCTION(Exec) void FTOCallout(const FString& Name);
 

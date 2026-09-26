@@ -131,7 +131,13 @@ Done:
   (need backup, suspect fleeing, officer down, 10-4) that needs no mic and drops pings on everyone's HUD. Going down
   calls "officer down" automatically.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (destruction, scoring, shift extension, Steam invites),
+- Phase 2: scoring. Every officer scores for arrests (by tier), busts, calls handled, assists, catching crimes in the
+  act, bookings, tickets and revives, and loses points for hurting citizens or shooting partners. Quick work builds a
+  combo (up to x3) that any penalty breaks, and "+250 ARREST! x1.5" pops up where it happened. At the end of the
+  shift the squad lines up outside the precinct, dancing (or slumping), while a scoreboard counts up, ranks them,
+  hands out awards (Top Cop, Traffic Warden, Bull in a China Shop...) and grades the shift S to F.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (destruction, shift extension, Steam invites),
 tracked in [TODO](TODO.md).
 
 Later ideas:

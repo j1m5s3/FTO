@@ -144,6 +144,8 @@ protected:
 	float BlockCheckAccumulator = 0.f;
 	float FleeUntil = 0.f;
 	FTimerHandle TicketTimer;
+	/** Who's writing the ticket (they get the points). */
+	TWeakObjectPtr<AFTOCharacter> TicketOfficer;
 
 	/** The chase this car is the target of, if it fled a stop. */
 	UPROPERTY(Transient) TObjectPtr<AFTOIncident> ChaseIncident;

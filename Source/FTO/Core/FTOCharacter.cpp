@@ -594,9 +594,14 @@ EFTOAnimAction AFTOCharacter::GetAnimAction() const
 	const UWorld* World = GetWorld();
 	const AFTOGameState* GS = World ? World->GetGameState<AFTOGameState>() : nullptr;
 
+	// Lined up for the scoreboard: the squad dances if the city made it, and slumps if it didn't.
 	if (GS && GS->GetShiftPhase() == EFTOShiftPhase::Survived)
 	{
-		return EFTOAnimAction::Cheer;
+		return EFTOAnimAction::Dance;
+	}
+	if (GS && GS->GetShiftPhase() == EFTOShiftPhase::Overrun)
+	{
+		return EFTOAnimAction::Slump;
 	}
 
 	const float Now = GS ? GS->GetServerWorldTimeSeconds() : (World ? World->GetTimeSeconds() : 0.f);
@@ -1196,6 +1201,7 @@ void AFTOCharacter::Interact(AFTOCharacter* Officer)
 	}
 	Officer->PlayTimedAction(EFTOAnimAction::Interact, 1.f);
 	Knockdown->Recover();
+	FTOScoring::Award(Officer, EFTOScore::Revive, GetActorLocation() + FVector(0.f, 0.f, 80.f));
 	if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(Officer->GetController()))
 	{
 		PC->ClientToast(INVTEXT("Back on your feet, partner."), FLinearColor(0.5f, 0.9f, 1.f));
