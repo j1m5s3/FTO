@@ -42,6 +42,19 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> NextWeapon;
 	UPROPERTY() TObjectPtr<UInputAction> PrevWeapon;
 	UPROPERTY() TArray<TObjectPtr<UInputAction>> Slots;
+	/** Radio: hold to talk (V, d-pad down), and hold for the callout wheel (T, d-pad up). */
+	UPROPERTY() TObjectPtr<UInputAction> Radio;
+	UPROPERTY() TObjectPtr<UInputAction> RadioWheel;
+
+	/**
+	 * Laid over everything while the callout wheel is open (so the mouse and 1-4 don't also turn the camera or
+	 * swap weapons): the mouse (RadioAim) nudges a cursor round the wheel and the right stick (RadioAimStick) points
+	 * straight at a callout; Callouts[0..3] pick one outright.
+	 */
+	UPROPERTY() TObjectPtr<UInputMappingContext> WheelContext;
+	UPROPERTY() TObjectPtr<UInputAction> RadioAim;
+	UPROPERTY() TObjectPtr<UInputAction> RadioAimStick;
+	UPROPERTY() TArray<TObjectPtr<UInputAction>> Callouts;
 
 private:
 	UInputAction* MakeAction(FName Name, int32 ValueType);

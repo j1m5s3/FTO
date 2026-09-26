@@ -8,7 +8,7 @@ Details live in the [Phase 2 plan](Phase2Plan.md) and the [game design](GameDesi
   struggling (mash to subdue) or bolting on foot (sprint and tackle); cuffed suspects walk hands-behind to the cells.
 - [ ] **Destruction** (plan item 8): shattering windows, bullet holes and facade chips, props that break or topple
   as debris, vehicle damage states (dents, shed parts, smoke, fire), cartoon debris and dust on impacts.
-- [ ] **Radio** (plan item 9): push-to-talk team voice with a radio filter and squelch; quick callouts with no mic
+- [x] **Radio** (plan item 9): push-to-talk team voice with a radio filter and squelch; quick callouts with no mic
   ("Need backup!", "Suspect fleeing!", "Officer down!", "10-4") that ping the map.
 - [ ] **Scoring** (plan item 10): per-officer points (arrests by tier, catches in the act, tickets, busts, revives;
   penalties for collateral and friendly fire), "+250 ARREST!" popups with combos, and an end-of-shift scoreboard

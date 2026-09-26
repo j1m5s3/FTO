@@ -2,10 +2,12 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Radio/FTORadio.h"
 #include "FTOPlayerController.generated.h"
 
 class UFTOInputConfig;
 class UFTOMenuWidget;
+struct FInputActionValue;
 
 UCLASS()
 class FTO_API AFTOPlayerController : public APlayerController
@@ -61,7 +63,40 @@ public:
 	/** In vehicles, look out from the seat instead of the chase camera (C toggles; local only). */
 	bool bPreferInteriorView = false;
 
+	// ---- Radio (see FTORadio.h) ----
+	/** Local: holding push-to-talk. */
+	bool IsTransmitting() const { return bTransmitting; }
+	bool IsRadioWheelOpen() const { return bWheelOpen; }
+	/** Which callout the wheel points at (None in the middle). Up backup, right fleeing, down officer down, left 10-4. */
+	EFTOCallout GetWheelChoice() const;
+	/** Where on the wheel the stick or mouse points (unit circle). */
+	FVector2D GetWheelAim() const { return WheelAim; }
+
+	/** Make a callout by name: Backup, Fleeing, OfficerDown or Copy. */
+	UFUNCTION(Exec) void FTOCallout(const FString& Name);
+
+	UFUNCTION(Server, Reliable)
+	void ServerCallout(EFTOCallout Callout);
+
+	// Radio input (public for the smoke test).
+	void RadioPressed();
+	void RadioReleased();
+	void WheelOpened();
+	void WheelClosed();
+	void WheelAimed(const FInputActionValue& Value);
+	void WheelStick(const FInputActionValue& Value);
+	void CalloutPicked(int32 Index);
+
 protected:
+	void SendCallout(EFTOCallout Callout);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetOnRadio(bool bOn);
+
+	bool bTransmitting = false;
+	bool bWheelOpen = false;
+	FVector2D WheelAim = FVector2D::ZeroVector;
+
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 

@@ -33,6 +33,10 @@
 			"Enabled": true
 		},
 		{
+			"Name": "Synthesis",
+			"Enabled": true
+		},
+		{
 			"Name": "AndroidFileServer",
 			"Enabled": false
 		},

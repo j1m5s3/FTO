@@ -51,6 +51,11 @@ protected:
 	/** Arrests in progress: the struggle meter (mash!), the cuffing bar, and a suspect on the run. */
 	void DrawArrestPanel(const AFTOGameState* GS);
 
+	/** The squad radio (FTOHUDRadio.cpp): callout pings, who's on air, and the callout wheel. */
+	void DrawRadio(const AFTOGameState* GS);
+	void DrawRadioPings(const AFTOGameState* GS);
+	void DrawRadioWheel();
+
 	/** Local stingers: radio chatter, chimes, alarms, shift fanfares. */
 	void UpdateAudioCues(const AFTOGameState* GS);
 	void DrawToasts();

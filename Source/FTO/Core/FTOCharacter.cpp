@@ -1169,6 +1169,11 @@ bool AFTOCharacter::GoDown(const FVector& Launch, float Seconds)
 	{
 		PC->ClientToast(INVTEXT("You're down! A partner can help you up."), FLinearColor(1.f, 0.4f, 0.3f));
 	}
+	// The radio calls it in for them (the ping follows them until they're up).
+	if (AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>())
+	{
+		PS->MakeCallout(EFTOCallout::OfficerDown, true);
+	}
 	return true;
 }
 

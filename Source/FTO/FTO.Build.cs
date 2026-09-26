@@ -11,7 +11,7 @@ public class FTO : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput",
-			"AIModule", "NavigationSystem", "UMG", "NetCore", "Sockets"
+			"AIModule", "NavigationSystem", "UMG", "NetCore", "Sockets", "Synthesis"
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
