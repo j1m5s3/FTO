@@ -8,6 +8,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Art/FTOArt.h"
 #include "FTO.h"
 
 namespace FTOCityPalette
@@ -71,6 +72,8 @@ AFTOCityGenerator::AFTOCityGenerator()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
+	BaseMaterial = BaseMat.Object;
 	CubeMesh = Cube.Object;
 	CylinderMesh = Cylinder.Object;
 	SphereMesh = Sphere.Object;
@@ -220,12 +223,8 @@ UInstancedStaticMeshComponent* AFTOCityGenerator::GetISM(UStaticMesh* Mesh, int3
 	ISM->SetCollisionProfileName(TEXT("BlockAll"));
 	ISM->RegisterComponent();
 
-	if (UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Mesh->GetMaterial(0), this))
-	{
-		const int32 SafeIndex = FMath::Clamp(ColorIndex, 0, int32(UE_ARRAY_COUNT(FTOCityPalette::Colors)) - 1);
-		MID->SetVectorParameterValue(TEXT("Color"), FTOCityPalette::Colors[SafeIndex]);
-		ISM->SetMaterial(0, MID);
-	}
+	const int32 SafeIndex = FMath::Clamp(ColorIndex, 0, int32(UE_ARRAY_COUNT(FTOCityPalette::Colors)) - 1);
+	FTOArt::ApplyColor(ISM, BaseMaterial, FTOCityPalette::Colors[SafeIndex]);
 
 	ISMs.Add(Key, ISM);
 	return ISM;
@@ -543,16 +542,16 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 			continue;
 		}
 
-		const TArray<FName>* Tags = nullptr;
+		const TArray<FName>* AllowedTags = nullptr;
 		switch (Block.District)
 		{
-		case EFTODistrict::Downtown:    Tags = &FTOSpawnTags::Commercial; break;
-		case EFTODistrict::Residential: Tags = &FTOSpawnTags::Home; break;
-		case EFTODistrict::Industrial:  Tags = &FTOSpawnTags::Industrial; break;
-		case EFTODistrict::Park:        Tags = &FTOSpawnTags::Park; break;
+		case EFTODistrict::Downtown:    AllowedTags = &FTOSpawnTags::Commercial; break;
+		case EFTODistrict::Residential: AllowedTags = &FTOSpawnTags::Home; break;
+		case EFTODistrict::Industrial:  AllowedTags = &FTOSpawnTags::Industrial; break;
+		case EFTODistrict::Park:        AllowedTags = &FTOSpawnTags::Park; break;
 		}
-		SpawnPoint(Block.Center + FVector(Edge, 0.f, 0.f) + Z, *Tags, Block.District);
-		SpawnPoint(Block.Center + FVector(0.f, -Edge, 0.f) + Z, *Tags, Block.District);
+		SpawnPoint(Block.Center + FVector(Edge, 0.f, 0.f) + Z, *AllowedTags, Block.District);
+		SpawnPoint(Block.Center + FVector(0.f, -Edge, 0.f) + Z, *AllowedTags, Block.District);
 	}
 
 	// Officers clock in at the precinct parking lot.
@@ -561,7 +560,7 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 		const FVector Location = PrecinctLocation + FVector(0.f, (i - 1.5f) * 250.f, 100.f);
 		FActorSpawnParameters Params;
 		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		if (APlayerStart* Start = World->SpawnActor<APlayerStart>(APlayerStart::StaticClass(), Location, FRotator::ZeroRotator, Params))
+		if (APlayerStart* Start = World->SpawnActor<APlayerStart>(APlayerStart::StaticClass(), Location, FRotator(0.f, 180.f, 0.f), Params))
 		{
 			Start->PlayerStartTag = TEXT("Precinct");
 		}

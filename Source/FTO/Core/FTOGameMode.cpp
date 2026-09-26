@@ -148,3 +148,16 @@ void AFTOGameMode::FTOAddChaos(float Amount)
 		GS->AddChaos(Amount);
 	}
 }
+
+void AFTOGameMode::FTOSkipBriefing()
+{
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+	{
+		if (GS->GetShiftPhase() == EFTOShiftPhase::Briefing)
+		{
+			const float Now = GetWorld()->GetTimeSeconds();
+			GS->SetShiftTimes(Now, Now + CrimeDirector->ShiftLengthSeconds);
+			GS->SetShiftPhase(EFTOShiftPhase::OnDuty);
+		}
+	}
+}

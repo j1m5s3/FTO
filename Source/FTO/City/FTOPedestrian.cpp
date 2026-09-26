@@ -12,6 +12,7 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Art/FTOArt.h"
 
 namespace
 {
@@ -44,6 +45,8 @@ AFTOPedestrian::AFTOPedestrian()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
+	BaseMaterial = BaseMat.Object;
 
 	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
 	Body->SetupAttachment(Capsule);
@@ -77,15 +80,15 @@ void AFTOPedestrian::BeginPlay()
 void AFTOPedestrian::OnRep_Look()
 {
 	FRandomStream LookRng(LookSeed);
+	const FLinearColor Shirt = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 150, 230);
+	const FLinearColor Skin = FTOArt::SkinTone(LookRng.RandRange(0, 4));
 	if (!BodyMaterial)
 	{
-		BodyMaterial = Body->CreateAndSetMaterialInstanceDynamic(0);
+		BodyMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Shirt);
+		HeadMaterial = FTOArt::ApplyColor(Head, BaseMaterial, Skin);
 	}
-	if (BodyMaterial)
-	{
-		const FLinearColor Shirt = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 150, 230);
-		BodyMaterial->SetVectorParameterValue(TEXT("Color"), Shirt);
-	}
+	FTOArt::SetColor(BodyMaterial, Shirt);
+	FTOArt::SetColor(HeadMaterial, Skin);
 	const float Size = LookRng.FRandRange(0.85f, 1.15f);
 	Body->SetRelativeScale3D(FVector(0.65f * LookRng.FRandRange(0.85f, 1.3f), 0.65f, 1.1f) * Size);
 	Head->SetRelativeScale3D(FVector(0.6f * Size));

@@ -11,6 +11,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Art/FTOArt.h"
 
 AFTOIncident::AFTOIncident()
 {
@@ -25,6 +26,8 @@ AFTOIncident::AFTOIncident()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
+	BaseMaterial = BaseMat.Object;
 
 	Beacon = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Beacon"));
 	Beacon->SetupAttachment(Root);
@@ -293,7 +296,9 @@ void AFTOIncident::RefreshVisuals()
 {
 	if (!BeaconMaterial)
 	{
-		BeaconMaterial = Beacon->CreateAndSetMaterialInstanceDynamic(0);
+		BeaconMaterial = FTOArt::ApplyColor(Beacon, BaseMaterial, FLinearColor::White, 0.6f);
+		// Suspects wear stripy-convict orange until real models land.
+		FTOArt::ApplyColor(Suspect, BaseMaterial, FLinearColor(1.f, 0.35f, 0.05f));
 	}
 
 	FLinearColor Color = FTOCrime::TierColor(Info.Tier);
@@ -308,7 +313,7 @@ void AFTOIncident::RefreshVisuals()
 
 	if (BeaconMaterial)
 	{
-		BeaconMaterial->SetVectorParameterValue(TEXT("Color"), Color);
+		FTOArt::SetColor(BeaconMaterial, Color, 0.6f);
 	}
 
 	// Unreported incidents are just "something happening": no beacon until someone knows.

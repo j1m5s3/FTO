@@ -16,6 +16,7 @@
 #include "Interaction/FTOInteractable.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
+#include "Art/FTOArt.h"
 #include "FTO.h"
 
 AFTOCharacter::AFTOCharacter()
@@ -50,11 +51,11 @@ AFTOCharacter::AFTOCharacter()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 
-	auto MakePiece = [this](FName Name, UStaticMesh* Mesh, const FVector& Loc, const FVector& Scale) -> UStaticMeshComponent*
+	auto MakePiece = [this](FName Name, UStaticMesh* PieceMesh, const FVector& Loc, const FVector& Scale) -> UStaticMeshComponent*
 	{
 		UStaticMeshComponent* Piece = CreateDefaultSubobject<UStaticMeshComponent>(Name);
 		Piece->SetupAttachment(RootComponent);
-		Piece->SetStaticMesh(Mesh);
+		Piece->SetStaticMesh(PieceMesh);
 		Piece->SetRelativeLocation(Loc);
 		Piece->SetRelativeScale3D(Scale);
 		Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -65,6 +66,9 @@ AFTOCharacter::AFTOCharacter()
 	BodyMesh = MakePiece(TEXT("BodyMesh"), CylinderMesh.Object, FVector(0.f, 0.f, -25.f), FVector(0.8f, 0.8f, 1.3f));
 	HeadMesh = MakePiece(TEXT("HeadMesh"), SphereMesh.Object,   FVector(0.f, 0.f, 60.f),  FVector(0.75f));
 	CapMesh  = MakePiece(TEXT("CapMesh"),  CylinderMesh.Object, FVector(8.f, 0.f, 95.f),  FVector(0.8f, 0.8f, 0.2f));
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
+	BaseMaterial = BaseMat.Object;
 
 	// No skeletal mesh yet.
 	GetMesh()->SetVisibility(false);
@@ -102,6 +106,17 @@ void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	EIC->BindAction(Input->Whistle, ETriggerEvent::Started, this, &AFTOCharacter::WhistlePressed);
 }
 
+void AFTOCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Skin and a navy cap band; the uniform itself follows the badge colour.
+	const AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>();
+	FTOArt::ApplyColor(HeadMesh, BaseMaterial, FTOArt::SkinTone(PS ? PS->GetBadgeIndex() : 0));
+	FTOArt::ApplyColor(CapMesh, BaseMaterial, FLinearColor(0.02f, 0.03f, 0.09f));
+	RefreshOfficerColor();
+}
+
 void AFTOCharacter::PossessedBy(AController* NewController)
 {
 	Super::PossessedBy(NewController);
@@ -124,17 +139,13 @@ void AFTOCharacter::RefreshOfficerColor()
 
 	if (!UniformMaterial)
 	{
-		UniformMaterial = BodyMesh->CreateAndSetMaterialInstanceDynamic(0);
-		if (CapMesh && UniformMaterial)
-		{
-			CapMesh->SetMaterial(0, UniformMaterial);
-		}
+		UniformMaterial = FTOArt::ApplyColor(BodyMesh, BaseMaterial, PS->GetOfficerColor());
 	}
+	FTOArt::SetColor(UniformMaterial, PS->GetOfficerColor());
 
-	if (UniformMaterial)
+	if (HeadMesh)
 	{
-		// BasicShapeMaterial exposes a "Color" vector parameter.
-		UniformMaterial->SetVectorParameterValue(TEXT("Color"), PS->GetOfficerColor());
+		FTOArt::ApplyColor(HeadMesh, BaseMaterial, FTOArt::SkinTone(PS->GetBadgeIndex()));
 	}
 }
 

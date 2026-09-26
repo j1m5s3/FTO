@@ -1,6 +1,7 @@
 #include "Core/FTOPlayerController.h"
 #include "Core/FTOInputConfig.h"
 #include "UI/FTOHUD.h"
+#include "Dev/FTOSmokeTest.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
 
@@ -12,6 +13,18 @@ UFTOInputConfig* AFTOPlayerController::GetInputConfig()
 		InputConfig->Build();
 	}
 	return InputConfig;
+}
+
+void AFTOPlayerController::BeginPlay()
+{
+	Super::BeginPlay();
+
+#if !UE_BUILD_SHIPPING
+	if (IsLocalPlayerController() && AFTOSmokeTest::IsRequested())
+	{
+		GetWorld()->SpawnActor<AFTOSmokeTest>(AFTOSmokeTest::StaticClass(), FTransform::Identity);
+	}
+#endif
 }
 
 void AFTOPlayerController::SetupInputComponent()

@@ -15,6 +15,7 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Art/FTOArt.h"
 
 namespace
 {
@@ -42,6 +43,8 @@ AFTOTrafficCar::AFTOTrafficCar()
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
+	BaseMaterial = BaseMat.Object;
 
 	Chassis = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Chassis"));
 	Chassis->SetupAttachment(Collision);
@@ -99,15 +102,17 @@ void AFTOTrafficCar::BeginPlay()
 void AFTOTrafficCar::OnRep_Look()
 {
 	FRandomStream LookRng(LookSeed);
+	const FLinearColor Paint = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 200, 240);
 	if (!PaintMaterial)
 	{
-		PaintMaterial = Chassis->CreateAndSetMaterialInstanceDynamic(0);
-		Cabin->SetMaterial(0, PaintMaterial);
+		PaintMaterial = FTOArt::ApplyColor(Chassis, BaseMaterial, Paint);
+		FTOArt::ApplyColor(Cabin, BaseMaterial, FLinearColor(0.55f, 0.75f, 0.9f));
+		for (UStaticMeshComponent* Wheel : Wheels)
+		{
+			FTOArt::ApplyColor(Wheel, BaseMaterial, FLinearColor(0.02f, 0.02f, 0.02f));
+		}
 	}
-	if (PaintMaterial)
-	{
-		PaintMaterial->SetVectorParameterValue(TEXT("Color"), FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 200, 240));
-	}
+	FTOArt::SetColor(PaintMaterial, Paint);
 	// Some cars are comically long, some are tiny.
 	const float Length = LookRng.FRandRange(0.8f, 1.25f);
 	Chassis->SetRelativeScale3D(FVector(4.6f * Length, 2.1f, 0.9f));
@@ -147,6 +152,7 @@ void AFTOTrafficCar::StartDriving(AFTOCityGenerator* InCity, int32 InI, int32 In
 	RollViolation();
 
 	Node = FIntPoint(InI, InJ);
+	MaxPatience = Rng.FRandRange(2.f, 4.5f);
 	Heading = Directions[Rng.RandRange(0, 3)];
 
 	const FVector Start = LanePoint(Node.X, Node.Y, Heading);
@@ -231,7 +237,7 @@ void AFTOTrafficCar::OnArrived()
 	}
 }
 
-bool AFTOTrafficCar::IsPathBlocked() const
+bool AFTOTrafficCar::IsPathBlocked(bool bIncludeCars) const
 {
 	const FVector Forward = GetActorForwardVector();
 	const FVector Start = GetActorLocation() + Forward * 260.f;
@@ -240,7 +246,10 @@ bool AFTOTrafficCar::IsPathBlocked() const
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCarAhead), false, this);
 	FCollisionObjectQueryParams Objects;
 	Objects.AddObjectTypesToQuery(ECC_Pawn);
-	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	if (bIncludeCars)
+	{
+		Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	}
 
 	FHitResult Hit;
 	return GetWorld()->SweepSingleByObjectType(Hit, Start, End, FQuat::Identity, Objects, FCollisionShape::MakeSphere(100.f), Params);
@@ -284,11 +293,21 @@ void AFTOTrafficCar::Tick(float DeltaSeconds)
 	}
 	BlockCheckAccumulator = 0.f;
 
-	const bool bBlocked = CarState == EFTOCarState::Driving && IsPathBlocked();
+	// Cars that have waited a while get impatient and stop yielding to other cars (never to people),
+	// which breaks four-way standoffs at intersections.
+	const float Now = GetWorld()->GetTimeSeconds();
+	const bool bImpatient = Now < IgnoreCarsUntil;
+	const bool bBlocked = CarState == EFTOCarState::Driving && IsPathBlocked(!bImpatient);
 	if (bBlocked && !bWaitingForClearRoad)
 	{
 		bWaitingForClearRoad = true;
+		WaitStartTime = Now;
 		Hold();
+	}
+	else if (bBlocked && bWaitingForClearRoad && Now - WaitStartTime > MaxPatience)
+	{
+		IgnoreCarsUntil = Now + 2.5f;
+		WaitStartTime = Now;
 	}
 	else if (!bBlocked && bWaitingForClearRoad)
 	{

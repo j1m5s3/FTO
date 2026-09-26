@@ -9,6 +9,7 @@ class AFTOCityGenerator;
 class UCapsuleComponent;
 class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 
 /**
  * An ambient citizen strolling the sidewalks. Officers can chat to them;
@@ -46,7 +47,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Body;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Head;
 
+	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> BodyMaterial;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> HeadMaterial;
 
 	/** Packed look: colour + size, rolled on the server. */
 	UPROPERTY(ReplicatedUsing=OnRep_Look) int32 LookSeed = 0;

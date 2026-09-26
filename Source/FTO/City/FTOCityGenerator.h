@@ -7,6 +7,7 @@
 class UInstancedStaticMeshComponent;
 class UStaticMesh;
 class UTextRenderComponent;
+class UMaterialInterface;
 
 UENUM(BlueprintType)
 enum class EFTODistrict : uint8
@@ -109,6 +110,7 @@ protected:
 
 	UPROPERTY(Transient) TArray<FFTOCityBlock> Blocks;
 	UPROPERTY(Transient) TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> ISMs;
+	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> CubeMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> CylinderMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> SphereMesh;
