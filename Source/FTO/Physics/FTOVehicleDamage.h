@@ -103,6 +103,7 @@ protected:
 
 	EFTOCarDamage Shown = EFTOCarDamage::Fine;
 	uint8 SeenSerial = 0;
+	bool bSeenState = false;
 	float PlumeTime = 0.f;
 	TWeakObjectPtr<AController> LastInstigator;
 

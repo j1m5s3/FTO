@@ -79,7 +79,7 @@ void UFTOVehicleDamage::ApplyDamage(float Amount, const FVector& At, AController
 
 	// The police knocking a citizen's car about: the city notices, and a write-off goes on the report card.
 	AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
-	const bool bPolice = Cast<APlayerController>(LastInstigator.Get()) != nullptr;
+	const bool bPolice = Cast<APlayerController>(Instigator) != nullptr;
 	if (GS && bCitizensCar && bPolice)
 	{
 		GS->AddChaos((Before - State.Health) * 0.02f);
@@ -106,8 +106,11 @@ void UFTOVehicleDamage::Repair()
 
 void UFTOVehicleDamage::OnRep_State()
 {
-	const bool bFresh = State.Serial != SeenSerial && State.LastDamage > 0.f;
+	// The first we hear of a car already knocked about (joining late, or it just came into range) is old news, unless
+	// it is its very first knock.
+	const bool bFresh = State.Serial != SeenSerial && State.LastDamage > 0.f && (bSeenState || State.Serial == 1);
 	SeenSerial = State.Serial;
+	bSeenState = true;
 	ApplyState(bFresh);
 }
 

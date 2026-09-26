@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Physics/FTODestruction.h"
 
 namespace
 {
@@ -239,7 +240,8 @@ void UFTODebris::BulletHole(const FVector& At, const FVector& Normal, USceneComp
 		return;
 	}
 	GetHost();
-	if (!DecalMaterial || Normal.IsNearlyZero())
+	// (Nothing in street furniture that breaks: the hole would be left hanging in the air when it goes.)
+	if (!DecalMaterial || Normal.IsNearlyZero() || (On && AFTODestruction::KindOf(Cast<UPrimitiveComponent>(On)) != EFTOBreakKind::None))
 	{
 		return;
 	}
@@ -254,7 +256,9 @@ void UFTODebris::BulletHole(const FVector& At, const FVector& Normal, USceneComp
 	}
 
 	// A decal projects along its X: into the surface, spun at random so they don't all match.
-	UDecalComponent* Hole = NewObject<UDecalComponent>(Host);
+	// Moving things (cars) own their holes, so they go when the car does.
+	const bool bMoving = On && On->Mobility == EComponentMobility::Movable && On->GetOwner();
+	UDecalComponent* Hole = NewObject<UDecalComponent>(bMoving ? On->GetOwner() : Host.Get());
 	Hole->SetDecalMaterial(DecalMaterial);
 	Hole->DecalSize = FVector(8.f, 5.f, 5.f) * FMath::FRandRange(0.8f, 1.2f);
 	Hole->SetFadeScreenSize(0.002f);
@@ -266,7 +270,7 @@ void UFTODebris::BulletHole(const FVector& At, const FVector& Normal, USceneComp
 	Facing.Roll = FMath::FRandRange(0.f, 360.f);
 	Hole->SetWorldLocationAndRotation(At, Facing);
 	// Moving things (cars) carry their holes with them.
-	if (On && On->Mobility == EComponentMobility::Movable)
+	if (bMoving)
 	{
 		Hole->SetUsingAbsoluteLocation(false);
 		Hole->SetUsingAbsoluteRotation(false);

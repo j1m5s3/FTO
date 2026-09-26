@@ -1,4 +1,5 @@
 #include "Vehicles/FTOCruiser.h"
+#include "Crime/FTOArrestee.h"
 #include "Physics/FTODestruction.h"
 #include "Physics/FTOImpact.h"
 #include "Physics/FTOKnockdownComponent.h"
@@ -706,9 +707,18 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 		Wreckage->BreakLocally(Thing, Hit.Item, Hit.ImpactPoint, Push);
 		ServerBreakThrough(Thing->GetFName(), Hit.Item, Hit.ImpactPoint, Push);
 	}
-	// It's being tucked away: don't catch on it again meanwhile.
+	// It's being tucked away: don't catch on it again meanwhile. (Briefly: this lets the car through every
+	// instance of that mesh, so the next fence panel along should still stop it.)
 	Collision->IgnoreComponentWhenMoving(Thing, true);
-	BrokenThrough.Emplace(Thing, GetWorld()->GetTimeSeconds() + 0.15f);
+	const float Until = GetWorld()->GetTimeSeconds() + 0.06f;
+	if (TPair<TWeakObjectPtr<UPrimitiveComponent>, float>* Already = BrokenThrough.FindByPredicate([Thing](const TPair<TWeakObjectPtr<UPrimitiveComponent>, float>& Entry) { return Entry.Key == Thing; }))
+	{
+		Already->Value = Until;
+	}
+	else
+	{
+		BrokenThrough.Emplace(Thing, Until);
+	}
 	Velocity *= Kind == EFTOBreakKind::Topple ? 0.6f : 0.85f;
 	return true;
 }
@@ -782,6 +792,14 @@ void AFTOCruiser::TickMotorPool(float DeltaSeconds)
 	AbandonedFor += DeltaSeconds;
 	if (AbandonedFor >= MotorPoolSeconds)
 	{
+		// Not with a prisoner still in the back (they'd be towed off from under their escort).
+		for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+		{
+			if (It->GetRideVehicle() == this)
+			{
+				return;
+			}
+		}
 		AbandonedFor = 0.f;
 		StopDead();
 		SetActorTransform(HomeTransform, false, nullptr, ETeleportType::TeleportPhysics);

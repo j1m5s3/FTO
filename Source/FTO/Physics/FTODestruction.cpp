@@ -283,7 +283,8 @@ void AFTODestruction::Apply(const FFTOBrokenPiece& Piece)
 	ISM->UpdateInstanceTransform(Piece.Instance, Gone, true, true, true);
 
 	const AGameStateBase* GS = GetWorld()->GetGameState();
-	const float Age = (GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds()) - Piece.Time;
+	// (No server clock yet, just joined: it's old news, no replay.)
+	const float Age = GS ? GS->GetServerWorldTimeSeconds() - Piece.Time : TNumericLimits<float>::Max();
 	const EFTOBreakKind Kind = KindOf(ISM);
 	if (Age < FreshSeconds)
 	{

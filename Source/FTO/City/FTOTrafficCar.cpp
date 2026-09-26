@@ -597,6 +597,8 @@ void AFTOTrafficCar::MakeGetaway()
 	check(HasAuthority());
 	// Floor it! The chase incident rides along with us.
 	CarState = EFTOCarState::Fleeing;
+	// A crook's getaway car now: running it off the road is fair game, not property damage.
+	Damage->bCitizensCar = false;
 	FleeUntil = GetWorld()->GetTimeSeconds() + 120.f;
 	Violation = EFTOCarViolation::None;
 	bWaitingForClearRoad = false;
