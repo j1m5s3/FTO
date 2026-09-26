@@ -38,6 +38,8 @@ struct FFTOSoundSet
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Bugle;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Fail;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Click;
+	/** Cartoon thump-and-boing when somebody gets knocked flying. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Bonk;
 	/** Shared 3D falloff for sounds in the world. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundAttenuation> World;
 };
@@ -95,6 +97,8 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 IncidentsWitnessed = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 TrafficStops = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 SuspectsBooked = 0;
+	/** Citizens the police bowled over (cruisers, tackles). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 CiviliansBowledOver = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") float PeakChaos = 0.f;
 
 	/** Seed for this shift's procedural generation (city layout + crimes). */

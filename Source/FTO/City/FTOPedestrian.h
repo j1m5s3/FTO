@@ -44,10 +44,7 @@ public:
 	virtual FVector GetInteractLocation() const override { return GetActorLocation(); }
 
 	// IFTOAnimatedActor
-	virtual EFTOAnimAction GetAnimAction() const override
-	{
-		return bHandsUp ? EFTOAnimAction::Cheer : (bChatting ? EFTOAnimAction::Interact : EFTOAnimAction::None);
-	}
+	virtual EFTOAnimAction GetAnimAction() const override;
 	virtual float GetAnimSpeed() const override { return GetCurrentSpeed(); }
 
 	virtual bool IsMovementFrozen() const override;

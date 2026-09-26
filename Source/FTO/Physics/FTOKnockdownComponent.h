@@ -48,6 +48,8 @@ public:
 	void Recover();
 
 	UFUNCTION(BlueprintPure, Category="Knockdown") bool IsDown() const { return State.bDown; }
+	/** Just got up: sat on the ground seeing stars for DazedSeconds (every machine keeps its own clock). */
+	bool IsDazed() const;
 
 	/** Where the body actually is right now (pelvis while ragdolling, else the actor). */
 	FVector GetBodyLocation() const;

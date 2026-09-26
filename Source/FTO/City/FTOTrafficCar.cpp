@@ -1,4 +1,6 @@
 #include "City/FTOTrafficCar.h"
+#include "Engine/OverlapResult.h"
+#include "Physics/FTOImpact.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameMode.h"
@@ -406,6 +408,21 @@ void AFTOTrafficCar::Tick(float DeltaSeconds)
 	if (!HasAuthority() || (CarState != EFTOCarState::Driving && CarState != EFTOCarState::Fleeing))
 	{
 		return;
+	}
+
+	// A getaway car doesn't stop for anyone: whoever's in front of the bumper goes flying.
+	if (CarState == EFTOCarState::Fleeing && GetCurrentSpeed() >= FTOImpact::MinRunOverSpeed)
+	{
+		TArray<FOverlapResult> InTheWay;
+		const FVector Ahead = GetActorLocation() + GetActorForwardVector() * 200.f;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOGetawayBumper), false, this);
+		if (GetWorld()->OverlapMultiByObjectType(InTheWay, Ahead, GetActorQuat(), FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeBox(FVector(90.f, 120.f, 90.f)), Params))
+		{
+			for (const FOverlapResult& Overlap : InTheWay)
+			{
+				FTOImpact::RunOver(Overlap.GetActor(), GetActorLocation(), GetMoveDirection() * GetCurrentSpeed(), nullptr);
+			}
+		}
 	}
 
 	BlockCheckAccumulator += DeltaSeconds;

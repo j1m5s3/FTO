@@ -8,6 +8,7 @@
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Dev/FTOAnimDummy.h"
+#include "Physics/FTOKnockdownComponent.h"
 #include "Crime/FTOArrestee.h"
 #include "Crime/FTOCrimeDirector.h"
 #include "Vehicles/FTOCruiser.h"
@@ -726,6 +727,127 @@ void AFTOSmokeTest::BuildSteps()
 		}
 	});
 	AddShot(TEXT("10_got_out"), 1.f);
+
+	// Ragdolls in the world (host only): drive into three citizens, then tackle one, then watch them get up.
+	if (GetNetMode() != NM_Client)
+	{
+		AddStep(TEXT("bowling"), 1.6f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!TestCruiser || !Cop)
+			{
+				return;
+			}
+			// The tour's staged crimes have the city near boiling point by now: calm it down so the shift
+			// doesn't end (report card over everything) mid-test.
+			if (AFTOGameMode* GM = GetAuthGameMode())
+			{
+				GM->FTOAddChaos(-100.f);
+			}
+			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+			{
+				GS->SetShiftPhase(EFTOShiftPhase::OnDuty);
+				ChaosBefore = GS->GetChaos();
+			}
+			const FVector Car = TestCruiser->GetActorLocation();
+			const FVector Fwd = TestCruiser->GetActorForwardVector();
+			const FVector Right = TestCruiser->GetActorRightVector();
+			const float Ground = Car.Z - AFTOCruiser::RideHeight;
+			Pins.Reset();
+			for (TActorIterator<AFTOPedestrian> It(GetWorld()); It && Pins.Num() < 3; ++It)
+			{
+				if (!It->IsA<AFTOOccupant>())
+				{
+					const int32 k = Pins.Num();
+					const FVector Spot = Car + Fwd * (1500.f + k * 220.f) + Right * (k - 1) * 70.f;
+					It->TeleportAndHold(FVector(Spot.X, Spot.Y, Ground + AFTOPedestrian::HalfHeight));
+					Pins.Add(*It);
+				}
+			}
+			TestCruiser->Interact(Cop);
+			TestCruiser->SetAutopilot(true, 1.f, 0.f);
+			SetHUDVisible(true);
+		});
+		AddStep(TEXT("chase cam"), 0.3f, [this]()
+		{
+			// Just before the bumper meets the first of them: from behind and above the car.
+			if (TestCruiser)
+			{
+				const FVector Car = TestCruiser->GetActorLocation();
+				const FVector Fwd = TestCruiser->GetActorForwardVector();
+				ViewFrom(Car - Fwd * 650.f + FVector(0.f, 0.f, 420.f), Car + Fwd * 900.f);
+			}
+		});
+		AddShot(TEXT("16a_bowled_over"), 0.5f);
+		AddStep(TEXT("bowling result"), 1.f, [this]()
+		{
+			int32 Down = 0;
+			for (const TWeakObjectPtr<AFTOPedestrian>& Pin : Pins)
+			{
+				Down += Pin.IsValid() && Pin->GetKnockdown()->IsDown() ? 1 : 0;
+			}
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: bowled over %d of %d citizens (chaos %+.1f, %d on the report card)."), Down, Pins.Num(),
+				GS ? GS->GetChaos() - ChaosBefore : 0.f, GS ? GS->CiviliansBowledOver : 0);
+			if (TestCruiser)
+			{
+				TestCruiser->SetAutopilot(false);
+				TestCruiser->StopDead();
+				TestCruiser->RequestExit();
+			}
+		});
+		AddStep(TEXT("tackle"), 0.35f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop)
+			{
+				return;
+			}
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(Cop, 0.f); }
+			TackleTarget.Reset();
+			for (TActorIterator<AFTOPedestrian> It(GetWorld()); It; ++It)
+			{
+				if (!It->IsA<AFTOOccupant>() && !It->GetKnockdown()->IsDown())
+				{
+					TackleTarget = *It;
+					break;
+				}
+			}
+			if (TackleTarget.IsValid() && TestCruiser)
+			{
+				// Face along the road beside the car, the citizen a few steps ahead; film from the side away from the car.
+				const FVector Fwd = TestCruiser->GetActorForwardVector();
+				const FVector Right = TestCruiser->GetActorRightVector();
+				const float Side = FVector::DotProduct(Cop->GetActorLocation() - TestCruiser->GetActorLocation(), Right) >= 0.f ? 1.f : -1.f;
+				Cop->SetActorRotation(Fwd.Rotation());
+				const FVector Spot = Cop->GetActorLocation() + Fwd * 280.f;
+				TackleTarget->TeleportAndHold(FVector(Spot.X, Spot.Y, Cop->GetActorLocation().Z - 96.f + AFTOPedestrian::HalfHeight));
+				ViewFrom(Cop->GetActorLocation() + Fwd * 150.f + Right * Side * 560.f + FVector(0.f, 0.f, 120.f), Cop->GetActorLocation() + Fwd * 180.f);
+			}
+			Cop->TacklePressed();
+		});
+		AddShot(TEXT("16b_tackle"), 0.6f);
+		AddStep(TEXT("tackle result"), 2.9f, [this]()
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: tackle: %s."), TackleTarget.IsValid() && TackleTarget->GetKnockdown()->IsDown() ? TEXT("they went down") : TEXT("MISSED"));
+		});
+		AddStep(TEXT("dazed"), 0.4f, [this]()
+		{
+			SetHUDVisible(false);
+			if (TackleTarget.IsValid())
+			{
+				const FVector Who = TackleTarget->GetActorLocation();
+				ViewFrom(Who + TackleTarget->GetActorForwardVector() * 260.f + TackleTarget->GetActorRightVector() * 120.f + FVector(0.f, 0.f, 40.f), Who - FVector(0.f, 0.f, 50.f));
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: after the tackle they're %s."), TackleTarget->GetKnockdown()->IsDazed() ? TEXT("sat up, seeing stars") : TEXT("NOT dazed"));
+			}
+		});
+		AddShot(TEXT("16c_dazed"), 0.3f, false);
+		AddStep(TEXT("back to the officer"), 0.3f, [this]()
+		{
+			SetHUDVisible(true);
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+	}
 
 	// Two players (-FTOSmokeRideAlong): the host parks in a cruiser and waits; the client (whose tour
 	// runs ~20 s behind) hops in beside them, looks around from both cameras, and gets out again.

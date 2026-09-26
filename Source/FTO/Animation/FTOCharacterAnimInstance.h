@@ -43,6 +43,12 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	float WalkReferenceSpeed = 200.f;
 	float RunReferenceSpeed = 475.f;
 
+	/** A pose to ease out of (local space, one transform per mesh bone), e.g. where a ragdoll came to rest. */
+	TArray<FTransform> FromPose;
+	/** How much of FromPose still shows, fading to 0 at FromFadeRate per second. */
+	float FromWeight = 0.f;
+	float FromFadeRate = 0.f;
+
 private:
 	void Sample(UAnimSequence* Sequence, float Time, FPoseContext& Out) const;
 	static void Blend(FPoseContext& InOut, const FPoseContext& Other, float Alpha);
@@ -83,6 +89,12 @@ public:
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> AimRifleClip;
 	/** One clip per EFTOAnimAction (A_Officer_<ActionName>). */
 	UPROPERTY(EditAnywhere, Category="Clips") TMap<EFTOAnimAction, TObjectPtr<UAnimSequence>> ActionClips;
+
+	/**
+	 * Start from LocalPose (one parent-relative transform per mesh bone) and ease into the animation over
+	 * Duration seconds, so a character getting up from a ragdoll doesn't snap upright.
+	 */
+	void BlendFromPose(const TArray<FTransform>& LocalPose, float Duration);
 
 protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;

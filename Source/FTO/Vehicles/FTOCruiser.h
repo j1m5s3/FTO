@@ -143,6 +143,16 @@ protected:
 	UFUNCTION(Server, Unreliable)
 	void ServerMove(FVector_NetQuantize10 Location, float Yaw, float Speed, float Lateral, float Steer);
 
+	/**
+	 * Whoever simulates the car: it's hit Victim at Velocity. Anyone who can be knocked over goes flying (the
+	 * server decides, see FTOImpact) and the car ploughs on through them; returns false for walls and cars.
+	 */
+	bool BowlOver(AActor* Victim, const FVector& Velocity);
+	UFUNCTION(Server, Reliable)
+	void ServerBowlOver(AActor* Victim, FVector_NetQuantize10 Velocity);
+	/** People we've just hit, passed through until then (they're busy flying). */
+	TArray<TPair<TWeakObjectPtr<AActor>, float>> BowledOver;
+
 	UFUNCTION(Server, Reliable)
 	void ServerExit();
 

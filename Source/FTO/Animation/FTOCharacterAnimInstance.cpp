@@ -87,6 +87,8 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	}
 	AimTime = Wrap(AimTime + DeltaSeconds, ShownAim == EFTOAimPose::Rifle ? AimRifle : AimPistol);
 	SmoothedPitch = FMath::FInterpTo(SmoothedPitch, AimPitch, DeltaSeconds, 15.f);
+
+	FromWeight = FMath::Max(0.f, FromWeight - DeltaSeconds * FromFadeRate);
 }
 
 void FFTOCharacterAnimProxy::Sample(UAnimSequence* Sequence, float Time, FPoseContext& Out) const
@@ -199,6 +201,23 @@ bool FFTOCharacterAnimProxy::Evaluate(FPoseContext& Output)
 	// 4. Weapon pose from the waist up.
 	ApplyAimLayer(Output);
 
+	// 5. Easing out of a pose we were thrown into (getting up from a ragdoll).
+	if (FromWeight > 0.f && FromPose.Num() > 0)
+	{
+		const float Alpha = FromWeight * FromWeight * (3.f - 2.f * FromWeight);
+		const FBoneContainer& Bones = Output.Pose.GetBoneContainer();
+		for (const FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
+		{
+			const int32 MeshIndex = Bones.MakeMeshPoseIndex(Bone).GetInt();
+			if (FromPose.IsValidIndex(MeshIndex))
+			{
+				FTransform Blended;
+				Blended.Blend(Output.Pose[Bone], FromPose[MeshIndex], Alpha);
+				Output.Pose[Bone] = Blended;
+			}
+		}
+	}
+
 	return true;
 }
 
@@ -256,6 +275,14 @@ void UFTOCharacterAnimInstance::NativeInitializeAnimation()
 	{
 		Proxy.ActionClips.Add(Pair.Key, Pair.Value.Get());
 	}
+}
+
+void UFTOCharacterAnimInstance::BlendFromPose(const TArray<FTransform>& LocalPose, float Duration)
+{
+	FFTOCharacterAnimProxy& Proxy = GetProxyOnGameThread<FFTOCharacterAnimProxy>();
+	Proxy.FromPose = LocalPose;
+	Proxy.FromWeight = 1.f;
+	Proxy.FromFadeRate = 1.f / FMath::Max(0.05f, Duration);
 }
 
 void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)

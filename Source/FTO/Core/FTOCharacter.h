@@ -59,6 +59,9 @@ public:
 	/** Blow the police whistle (what Q does on foot). */
 	void BlowWhistle() { ServerWhistle(); }
 
+	/** Flying tackle (what F does on foot): dive forward and bowl over whoever's in the way. */
+	void TacklePressed();
+
 	/** Server: play a full-body action for a while (ticket writing, chatting). */
 	void PlayTimedAction(EFTOAnimAction Action, float Duration);
 
@@ -196,7 +199,23 @@ protected:
 	void ServerWhistle();
 	float NextWhistleTime = 0.f;
 
+	/** Can this officer dive right now (on foot, on their feet, not mid-air, not too soon after the last)? */
+	bool CanTackle() const;
+	/** The dive itself: launch forward (the owner predicts it, the server does it for real). */
+	void LaunchTackle();
+	UFUNCTION(Server, Reliable)
+	void ServerTackle();
+	/** Server: during the dive, look for someone to land on. */
+	void CheckTackle();
+	FTimerHandle TackleTimer;
+	float TackleReachUntil = 0.f;
+	float NextTackleTime = 0.f;
+
 	/** How far a whistle carries (citizens stop, nearby crimes get called in). */
 	UPROPERTY(EditDefaultsOnly, Category="FTO")
 	float WhistleRadius = 1800.f;
+
+	/** Seconds between tackles. */
+	UPROPERTY(EditDefaultsOnly, Category="FTO")
+	float TackleCooldown = 1.2f;
 };

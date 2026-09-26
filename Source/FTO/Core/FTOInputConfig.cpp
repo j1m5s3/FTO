@@ -42,6 +42,7 @@ void UFTOInputConfig::Build()
 	Menu     = MakeAction(TEXT("IA_Menu"),     (int32)EInputActionValueType::Boolean);
 	Horn     = MakeAction(TEXT("IA_Horn"),     (int32)EInputActionValueType::Boolean);
 	Camera   = MakeAction(TEXT("IA_Camera"),   (int32)EInputActionValueType::Boolean);
+	Tackle   = MakeAction(TEXT("IA_Tackle"),   (int32)EInputActionValueType::Boolean);
 
 	// Movement
 	MapAxis2D(Move, EKeys::W, EKeys::S, EKeys::A, EKeys::D);
@@ -85,4 +86,7 @@ void UFTOInputConfig::Build()
 
 	DefaultContext->MapKey(Camera, EKeys::C);
 	DefaultContext->MapKey(Camera, EKeys::Gamepad_RightThumbstick);
+
+	DefaultContext->MapKey(Tackle, EKeys::F);
+	DefaultContext->MapKey(Tackle, EKeys::Gamepad_FaceButton_Right);
 }

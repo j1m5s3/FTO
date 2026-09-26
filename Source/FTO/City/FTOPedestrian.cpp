@@ -282,6 +282,15 @@ void AFTOPedestrian::Interact(AFTOCharacter* Officer)
 	PC->ClientToast(FText::FromString(GetSmallTalk()), FLinearColor::White);
 }
 
+EFTOAnimAction AFTOPedestrian::GetAnimAction() const
+{
+	if (Knockdown && Knockdown->IsDazed())
+	{
+		return EFTOAnimAction::Dazed;
+	}
+	return bHandsUp ? EFTOAnimAction::Cheer : (bChatting ? EFTOAnimAction::Interact : EFTOAnimAction::None);
+}
+
 bool AFTOPedestrian::IsMovementFrozen() const
 {
 	return Knockdown && Knockdown->IsDown();

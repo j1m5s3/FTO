@@ -5,6 +5,7 @@ Synthesises all of FTO's sound effects from code (100% in-house) and imports the
 
 Writes 16-bit mono WAVs to Art/Source/Audio, imports them to /Game/FTO/Audio as SoundWaves
 (loops flagged), and creates SA_FTOWorld, the shared 3D attenuation for world sounds.
+Set FTO_SOUNDS=SW_Bonk,SW_Chime (comma-separated) to rebuild just those.
 """
 import math
 import os
@@ -219,6 +220,16 @@ def click():
     return normalize(envelope(tone(lambda t: 1800.0, 0.03), 0.001, 0.02, decay=0.01), 0.4)
 
 
+def bonk():
+    # Somebody got knocked flying: a dull thump with a springy cartoon boing on top.
+    thump = mix(tone(lambda t: 45.0 + 120.0 * math.exp(-t * 14.0), 0.25),
+                gain(lowpass(noise(0.25), 700), 0.7))
+    thump = envelope(thump, 0.001, 0.05, decay=0.07)
+    wobble = lambda t: 1.0 + 0.3 * math.sin(TAU * 17.0 * t) * math.exp(-t * 4.0)
+    boing = envelope(tone(lambda t: 310.0 * wobble(t) * (1.0 - 0.4 * t), 0.55, tri), 0.004, 0.15, decay=0.25)
+    return normalize(mix(thump, gain(boing, 0.5)), 0.6)
+
+
 SOUNDS = {
     "SW_SirenLoop": (siren_loop, True),
     "SW_Whistle": (whistle, False),
@@ -232,6 +243,7 @@ SOUNDS = {
     "SW_Bugle": (bugle, False),
     "SW_Fail": (fail, False),
     "SW_Click": (click, False),
+    "SW_Bonk": (bonk, False),
 }
 
 
@@ -274,6 +286,9 @@ def make_attenuation():
     unreal.log("FTO: SA_FTOWorld ready")
 
 
+ONLY = [name for name in os.environ.get("FTO_SOUNDS", "").split(",") if name]
 for sound_name, (build, loops) in SOUNDS.items():
-    import_wav(write(sound_name, build()), sound_name, loops)
-make_attenuation()
+    if not ONLY or sound_name in ONLY:
+        import_wav(write(sound_name, build()), sound_name, loops)
+if not ONLY:
+    make_attenuation()

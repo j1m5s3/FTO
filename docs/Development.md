@@ -43,11 +43,13 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 ## Controls
 - **On foot**: WASD / left stick to move, Shift to sprint, Space to jump. Q blows the police whistle (citizens
   freeze, nearby crimes get called in). E interacts: tickets, chats (with anyone, indoors or out), questioning a
-  suspicious character, taking a cruiser, or riding shotgun in one someone's already driving. Cuffed suspects follow
-  in your footsteps: walk them into the precinct's holding cells to book them.
+  suspicious character, taking a cruiser, or riding shotgun in one someone's already driving. F (B on a gamepad) is
+  a flying tackle that bowls over whoever's in front (citizens cost a little chaos). Cuffed suspects follow in your
+  footsteps: walk them into the precinct's holding cells to book them.
 - **Driving a cruiser**: W/S to drive and brake, A/D to steer, Space for the handbrake (drift). Q switches the lights
   and siren (offending cars ahead pull over), H honks. C (right stick click) swaps the chase camera for the view from
-  the seat, and the mouse / right stick glances around (it eases back to the road). E gets out.
+  the seat, and the mouse / right stick glances around (it eases back to the road). E gets out. Anyone you hit at
+  speed goes flying (and hitting citizens costs chaos).
 - **Riding shotgun**: the mouse / right stick looks around, Q works the lights and siren, C swaps cameras, E gets out.
 
 ## Sharing a build
@@ -60,8 +62,8 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
 Along the way it books a suspect into the cells, looks inside every kind of building (with their people), stages a
-hold-up and a bar brawl, questions a crook, walks through front doors, and checks that shop windows let sight
-through; the log (`SMOKE:` lines) reports each check.
+hold-up and a bar brawl, questions a crook, walks through front doors, checks that shop windows let sight through,
+drives into three citizens, and tackles one; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around and gets out.
 
@@ -98,7 +100,8 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
   (`FTO_IMPORT=characters`, `statics` or `kit` limits a run to one group)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
 - **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
-  radio squelch, chimes, alarm, fanfare, sad trombone) into `Art/Source/Audio` and imports them to `/Game/FTO/Audio`.
+  radio squelch, chimes, alarm, fanfare, sad trombone, the knockdown bonk) into `Art/Source/Audio` and imports them
+  to `/Game/FTO/Audio` (`FTO_SOUNDS=SW_Bonk` rebuilds just the ones named).
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
   idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) and upper-body aiming
   layered on top. Actors animating several people (a car's driver and passengers) pick each one's action per mesh.

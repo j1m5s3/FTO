@@ -9,6 +9,7 @@ class AFTOCharacter;
 class AFTOCityGenerator;
 class AFTOCruiser;
 class AFTOGameMode;
+class AFTOPedestrian;
 class APawn;
 class APlayerController;
 
@@ -71,6 +72,11 @@ protected:
 	int32 NextStep = 0;
 	float NextStepTime = 0.f;
 	int32 FramesSinceReady = 0;
+
+	/** Citizens stood in the road for the cruiser, and the one who gets tackled. */
+	TArray<TWeakObjectPtr<AFTOPedestrian>> Pins;
+	TWeakObjectPtr<AFTOPedestrian> TackleTarget;
+	float ChaosBefore = 0.f;
 
 	FVector IncidentSpot = FVector::ZeroVector;
 	FVector WalkDirection = FVector::ForwardVector;
