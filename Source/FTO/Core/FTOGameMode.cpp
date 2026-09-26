@@ -161,3 +161,11 @@ void AFTOGameMode::FTOSkipBriefing()
 		}
 	}
 }
+
+void AFTOGameMode::FTOEndShift(bool bSurvived)
+{
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+	{
+		GS->SetShiftPhase(bSurvived ? EFTOShiftPhase::Survived : EFTOShiftPhase::Overrun);
+	}
+}

@@ -16,7 +16,12 @@
 #include "Interaction/FTOInteractable.h"
 #include "Engine/OverlapResult.h"
 #include "Engine/World.h"
+#include "Animation/FTOCharacterAnimInstance.h"
 #include "Art/FTOArt.h"
+#include "Core/FTOGameState.h"
+#include "Crime/FTOIncident.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "FTO.h"
 
 AFTOCharacter::AFTOCharacter()
@@ -47,31 +52,43 @@ AFTOCharacter::AFTOCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	// Bean cop placeholder built from engine basic shapes.
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
-
-	auto MakePiece = [this](FName Name, UStaticMesh* PieceMesh, const FVector& Loc, const FVector& Scale) -> UStaticMeshComponent*
-	{
-		UStaticMeshComponent* Piece = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-		Piece->SetupAttachment(RootComponent);
-		Piece->SetStaticMesh(PieceMesh);
-		Piece->SetRelativeLocation(Loc);
-		Piece->SetRelativeScale3D(Scale);
-		Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		Piece->SetGenerateOverlapEvents(false);
-		return Piece;
-	};
-
-	BodyMesh = MakePiece(TEXT("BodyMesh"), CylinderMesh.Object, FVector(0.f, 0.f, -25.f), FVector(0.8f, 0.8f, 1.3f));
-	HeadMesh = MakePiece(TEXT("HeadMesh"), SphereMesh.Object,   FVector(0.f, 0.f, 60.f),  FVector(0.75f));
-	CapMesh  = MakePiece(TEXT("CapMesh"),  CylinderMesh.Object, FVector(8.f, 0.f, 95.f),  FVector(0.8f, 0.8f, 0.2f));
-
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	BaseMaterial = BaseMat.Object;
 
-	// No skeletal mesh yet.
-	GetMesh()->SetVisibility(false);
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> OfficerMesh(TEXT("/Game/FTO/Characters/Officer/SK_Officer.SK_Officer"));
+	if (OfficerMesh.Succeeded())
+	{
+		// The Blender model faces +Y with feet at its origin.
+		USkeletalMeshComponent* Body = GetMesh();
+		Body->SetSkeletalMeshAsset(OfficerMesh.Object);
+		Body->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()), FRotator(0.f, -90.f, 0.f));
+		Body->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+		Body->SetAnimInstanceClass(UFTOCharacterAnimInstance::StaticClass());
+		Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+	}
+	else
+	{
+		// Bean cop placeholder built from engine basic shapes.
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+		static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+
+		auto MakePiece = [this](FName Name, UStaticMesh* PieceMesh, const FVector& Loc, const FVector& Scale) -> UStaticMeshComponent*
+		{
+			UStaticMeshComponent* Piece = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+			Piece->SetupAttachment(RootComponent);
+			Piece->SetStaticMesh(PieceMesh);
+			Piece->SetRelativeLocation(Loc);
+			Piece->SetRelativeScale3D(Scale);
+			Piece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Piece->SetGenerateOverlapEvents(false);
+			return Piece;
+		};
+
+		BodyMesh = MakePiece(TEXT("BodyMesh"), CylinderMesh.Object, FVector(0.f, 0.f, -25.f), FVector(0.8f, 0.8f, 1.3f));
+		HeadMesh = MakePiece(TEXT("HeadMesh"), SphereMesh.Object,   FVector(0.f, 0.f, 60.f),  FVector(0.75f));
+		CapMesh  = MakePiece(TEXT("CapMesh"),  CylinderMesh.Object, FVector(8.f, 0.f, 95.f),  FVector(0.8f, 0.8f, 0.2f));
+		GetMesh()->SetVisibility(false);
+	}
 
 	PrimaryActorTick.bCanEverTick = true;
 }
@@ -80,6 +97,8 @@ void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(AFTOCharacter, bSprinting, COND_SkipOwner);
+	DOREPLIFETIME(AFTOCharacter, TimedAction);
+	DOREPLIFETIME(AFTOCharacter, TimedActionEnd);
 }
 
 void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -110,10 +129,10 @@ void AFTOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Skin and a navy cap band; the uniform itself follows the badge colour.
-	const AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>();
-	FTOArt::ApplyColor(HeadMesh, BaseMaterial, FTOArt::SkinTone(PS ? PS->GetBadgeIndex() : 0));
-	FTOArt::ApplyColor(CapMesh, BaseMaterial, FLinearColor(0.02f, 0.03f, 0.09f));
+	if (CapMesh)
+	{
+		FTOArt::ApplyColor(CapMesh, BaseMaterial, FLinearColor(0.02f, 0.03f, 0.09f));
+	}
 	RefreshOfficerColor();
 }
 
@@ -132,20 +151,28 @@ void AFTOCharacter::OnRep_PlayerState()
 void AFTOCharacter::RefreshOfficerColor()
 {
 	const AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>();
-	if (!PS || !BodyMesh)
+	if (!PS)
 	{
 		return;
 	}
 
+	// Real model: vertex alpha marks the shirt, so one tint colours just the uniform.
+	// Placeholder: the body cylinder is the uniform.
+	UPrimitiveComponent* UniformTarget = BodyMesh ? static_cast<UPrimitiveComponent*>(BodyMesh) : GetMesh();
 	if (!UniformMaterial)
 	{
-		UniformMaterial = FTOArt::ApplyColor(BodyMesh, BaseMaterial, PS->GetOfficerColor());
+		UniformMaterial = FTOArt::ApplyColor(UniformTarget, BaseMaterial, PS->GetOfficerColor());
+		// Imported meshes can carry several (identical) slots; they all share the one tint.
+		for (int32 Slot = 1; Slot < UniformTarget->GetNumMaterials(); ++Slot)
+		{
+			UniformTarget->SetMaterial(Slot, UniformMaterial);
+		}
 	}
 	FTOArt::SetColor(UniformMaterial, PS->GetOfficerColor());
 
-	if (HeadMesh)
+	if (HeadMesh && !HeadMaterial)
 	{
-		FTOArt::ApplyColor(HeadMesh, BaseMaterial, FTOArt::SkinTone(PS->GetBadgeIndex()));
+		HeadMaterial = FTOArt::ApplyColor(HeadMesh, BaseMaterial, FTOArt::SkinTone(PS->GetBadgeIndex()));
 	}
 }
 
@@ -284,4 +311,52 @@ void AFTOCharacter::ServerInteract_Implementation(AActor* Target)
 	{
 		Interactable->Interact(this);
 	}
+}
+
+void AFTOCharacter::PlayTimedAction(EFTOAnimAction Action, float Duration)
+{
+	check(HasAuthority());
+	TimedAction = Action;
+	TimedActionEnd = GetWorld()->GetTimeSeconds() + Duration;
+}
+
+EFTOAnimAction AFTOCharacter::GetAnimAction() const
+{
+	const UWorld* World = GetWorld();
+	const AFTOGameState* GS = World ? World->GetGameState<AFTOGameState>() : nullptr;
+
+	if (GS && GS->GetShiftPhase() == EFTOShiftPhase::Survived)
+	{
+		return EFTOAnimAction::Cheer;
+	}
+
+	const float Now = GS ? GS->GetServerWorldTimeSeconds() : (World ? World->GetTimeSeconds() : 0.f);
+	if (TimedAction != EFTOAnimAction::None && Now < TimedActionEnd)
+	{
+		return TimedAction;
+	}
+
+	// Standing still at a live scene: take notes, look busy.
+	if (GS && !IsAnimAirborne() && GetAnimSpeed() < 40.f)
+	{
+		for (const AFTOIncident* Incident : GS->GetIncidents())
+		{
+			if (Incident && Incident->IsActive() &&
+				FVector::DistSquared2D(Incident->GetActorLocation(), GetActorLocation()) <= FMath::Square(Incident->SceneRadius))
+			{
+				return EFTOAnimAction::Interact;
+			}
+		}
+	}
+	return EFTOAnimAction::None;
+}
+
+bool AFTOCharacter::IsAnimAirborne() const
+{
+	return GetCharacterMovement() && GetCharacterMovement()->IsFalling();
+}
+
+float AFTOCharacter::GetAnimSpeed() const
+{
+	return GetVelocity().Size2D();
 }

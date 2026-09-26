@@ -28,7 +28,7 @@ public:
 protected:
 	bool AreShadersReady() const;
 	void RunStep(int32 Step);
-	void Shot(const TCHAR* Name);
+	void Shot(const TCHAR* Name, bool bShowUI = true);
 	void ViewFrom(const FVector& Location, const FVector& LookAt);
 
 	UPROPERTY(Transient) TObjectPtr<ACameraActor> Camera;
@@ -38,4 +38,6 @@ protected:
 	int32 NextStep = 0;
 	float NextStepTime = 0.f;
 	FVector IncidentSpot = FVector::ZeroVector;
+	FVector WalkDirection = FVector::ForwardVector;
+	bool bWalkOfficer = false;
 };
