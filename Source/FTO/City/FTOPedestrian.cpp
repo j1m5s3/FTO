@@ -74,6 +74,7 @@ void AFTOPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFTOPedestrian, LookSeed);
 	DOREPLIFETIME(AFTOPedestrian, bChatting);
+	DOREPLIFETIME(AFTOPedestrian, bHandsUp);
 }
 
 void AFTOPedestrian::BeginPlay()
@@ -125,6 +126,7 @@ void AFTOPedestrian::StartWandering(AFTOCityGenerator* InCity, int32 InBlockX, i
 void AFTOPedestrian::WalkToNextCorner()
 {
 	bChatting = false;
+	bHandsUp = false;
 
 	if (!City)
 	{
@@ -171,6 +173,18 @@ void AFTOPedestrian::OnArrived()
 		return;
 	}
 	WalkToNextCorner();
+}
+
+void AFTOPedestrian::FreezeFor(const AActor* Officer, float Seconds)
+{
+	check(HasAuthority());
+	Hold();
+	bHandsUp = true;
+	if (Officer)
+	{
+		SetActorRotation(FRotator(0.f, (Officer->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
+	}
+	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::WalkToNextCorner, Seconds * Rng.FRandRange(0.8f, 1.2f), false);
 }
 
 bool AFTOPedestrian::CanInteract(const AFTOCharacter* Officer) const

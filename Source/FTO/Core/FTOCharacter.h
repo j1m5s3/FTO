@@ -41,6 +41,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="FTO")
 	AActor* GetCurrentVehicle() const { return CurrentVehicle; }
 
+	/** Blow the police whistle (what Q does on foot). */
+	void BlowWhistle() { ServerWhistle(); }
+
 	/** Server: play a full-body action for a while (ticket writing, chatting). */
 	void PlayTimedAction(EFTOAnimAction Action, float Duration);
 
@@ -139,4 +142,12 @@ protected:
 	virtual void InteractPressed();
 	virtual void InteractReleased();
 	virtual void WhistlePressed();
+
+	UFUNCTION(Server, Unreliable)
+	void ServerWhistle();
+	float NextWhistleTime = 0.f;
+
+	/** How far a whistle carries (citizens stop, nearby crimes get called in). */
+	UPROPERTY(EditDefaultsOnly, Category="FTO")
+	float WhistleRadius = 1800.f;
 };

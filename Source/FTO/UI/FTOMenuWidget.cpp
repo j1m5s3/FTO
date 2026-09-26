@@ -17,6 +17,7 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Engine/World.h"
 #include "Styling/CoreStyle.h"
+#include "Kismet/GameplayStatics.h"
 
 namespace
 {
@@ -172,13 +173,19 @@ void UFTOMenuWidget::RefreshState()
 	StartButton->SetVisibility(bIsHost && Phase == EFTOShiftPhase::Lobby ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	NewShiftButton->SetVisibility(bIsHost && Phase != EFTOShiftPhase::Lobby ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	HostButton->SetVisibility(NetMode == NM_Standalone ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	const ESlateVisibility JoinVisibility = NetMode == NM_Client ? ESlateVisibility::Collapsed : ESlateVisibility::Visible;
+	const ESlateVisibility JoinVisibility = NetMode == NM_Standalone ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
 	AddressBox->SetVisibility(JoinVisibility);
 	JoinButton->SetVisibility(JoinVisibility);
 }
 
+void UFTOMenuWidget::PlayClick()
+{
+	UGameplayStatics::PlaySound2D(this, AFTOGameState::Sounds().Click, 0.8f);
+}
+
 void UFTOMenuWidget::OnStartShift()
 {
+	PlayClick();
 	if (AFTOPlayerController* PC = GetOwningPlayer<AFTOPlayerController>())
 	{
 		PC->ServerStartShift();
@@ -188,6 +195,7 @@ void UFTOMenuWidget::OnStartShift()
 
 void UFTOMenuWidget::OnNewShift()
 {
+	PlayClick();
 	if (AFTOPlayerController* PC = GetOwningPlayer<AFTOPlayerController>())
 	{
 		PC->ServerNewShift();
@@ -196,6 +204,7 @@ void UFTOMenuWidget::OnNewShift()
 
 void UFTOMenuWidget::OnHost()
 {
+	PlayClick();
 	if (AFTOPlayerController* PC = GetOwningPlayer<AFTOPlayerController>())
 	{
 		PC->HostOnline();
@@ -204,6 +213,7 @@ void UFTOMenuWidget::OnHost()
 
 void UFTOMenuWidget::OnJoin()
 {
+	PlayClick();
 	AFTOPlayerController* PC = GetOwningPlayer<AFTOPlayerController>();
 	const FString Address = AddressBox ? AddressBox->GetText().ToString().TrimStartAndEnd() : FString();
 	if (PC && !Address.IsEmpty())
@@ -214,6 +224,7 @@ void UFTOMenuWidget::OnJoin()
 
 void UFTOMenuWidget::OnResume()
 {
+	PlayClick();
 	if (AFTOPlayerController* PC = GetOwningPlayer<AFTOPlayerController>())
 	{
 		PC->SetMenuVisible(false);

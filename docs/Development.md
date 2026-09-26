@@ -45,6 +45,7 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 | WASD / left stick: move | W/S: drive and brake, A/D: steer |
 | Shift: sprint | Space: handbrake (drift) |
 | Space: jump | Q: lights and siren (pulls over offending cars ahead) |
+| Q: police whistle (citizens freeze, nearby crimes get called in) | H: horn |
 | E: interact (tickets, chat, get in) | E: get out |
 
 ## Smoke test
@@ -64,6 +65,8 @@ tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy a
   master material) and can be re-run after any Blender change:
   (`FTO_IMPORT=characters` or `FTO_IMPORT=statics` limits a run to one group)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
+- **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
+  radio squelch, chimes, alarm, fanfare, sad trombone) into `Art/Source/Audio` and imports them to `/Game/FTO/Audio`.
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
   idle/walk/run by speed, with jump, interact (tickets, scenes) and cheer layered on top.
 - **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials/M_FTOBase` (vertex colour × `Color` tint, `Emissive`).

@@ -116,6 +116,16 @@ float AFTOIncident::GetChaosRate() const
 	return State == EFTOIncidentState::Responding ? Info.ChaosPerSecond * 0.35f : Info.ChaosPerSecond;
 }
 
+void AFTOIncident::ReportByOfficer()
+{
+	check(HasAuthority());
+	if (State == EFTOIncidentState::Unreported)
+	{
+		bWitnessed = true;
+		ForceReport();
+	}
+}
+
 void AFTOIncident::ForceReport()
 {
 	check(HasAuthority());

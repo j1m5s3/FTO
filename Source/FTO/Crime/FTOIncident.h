@@ -56,6 +56,9 @@ public:
 	/** Server: a citizen tip or radio call puts this on the board right now. */
 	void ForceReport();
 
+	/** Server: an officer spotted or called this in personally (counts as caught in the act). */
+	void ReportByOfficer();
+
 	/** Server: make this a moving incident that rides along with Target (car chases). */
 	void FollowActor(AActor* Target);
 
