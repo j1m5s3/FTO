@@ -5,6 +5,7 @@
 #include "Core/FTOPlayerController.h"
 #include "Core/FTOPlayerState.h"
 #include "Crime/FTOCrimeDirector.h"
+#include "UI/FTOHUD.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
@@ -16,6 +17,7 @@ AFTOGameMode::AFTOGameMode()
 	PlayerControllerClass = AFTOPlayerController::StaticClass();
 	PlayerStateClass = AFTOPlayerState::StaticClass();
 	GameStateClass = AFTOGameState::StaticClass();
+	HUDClass = AFTOHUD::StaticClass();
 
 	CrimeDirector = CreateDefaultSubobject<UFTOCrimeDirector>(TEXT("CrimeDirector"));
 }
