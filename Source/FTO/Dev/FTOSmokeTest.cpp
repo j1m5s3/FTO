@@ -1541,7 +1541,7 @@ void AFTOSmokeTest::BuildSteps()
 				ViewFrom(TestTarget + TestAway * 330.f + Across * 330.f + FVector(0.f, 0.f, 40.f), TestTarget - FVector(0.f, 0.f, 40.f));
 			}
 		});
-		AddShot(TEXT("19a_window"), 1.2f);
+		AddShot(TEXT("20a_window"), 1.2f);
 		AddStep(TEXT("window result"), 0.f, [this]()
 		{
 			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
@@ -1611,7 +1611,7 @@ void AFTOSmokeTest::BuildSteps()
 			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
 			ViewFrom(TestTarget + TestAway * 250.f + Across * 420.f + FVector(0.f, 0.f, 120.f), TestTarget + FVector(0.f, 0.f, 60.f));
 		});
-		AddShot(TEXT("19b_hydrant"), 0.2f);
+		AddShot(TEXT("20b_hydrant"), 0.2f);
 		AddStep(TEXT("hydrant result"), 0.f, [this]()
 		{
 			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
@@ -1671,7 +1671,7 @@ void AFTOSmokeTest::BuildSteps()
 				TestCruiser->StopDead();
 			}
 		});
-		AddShot(TEXT("19c_lamp_post"), 0.4f);
+		AddShot(TEXT("20c_lamp_post"), 0.4f);
 		AddStep(TEXT("lamp post result"), 0.f, [this]()
 		{
 			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
@@ -1783,7 +1783,7 @@ void AFTOSmokeTest::BuildSteps()
 						ViewFrom(Car + TestAway * 350.f + Across * 520.f + FVector(0.f, 0.f, 240.f), Car + FVector(0.f, 0.f, 40.f));
 					}
 				});
-				AddShot(RunUp > 1000.f ? TEXT("19e_wrecked") : TEXT("19d_smoking"), 0.3f);
+				AddShot(RunUp > 1000.f ? TEXT("20e_wrecked") : TEXT("20d_smoking"), 0.3f);
 			}
 		}
 
@@ -1807,7 +1807,7 @@ void AFTOSmokeTest::BuildSteps()
 				ViewFrom(Car->GetActorLocation() + Car->GetActorRightVector() * 600.f + Car->GetActorForwardVector() * 300.f + FVector(0.f, 0.f, 250.f), Car->GetActorLocation());
 			}
 		});
-		AddShot(TEXT("19f_wrecked_car"), 0.3f);
+		AddShot(TEXT("20f_wrecked_car"), 0.3f);
 		AddStep(TEXT("wreck result"), 0.f, [this]()
 		{
 			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
