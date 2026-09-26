@@ -20,6 +20,10 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientToast(const FText& Message, FLinearColor Color);
 
+	/** One of this player's rounds just hit someone (a suspect, or someone it shouldn't have). */
+	UFUNCTION(Client, Unreliable)
+	void ClientHitMarker(bool bBadHit);
+
 	// ---- Menu / session flow ----
 	void SetMenuVisible(bool bVisible);
 	void ToggleMenu();

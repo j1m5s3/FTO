@@ -4,6 +4,7 @@
 #include "Crime/FTOCrimeSpawnPoint.h"
 #include "Crime/FTOIncident.h"
 #include "Crime/FTOArrestee.h"
+#include "Crime/FTOPerp.h"
 #include "Core/FTOCharacter.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
@@ -385,11 +386,14 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 	++GS->IncidentsResolved;
 
 	// Perps get cuffed and have to be walked or driven back to the precinct for the rest of the credit.
+	AFTOPerp* Perp = Incident->GetPerp();
 	if (Info.bArrest)
 	{
-		AFTOCharacter* Arresting = nullptr;
+		// Whoever put them on the floor, else the nearest officer.
+		const AController* Subduer = Incident->GetSubduedBy();
+		AFTOCharacter* Arresting = Subduer ? Cast<AFTOCharacter>(Subduer->GetPawn()) : nullptr;
 		float BestDistSq = FMath::Square(Incident->GetSceneRadius() * 3.f);
-		for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+		for (TActorIterator<AFTOCharacter> It(GetWorld()); It && !Arresting; ++It)
 		{
 			const float DistSq = FVector::DistSquared2D(It->GetActorLocation(), Incident->GetActorLocation());
 			if (DistSq < BestDistSq && It->GetController())
@@ -413,12 +417,19 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 		}
 		if (Arresting)
 		{
+			// The perp becomes a cuffed arrestee right where they stand (or lie).
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			const FVector SpawnAt = Incident->GetActorLocation() + FVector(0.f, 0.f, 92.f);
-			if (AFTOArrestee* Perp = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), SpawnAt, Incident->GetActorRotation(), Params))
+			const FVector Floor = Incident->GetActorLocation();
+			const FVector SpawnAt = Perp ? FVector(Perp->GetActorLocation().X, Perp->GetActorLocation().Y, Floor.Z + 92.f) : Floor + FVector(0.f, 0.f, 92.f);
+			const FRotator Facing = Perp ? FRotator(0.f, Perp->GetActorRotation().Yaw, 0.f) : Incident->GetActorRotation();
+			if (AFTOArrestee* Cuffed = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), SpawnAt, Facing, Params))
 			{
-				Perp->Init(Arresting, FMath::Max(2.f, Info.ChaosRelief * 0.6f), Info.Title);
+				Cuffed->Init(Arresting, FMath::Max(2.f, Info.ChaosRelief * 0.6f), Info.Title);
+				if (Perp)
+				{
+					Perp->Destroy();
+				}
 			}
 		}
 	}

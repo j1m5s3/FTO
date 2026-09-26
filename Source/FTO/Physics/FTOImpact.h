@@ -1,14 +1,16 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Weapons/FTOWeapons.h"
 
 class AActor;
 class AController;
 
 /**
- * The rules for bowling people over (server only): who can be knocked flying, how far, and what it costs.
- * The police pay in chaos for flattening citizens (and it goes on the report card); a getaway car mowing
- * people down just makes the city angrier. Crooks and fellow officers go flying for free.
+ * The rules for bowling people over and shooting them (server only): who can be knocked down, how far, and what it
+ * costs. The police pay in chaos for hurting citizens (and it goes on the report card); a getaway car mowing people
+ * down just makes the city angrier. Crooks and perps go down for free, and a perp who goes down is subdued (their
+ * crime is handled). Officers hit by gunfire are downed until a partner helps them up.
  */
 namespace FTOImpact
 {
@@ -26,4 +28,7 @@ namespace FTOImpact
 
 	/** Server: an officer's flying tackle, heading along Direction, lands on Victim. */
 	FTO_API bool Tackle(AActor* Victim, const FVector& Direction, AController* Officer);
+
+	/** Server: a round from Weapon, fired by Shooter (an officer, a perp), hits Victim at Velocity. */
+	FTO_API bool Shot(AActor* Victim, const FVector& Velocity, EFTOWeapon Weapon, AActor* Shooter);
 }

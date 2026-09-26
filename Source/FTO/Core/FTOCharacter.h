@@ -4,6 +4,8 @@
 #include "GameFramework/Character.h"
 #include "Animation/FTOAnimatedActor.h"
 #include "Vehicles/FTOVehicleSeats.h"
+#include "Interaction/FTOInteractable.h"
+#include "Weapons/FTOWeapons.h"
 #include "FTOCharacter.generated.h"
 
 class USpringArmComponent;
@@ -18,9 +20,13 @@ struct FInputActionValue;
  * A player officer: the in-house Blender-built cop (Tools/Blender/build_officer.py) with its
  * uniform tinted in the player's badge colour. Falls back to a "bean cop" made of engine
  * primitives if the art hasn't been imported.
+ *
+ * Carries up to three weapons (a taser as standard issue; the precinct armory hands out the rest). Drawing one
+ * brings it up to the shoulder with an over-the-shoulder camera; every round is flown by UFTOBallistics. Shot
+ * down, an officer stays down until a partner helps them up (they're interactable while they're down).
  */
 UCLASS()
-class FTO_API AFTOCharacter : public ACharacter, public IFTOAnimatedActor
+class FTO_API AFTOCharacter : public ACharacter, public IFTOAnimatedActor, public IFTOInteractable
 {
 	GENERATED_BODY()
 
@@ -69,6 +75,37 @@ public:
 	virtual EFTOAnimAction GetAnimAction() const override;
 	virtual bool IsAnimAirborne() const override;
 	virtual float GetAnimSpeed() const override;
+	virtual EFTOAimPose GetAimPose() const override;
+	virtual float GetAimPitch() const override;
+	/** Where this officer is aiming. */
+	FRotator GetAimRotation() const;
+
+	// IFTOInteractable: a downed partner can be helped up.
+	virtual bool CanInteract(const AFTOCharacter* Officer) const override;
+	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
+	virtual void Interact(AFTOCharacter* Officer) override;
+	virtual FVector GetInteractLocation() const override;
+
+	// ---- Weapons ----
+	/** Server: the armory hands over a weapon: into a free slot (or swapped for the one in hand), or a restock if they already carry one. */
+	void GiveWeapon(EFTOWeapon Weapon);
+	bool HasWeapon(EFTOWeapon Weapon) const { return Loadout.Contains(Weapon); }
+	bool HasFreeSlot() const { return Loadout.Contains(EFTOWeapon::None); }
+	EFTOWeapon GetWeaponInSlot(int32 Slot) const { return Loadout.IsValidIndex(Slot) ? Loadout[Slot] : EFTOWeapon::None; }
+	int32 GetDrawnSlot() const { return DrawnSlot; }
+	EFTOWeapon GetDrawnWeapon() const { return GetWeaponInSlot(DrawnSlot); }
+	int32 GetClip(int32 Slot) const { return Clips.IsValidIndex(Slot) ? Clips[Slot] : 0; }
+	int32 GetSpare(int32 Slot) const { return Spares.IsValidIndex(Slot) ? Spares[Slot] : 0; }
+	bool IsReloading() const;
+
+	/** Local player: draw slot Slot (what 1, 2, 3 do; again puts it away), or put the weapon away with INDEX_NONE. */
+	void SelectSlot(int32 Slot);
+	/** Local player: fire the weapon in hand at the crosshair (what the left mouse button does). */
+	void FirePressed();
+
+	/** Server: flattened by gunfire: down until a partner helps them up, or Seconds pass. False if already down. */
+	bool GoDown(const FVector& Launch, float Seconds);
+	bool IsDowned() const { return bDowned; }
 
 	/** The interactable the local officer would use if they pressed Interact now. */
 	AActor* GetFocusedInteractable() const { return FocusedInteractable.Get(); }
@@ -218,4 +255,71 @@ protected:
 	/** Seconds between tackles. */
 	UPROPERTY(EditDefaultsOnly, Category="FTO")
 	float TackleCooldown = 1.2f;
+
+	// ---- Weapons ----
+	/** Where the weapon goes: in hand along the aim when drawn, else on the hip (sidearms) or slung on the back. */
+	UPROPERTY(VisibleAnywhere, Category="Components")
+	TObjectPtr<UStaticMeshComponent> WeaponMesh;
+
+	/** What's in each of the three slots (None = empty). */
+	UPROPERTY(ReplicatedUsing=OnRep_Loadout)
+	TArray<EFTOWeapon> Loadout;
+
+	/** Rounds in the magazine, and spare, per slot (only the owner needs to know). */
+	UPROPERTY(Replicated)
+	TArray<int32> Clips;
+	UPROPERTY(Replicated)
+	TArray<int32> Spares;
+
+	/** The slot in hand, or INDEX_NONE with everything put away. */
+	UPROPERTY(ReplicatedUsing=OnRep_Loadout)
+	int32 DrawnSlot = INDEX_NONE;
+
+	/** The last slot drawn (what the right mouse button brings back out). */
+	int32 LastDrawnSlot = 0;
+
+	/** Server world time a reload finishes (0 when not reloading). */
+	UPROPERTY(Replicated)
+	float ReloadEnd = 0.f;
+
+	/** Shot down and waiting for a partner. */
+	UPROPERTY(Replicated)
+	bool bDowned = false;
+
+	UFUNCTION()
+	void OnRep_Loadout();
+
+	/** Movement and rotation for the weapon being up or away (every machine). */
+	void ApplyWeaponStance();
+	/** Puts WeaponMesh where it belongs this frame (every machine). */
+	void UpdateWeaponMesh();
+	/** Local player: ease the camera over the shoulder while a weapon is up. */
+	void UpdateAimCamera(float DeltaSeconds);
+	/** Local player: what the crosshair is on (a point up to 100 m away). */
+	FVector GetCrosshairTarget() const;
+
+	void DrawPressed();
+	void ReloadPressed();
+	void NextWeaponPressed();
+	void PrevWeaponPressed();
+	void CycleWeapon(int32 Step);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSelectSlot(int32 Slot);
+	/** The server turned down a weapon swap the owner already made on their screen: put it back. */
+	UFUNCTION(Client, Reliable)
+	void ClientSetDrawnSlot(int32 Slot);
+	UFUNCTION(Server, Reliable)
+	void ServerFire(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed);
+	UFUNCTION(Server, Reliable)
+	void ServerReload();
+	void FinishReload();
+
+	FTimerHandle ReloadTimer;
+	float NextShotTime = 0.f;
+	float NextServerShotTime = 0.f;
+	float AimBlend = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category="FTO|Movement")
+	float DrawnWalkSpeed = 380.f;
 };

@@ -17,6 +17,9 @@
 #include "Engine/OverlapResult.h"
 #include "Physics/FTOKnockdownComponent.h"
 #include "Physics/FTOImpact.h"
+#include "Weapons/FTOBallistics.h"
+#include "GameFramework/GameStateBase.h"
+#include "Kismet/GameplayStatics.h"
 #include "City/FTOPedestrian.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
@@ -58,6 +61,21 @@ AFTOCharacter::AFTOCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	Knockdown = CreateDefaultSubobject<UFTOKnockdownComponent>(TEXT("Knockdown"));
+
+	// The weapon in hand (or on the hip, or slung): placed in world space every frame (see UpdateWeaponMesh).
+	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));
+	WeaponMesh->SetupAttachment(RootComponent);
+	WeaponMesh->SetUsingAbsoluteLocation(true);
+	WeaponMesh->SetUsingAbsoluteRotation(true);
+	WeaponMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	WeaponMesh->SetCastShadow(false);
+	WeaponMesh->SetVisibility(false);
+
+	// Standard issue: a taser in the first slot; the armory hands out the rest.
+	Loadout = { EFTOWeapon::Taser, EFTOWeapon::None, EFTOWeapon::None };
+	const FFTOWeaponSpec& Taser = FTOWeapons::Spec(EFTOWeapon::Taser);
+	Clips = { Taser.Magazine, 0, 0 };
+	Spares = { Taser.Magazine * Taser.SpareMagazines, 0, 0 };
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	BaseMaterial = BaseMat.Object;
@@ -108,6 +126,12 @@ void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOCharacter, CurrentVehicle);
 	DOREPLIFETIME(AFTOCharacter, CurrentSeat);
 	DOREPLIFETIME(AFTOCharacter, TimedActionEnd);
+	DOREPLIFETIME(AFTOCharacter, Loadout);
+	DOREPLIFETIME_CONDITION(AFTOCharacter, Clips, COND_OwnerOnly);
+	DOREPLIFETIME_CONDITION(AFTOCharacter, Spares, COND_OwnerOnly);
+	DOREPLIFETIME(AFTOCharacter, DrawnSlot);
+	DOREPLIFETIME(AFTOCharacter, ReloadEnd);
+	DOREPLIFETIME(AFTOCharacter, bDowned);
 }
 
 void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -134,6 +158,15 @@ void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	EIC->BindAction(Input->Whistle, ETriggerEvent::Started, this, &AFTOCharacter::WhistlePressed);
 	EIC->BindAction(Input->Camera, ETriggerEvent::Started, this, &AFTOCharacter::ToggleCamera);
 	EIC->BindAction(Input->Tackle, ETriggerEvent::Started, this, &AFTOCharacter::TacklePressed);
+	EIC->BindAction(Input->Draw, ETriggerEvent::Started, this, &AFTOCharacter::DrawPressed);
+	EIC->BindAction(Input->Fire, ETriggerEvent::Started, this, &AFTOCharacter::FirePressed);
+	EIC->BindAction(Input->Reload, ETriggerEvent::Started, this, &AFTOCharacter::ReloadPressed);
+	EIC->BindAction(Input->NextWeapon, ETriggerEvent::Started, this, &AFTOCharacter::NextWeaponPressed);
+	EIC->BindAction(Input->PrevWeapon, ETriggerEvent::Started, this, &AFTOCharacter::PrevWeaponPressed);
+	for (int32 Slot = 0; Slot < Input->Slots.Num(); ++Slot)
+	{
+		EIC->BindAction(Input->Slots[Slot], ETriggerEvent::Started, this, &AFTOCharacter::SelectSlot, Slot);
+	}
 }
 
 void AFTOCharacter::BeginPlay()
@@ -237,7 +270,8 @@ void AFTOCharacter::OnRep_Sprinting()
 
 void AFTOCharacter::ApplySprint()
 {
-	GetCharacterMovement()->MaxWalkSpeed = bSprinting ? SprintSpeed : WalkSpeed;
+	// With a weapon up it's a careful walk, sprint or no sprint.
+	GetCharacterMovement()->MaxWalkSpeed = GetDrawnWeapon() != EFTOWeapon::None ? DrawnWalkSpeed : (bSprinting ? SprintSpeed : WalkSpeed);
 }
 
 void AFTOCharacter::InteractReleased() {}
@@ -403,6 +437,12 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 	{
 		bTrackVehicleYaw = false;
 	}
+
+	UpdateWeaponMesh();
+	if (IsLocallyControlled())
+	{
+		UpdateAimCamera(DeltaSeconds);
+	}
 }
 
 bool AFTOCharacter::IsWallBetween(const FVector& From, const FVector& To, const AActor* Target) const
@@ -442,6 +482,7 @@ void AFTOCharacter::UpdateFocus()
 	FCollisionObjectQueryParams Objects;
 	Objects.AddObjectTypesToQuery(ECC_Pawn);
 	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	Objects.AddObjectTypesToQuery(ECC_PhysicsBody); // a downed partner, lying ragdolled
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOInteractFocus), false, this);
 
 	if (!GetWorld()->OverlapMultiByObjectType(Overlaps, GetActorLocation(), FQuat::Identity, Objects, FCollisionShape::MakeSphere(800.f), Params))
@@ -576,6 +617,10 @@ void AFTOCharacter::EnterVehicle(AActor* Vehicle, EFTOSeat Seat)
 	check(HasAuthority());
 	CurrentVehicle = Vehicle;
 	CurrentSeat = Seat;
+	DrawnSlot = INDEX_NONE; // weapons away in the car
+	ReloadEnd = 0.f;
+	GetWorldTimerManager().ClearTimer(ReloadTimer);
+	OnRep_Loadout();
 	ApplyVehicleState();
 }
 
@@ -703,9 +748,437 @@ void AFTOCharacter::SetHeadHidden(bool bHide)
 void AFTOCharacter::HandleKnockedDown()
 {
 	GetCharacterMovement()->DisableMovement();
+	if (HasAuthority())
+	{
+		// Down, the weapon goes away (and stays away until they draw it again).
+		DrawnSlot = INDEX_NONE;
+		OnRep_Loadout();
+	}
 }
 
 void AFTOCharacter::HandleRecovered()
 {
 	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	if (HasAuthority())
+	{
+		bDowned = false;
+	}
+}
+
+// ------------------------------------------------------------------------------------------
+// Weapons
+// ------------------------------------------------------------------------------------------
+
+bool AFTOCharacter::IsReloading() const
+{
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	const float Now = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+	return ReloadEnd > 0.f && Now < ReloadEnd;
+}
+
+void AFTOCharacter::GiveWeapon(EFTOWeapon Weapon)
+{
+	check(HasAuthority());
+	if (Weapon == EFTOWeapon::None)
+	{
+		return;
+	}
+	// Already carrying one: a restock. Otherwise the first free slot, or swap it for the one in hand.
+	int32 Slot = Loadout.IndexOfByKey(Weapon);
+	if (Slot == INDEX_NONE)
+	{
+		Slot = Loadout.IndexOfByKey(EFTOWeapon::None);
+	}
+	if (Slot == INDEX_NONE)
+	{
+		Slot = Loadout.IsValidIndex(DrawnSlot) ? DrawnSlot : FTOWeapons::MaxSlots - 1;
+	}
+	const FFTOWeaponSpec& Spec = FTOWeapons::Spec(Weapon);
+	Loadout[Slot] = Weapon;
+	Clips[Slot] = Spec.Magazine;
+	Spares[Slot] = Spec.Magazine * Spec.SpareMagazines;
+	DrawnSlot = Slot;
+	LastDrawnSlot = Slot;
+	ReloadEnd = 0.f;
+	GetWorldTimerManager().ClearTimer(ReloadTimer);
+	OnRep_Loadout();
+}
+
+void AFTOCharacter::OnRep_Loadout()
+{
+	if (Loadout.IsValidIndex(DrawnSlot))
+	{
+		LastDrawnSlot = DrawnSlot;
+	}
+	ApplyWeaponStance();
+	UpdateWeaponMesh();
+}
+
+void AFTOCharacter::ApplyWeaponStance()
+{
+	// Weapon up: face where the camera looks and move at a careful walk. Put away: turn with movement again.
+	const bool bDrawn = GetDrawnWeapon() != EFTOWeapon::None && !CurrentVehicle;
+	bUseControllerRotationYaw = bDrawn;
+	GetCharacterMovement()->bOrientRotationToMovement = !bDrawn;
+	ApplySprint();
+}
+
+EFTOAimPose AFTOCharacter::GetAimPose() const
+{
+	if (CurrentVehicle || (Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed())))
+	{
+		return EFTOAimPose::None;
+	}
+	const EFTOWeapon Weapon = GetDrawnWeapon();
+	return Weapon == EFTOWeapon::None ? EFTOAimPose::None : FTOWeapons::Spec(Weapon).Pose;
+}
+
+FRotator AFTOCharacter::GetAimRotation() const
+{
+	// Where the controller points (the base aim rotation would follow whatever camera is being looked through);
+	// everyone else's copy of us has no controller and goes by the replicated view pitch.
+	return Controller ? Controller->GetControlRotation() : GetBaseAimRotation();
+}
+
+float AFTOCharacter::GetAimPitch() const
+{
+	return FMath::Clamp(FRotator::NormalizeAxis(GetAimRotation().Pitch), -60.f, 60.f);
+}
+
+void AFTOCharacter::UpdateWeaponMesh()
+{
+	// In hand when drawn; otherwise the last one drawn rides on the hip (sidearms) or across the back (long guns).
+	const bool bDrawn = GetAimPose() != EFTOAimPose::None;
+	EFTOWeapon Shown = bDrawn ? GetDrawnWeapon() : GetWeaponInSlot(LastDrawnSlot);
+	if (Shown == EFTOWeapon::None)
+	{
+		Shown = GetWeaponInSlot(0);
+	}
+	const bool bVisible = Shown != EFTOWeapon::None && !CurrentVehicle && !(Knockdown && Knockdown->IsDown()) && GetMesh()->IsVisible();
+	if (WeaponMesh->IsVisible() != bVisible)
+	{
+		WeaponMesh->SetVisibility(bVisible);
+	}
+	if (!bVisible)
+	{
+		return;
+	}
+	UStaticMesh* WeaponAsset = FTOWeapons::Mesh(Shown);
+	if (WeaponMesh->GetStaticMesh() != WeaponAsset)
+	{
+		WeaponMesh->SetStaticMesh(WeaponAsset);
+	}
+	if (bDrawn)
+	{
+		FTOWeapons::HoldInHand(WeaponMesh, GetMesh(), GetAimRotation());
+		return;
+	}
+	const FTransform Body = GetActorTransform();
+	if (FTOWeapons::Spec(Shown).bLongGun)
+	{
+		// Slung across the back, muzzle up over the right shoulder.
+		WeaponMesh->SetWorldLocationAndRotation(Body.TransformPosition(FVector(-28.f, -12.f, -20.f)),
+			Body.TransformRotation(FRotator(62.f, 180.f, 0.f).Quaternion()));
+	}
+	else
+	{
+		// Holstered on the right hip, muzzle down.
+		WeaponMesh->SetWorldLocationAndRotation(Body.TransformPosition(FVector(2.f, 34.f, -22.f)),
+			Body.TransformRotation(FRotator(-90.f, 0.f, 0.f).Quaternion()));
+	}
+}
+
+void AFTOCharacter::UpdateAimCamera(float DeltaSeconds)
+{
+	if (CurrentVehicle)
+	{
+		return; // the seat camera has its own rules
+	}
+	// Over the right shoulder, closer in and a little tighter, while a weapon is up.
+	const float Target = GetAimPose() != EFTOAimPose::None ? 1.f : 0.f;
+	AimBlend = FMath::FInterpTo(AimBlend, Target, DeltaSeconds, 10.f);
+	CameraBoom->TargetArmLength = FMath::Lerp(550.f, 240.f, AimBlend);
+	CameraBoom->SocketOffset = FMath::Lerp(FVector(0.f, 60.f, 120.f), FVector(0.f, 75.f, 72.f), AimBlend);
+	FollowCamera->SetFieldOfView(FMath::Lerp(90.f, 72.f, AimBlend));
+}
+
+FVector AFTOCharacter::GetCrosshairTarget() const
+{
+	const APlayerController* PC = Cast<APlayerController>(Controller);
+	if (!PC || !PC->PlayerCameraManager)
+	{
+		return GetActorLocation() + GetActorForwardVector() * 10000.f;
+	}
+	// From the camera through the middle of the screen, starting past our own shoulder.
+	const FVector Eye = PC->PlayerCameraManager->GetCameraLocation();
+	const FVector Look = PC->PlayerCameraManager->GetCameraRotation().Vector();
+	const FVector Start = Eye + Look * (FVector::Dist(Eye, GetActorLocation()) + 40.f);
+	const FVector End = Eye + Look * 10000.f;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCrosshair), false, this);
+	FHitResult Hit;
+	return GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_FTOProjectile, Params) ? Hit.ImpactPoint : End;
+}
+
+void AFTOCharacter::SelectSlot(int32 Slot)
+{
+	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()))
+	{
+		return;
+	}
+	// The same slot again puts it away; empty slots do nothing.
+	if (Slot == DrawnSlot)
+	{
+		Slot = INDEX_NONE;
+	}
+	else if (GetWeaponInSlot(Slot) == EFTOWeapon::None)
+	{
+		return;
+	}
+	if (!HasAuthority())
+	{
+		DrawnSlot = Slot; // straight away here; the server agrees a moment later
+		OnRep_Loadout();
+	}
+	ServerSelectSlot(Slot);
+}
+
+void AFTOCharacter::ServerSelectSlot_Implementation(int32 Slot)
+{
+	const int32 Asked = Slot;
+	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()) || (Slot != INDEX_NONE && GetWeaponInSlot(Slot) == EFTOWeapon::None))
+	{
+		Slot = INDEX_NONE;
+	}
+	if (Slot != DrawnSlot)
+	{
+		// A reload doesn't survive swapping weapons.
+		ReloadEnd = 0.f;
+		GetWorldTimerManager().ClearTimer(ReloadTimer);
+	}
+	DrawnSlot = Slot;
+	OnRep_Loadout();
+	// Turned down: the owner already swapped on their screen, and if our answer matches what we had before, nothing
+	// would replicate to correct them.
+	if (Slot != Asked && !IsLocallyControlled())
+	{
+		ClientSetDrawnSlot(Slot);
+	}
+}
+
+void AFTOCharacter::ClientSetDrawnSlot_Implementation(int32 Slot)
+{
+	DrawnSlot = Slot;
+	OnRep_Loadout();
+}
+
+void AFTOCharacter::DrawPressed()
+{
+	if (Loadout.IsValidIndex(DrawnSlot))
+	{
+		SelectSlot(DrawnSlot); // put it away
+		return;
+	}
+	const int32 Slot = GetWeaponInSlot(LastDrawnSlot) != EFTOWeapon::None
+		? LastDrawnSlot : Loadout.IndexOfByPredicate([](EFTOWeapon Weapon) { return Weapon != EFTOWeapon::None; });
+	if (Slot != INDEX_NONE)
+	{
+		SelectSlot(Slot);
+	}
+}
+
+void AFTOCharacter::NextWeaponPressed()
+{
+	CycleWeapon(1);
+}
+
+void AFTOCharacter::PrevWeaponPressed()
+{
+	CycleWeapon(-1);
+}
+
+void AFTOCharacter::CycleWeapon(int32 Step)
+{
+	// On to the next slot with something in it, from the one in hand (or the last one used).
+	const int32 From = Loadout.IsValidIndex(DrawnSlot) ? DrawnSlot : LastDrawnSlot;
+	for (int32 k = 1; k <= FTOWeapons::MaxSlots; ++k)
+	{
+		const int32 Slot = ((From + Step * k) % FTOWeapons::MaxSlots + FTOWeapons::MaxSlots) % FTOWeapons::MaxSlots;
+		if (GetWeaponInSlot(Slot) != EFTOWeapon::None && Slot != DrawnSlot)
+		{
+			SelectSlot(Slot);
+			return;
+		}
+	}
+}
+
+void AFTOCharacter::FirePressed()
+{
+	if (CurrentVehicle || (Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed())))
+	{
+		return;
+	}
+	// Nothing up yet: the first press draws.
+	if (GetDrawnWeapon() == EFTOWeapon::None)
+	{
+		DrawPressed();
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextShotTime || IsReloading())
+	{
+		return;
+	}
+	const FFTOWeaponSpec& Spec = FTOWeapons::Spec(GetDrawnWeapon());
+	if (GetClip(DrawnSlot) <= 0)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, AFTOGameState::Sounds().DryFire, GetActorLocation());
+		ReloadPressed();
+		return;
+	}
+	NextShotTime = Now + Spec.Interval;
+
+	// From the muzzle toward whatever's under the crosshair.
+	UpdateWeaponMesh();
+	const FVector Muzzle = WeaponMesh->GetSocketLocation(TEXT("Muzzle"));
+	const FVector Aim = (GetCrosshairTarget() - Muzzle).GetSafeNormal();
+	const int32 Seed = FMath::Rand();
+	if (!HasAuthority())
+	{
+		// Show it now; the server's copy decides what it hits.
+		if (UFTOBallistics* Ballistics = UFTOBallistics::Get(GetWorld()))
+		{
+			Ballistics->Fire(this, GetDrawnWeapon(), Muzzle, Aim, Seed, true, false, true);
+		}
+		--Clips[DrawnSlot];
+	}
+	ServerFire(Muzzle, Aim, Seed);
+}
+
+void AFTOCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed)
+{
+	const EFTOWeapon Weapon = GetDrawnWeapon();
+	if (Weapon == EFTOWeapon::None || CurrentVehicle || GetClip(DrawnSlot) <= 0 || IsReloading() || (Knockdown && Knockdown->IsDown()))
+	{
+		return;
+	}
+	// A little slack for latency, but no machine-gunning a pistol.
+	const FFTOWeaponSpec& Spec = FTOWeapons::Spec(Weapon);
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextServerShotTime)
+	{
+		return;
+	}
+	NextServerShotTime = Now + Spec.Interval * 0.8f;
+	// The shot has to leave from somewhere near our hands.
+	FVector Muzzle = Origin;
+	if (FVector::DistSquared(Muzzle, GetActorLocation()) > FMath::Square(250.f))
+	{
+		Muzzle = GetPawnViewLocation();
+	}
+	--Clips[DrawnSlot];
+	if (UFTOBallistics* Ballistics = UFTOBallistics::Get(GetWorld()))
+	{
+		Ballistics->Fire(this, Weapon, Muzzle, Aim, Seed, true, true, GetNetMode() != NM_DedicatedServer);
+	}
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->MulticastShot(this, Weapon, Muzzle, Aim, Seed, true);
+	}
+	// Empty: reload on the spot.
+	if (Clips[DrawnSlot] <= 0)
+	{
+		ServerReload_Implementation();
+	}
+}
+
+void AFTOCharacter::ReloadPressed()
+{
+	const EFTOWeapon Weapon = GetDrawnWeapon();
+	if (Weapon != EFTOWeapon::None && !IsReloading() && GetClip(DrawnSlot) < FTOWeapons::Spec(Weapon).Magazine && GetSpare(DrawnSlot) > 0)
+	{
+		ServerReload();
+	}
+}
+
+void AFTOCharacter::ServerReload_Implementation()
+{
+	const EFTOWeapon Weapon = GetDrawnWeapon();
+	if (Weapon == EFTOWeapon::None || IsReloading() || GetSpare(DrawnSlot) <= 0 || GetClip(DrawnSlot) >= FTOWeapons::Spec(Weapon).Magazine)
+	{
+		return;
+	}
+	const float Seconds = FTOWeapons::Spec(Weapon).ReloadSeconds;
+	ReloadEnd = GetWorld()->GetTimeSeconds() + Seconds;
+	GetWorldTimerManager().SetTimer(ReloadTimer, this, &AFTOCharacter::FinishReload, Seconds, false);
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Reload, GetActorLocation(), 0.8f);
+	}
+}
+
+void AFTOCharacter::FinishReload()
+{
+	ReloadEnd = 0.f;
+	const EFTOWeapon Weapon = GetDrawnWeapon();
+	if (Weapon == EFTOWeapon::None)
+	{
+		return;
+	}
+	const int32 Moved = FMath::Min(FTOWeapons::Spec(Weapon).Magazine - Clips[DrawnSlot], Spares[DrawnSlot]);
+	Clips[DrawnSlot] += Moved;
+	Spares[DrawnSlot] -= Moved;
+}
+
+// ------------------------------------------------------------------------------------------
+// Down, and back up again
+// ------------------------------------------------------------------------------------------
+
+bool AFTOCharacter::GoDown(const FVector& Launch, float Seconds)
+{
+	check(HasAuthority());
+	if (!Knockdown || Knockdown->IsDown() || CurrentVehicle)
+	{
+		return false;
+	}
+	bDowned = true;
+	Knockdown->Knockdown(Launch, Seconds);
+	if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(Controller))
+	{
+		PC->ClientToast(INVTEXT("You're down! A partner can help you up."), FLinearColor(1.f, 0.4f, 0.3f));
+	}
+	return true;
+}
+
+bool AFTOCharacter::CanInteract(const AFTOCharacter* Officer) const
+{
+	return Officer && Officer != this && bDowned && Knockdown && Knockdown->IsDown();
+}
+
+FText AFTOCharacter::GetInteractPrompt(const AFTOCharacter* Officer) const
+{
+	return INVTEXT("Help your partner up");
+}
+
+void AFTOCharacter::Interact(AFTOCharacter* Officer)
+{
+	check(HasAuthority());
+	if (!CanInteract(Officer))
+	{
+		return;
+	}
+	Officer->PlayTimedAction(EFTOAnimAction::Interact, 1.f);
+	Knockdown->Recover();
+	if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(Officer->GetController()))
+	{
+		PC->ClientToast(INVTEXT("Back on your feet, partner."), FLinearColor(0.5f, 0.9f, 1.f));
+	}
+	if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(Controller))
+	{
+		PC->ClientToast(INVTEXT("Your partner's got you. Back in it!"), FLinearColor(0.5f, 0.9f, 1.f));
+	}
+}
+
+FVector AFTOCharacter::GetInteractLocation() const
+{
+	return Knockdown ? Knockdown->GetBodyLocation() : GetActorLocation();
 }

@@ -35,6 +35,13 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> Camera;
 	/** On foot: flying tackle. */
 	UPROPERTY() TObjectPtr<UInputAction> Tackle;
+	/** On foot: weapons. Draw brings the last weapon up (or puts it away); Slots are 1, 2, 3. */
+	UPROPERTY() TObjectPtr<UInputAction> Draw;
+	UPROPERTY() TObjectPtr<UInputAction> Fire;
+	UPROPERTY() TObjectPtr<UInputAction> Reload;
+	UPROPERTY() TObjectPtr<UInputAction> NextWeapon;
+	UPROPERTY() TObjectPtr<UInputAction> PrevWeapon;
+	UPROPERTY() TArray<TObjectPtr<UInputAction>> Slots;
 
 private:
 	UInputAction* MakeAction(FName Name, int32 ValueType);

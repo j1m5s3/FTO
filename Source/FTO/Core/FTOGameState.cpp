@@ -1,5 +1,7 @@
 #include "Core/FTOGameState.h"
 #include "Crime/FTOIncident.h"
+#include "GameFramework/Pawn.h"
+#include "Weapons/FTOBallistics.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
@@ -26,6 +28,13 @@ AFTOGameState::AFTOGameState()
 	SoundSet.Fail = Load(TEXT("SW_Fail"));
 	SoundSet.Click = Load(TEXT("SW_Click"));
 	SoundSet.Bonk = Load(TEXT("SW_Bonk"));
+	SoundSet.ShotPistol = Load(TEXT("SW_ShotPistol"));
+	SoundSet.ShotShotgun = Load(TEXT("SW_ShotShotgun"));
+	SoundSet.ShotRifle = Load(TEXT("SW_ShotRifle"));
+	SoundSet.Taser = Load(TEXT("SW_Taser"));
+	SoundSet.Reload = Load(TEXT("SW_Reload"));
+	SoundSet.Ricochet = Load(TEXT("SW_Ricochet"));
+	SoundSet.DryFire = Load(TEXT("SW_DryFire"));
 
 	static ConstructorHelpers::FObjectFinder<USoundAttenuation> WorldAttenuation(TEXT("/Game/FTO/Audio/SA_FTOWorld.SA_FTOWorld"));
 	SoundSet.World = WorldAttenuation.Object;
@@ -36,6 +45,20 @@ void AFTOGameState::MulticastPlaySound_Implementation(USoundBase* Sound, FVector
 	if (Sound && GetNetMode() != NM_DedicatedServer)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, Sound, Location, Volume, 1.f, 0.f, SoundSet.World);
+	}
+}
+
+void AFTOGameState::MulticastShot_Implementation(AActor* Shooter, EFTOWeapon Weapon, FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed, bool bAimed)
+{
+	// The server flew (and drew) its own copy; the shooter's machine drew theirs the moment they pulled the trigger.
+	const APawn* Pawn = Cast<APawn>(Shooter);
+	if (HasAuthority() || (Pawn && Pawn->IsLocallyControlled()))
+	{
+		return;
+	}
+	if (UFTOBallistics* Ballistics = UFTOBallistics::Get(GetWorld()))
+	{
+		Ballistics->Fire(Shooter, Weapon, Origin, Aim, Seed, bAimed, false, true);
 	}
 }
 

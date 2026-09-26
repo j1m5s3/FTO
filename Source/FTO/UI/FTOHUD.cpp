@@ -75,6 +75,7 @@ void AFTOHUD::DrawHUD()
 		DrawLobby(GS);
 		DrawInteractPrompt();
 		DrawCruiserPanel();
+		DrawWeaponPanel();
 		break;
 
 	case EFTOShiftPhase::Briefing:
@@ -92,6 +93,7 @@ void AFTOHUD::DrawHUD()
 		DrawInteractPrompt();
 		DrawCruiserPanel();
 		DrawEscortPanel();
+		DrawWeaponPanel();
 		break;
 
 	default:
@@ -321,12 +323,94 @@ void AFTOHUD::DrawTeammateMarkers(const AFTOGameState* GS)
 			continue;
 		}
 
+		// A partner who's been shot down needs helping up: flash their marker red.
+		const AFTOCharacter* Partner = Cast<AFTOCharacter>(Pawn);
+		const bool bDown = Partner && Partner->IsDowned();
 		FVector2D Screen;
-		ProjectToScreenEdge(Pawn->GetActorLocation() + FVector(0.f, 0.f, 160.f), 30.f * S, Screen);
-		const FLinearColor Color = Officer->GetOfficerColor();
+		ProjectToScreenEdge((bDown ? Partner->GetInteractLocation() + FVector(0.f, 0.f, 80.f) : Pawn->GetActorLocation() + FVector(0.f, 0.f, 160.f)), 30.f * S, Screen);
+		const bool bFlash = bDown && FMath::Fmod(GetWorld()->GetTimeSeconds() * 3.f, 1.f) < 0.5f;
+		const FLinearColor Color = bFlash ? FLinearColor(1.f, 0.15f, 0.1f) : Officer->GetOfficerColor();
 		DrawRect(FLinearColor::Black, Screen.X - 7.f * S, Screen.Y - 7.f * S, 14.f * S, 14.f * S);
 		DrawRect(Color, Screen.X - 5.f * S, Screen.Y - 5.f * S, 10.f * S, 10.f * S);
-		DrawCenteredText(Officer->GetPlayerName(), Screen.X, Screen.Y - 26.f * S, Color, Font, S);
+		DrawCenteredText(bDown ? FString::Printf(TEXT("%s  HELP!"), *Officer->GetPlayerName()) : Officer->GetPlayerName(), Screen.X, Screen.Y - 26.f * S, Color, Font, S);
+	}
+}
+
+void AFTOHUD::ShowHitMarker(bool bBadHit)
+{
+	HitMarkerUntil = GetWorld()->GetTimeSeconds() + 0.25f;
+	bHitMarkerBad = bBadHit;
+}
+
+void AFTOHUD::DrawWeaponPanel()
+{
+	const AFTOCharacter* Me = Cast<AFTOCharacter>(GetOwningPawn());
+	if (!Me || Me->GetCurrentVehicle())
+	{
+		return;
+	}
+	const float S = UIScale();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float CY = Canvas->ClipY * 0.5f;
+	const float Now = GetWorld()->GetTimeSeconds();
+	const EFTOWeapon Drawn = Me->GetDrawnWeapon();
+
+	// Crosshair while a weapon is up: a dot and four ticks, and an X when a round lands on someone.
+	if (Drawn != EFTOWeapon::None && Me->GetAimPose() != EFTOAimPose::None)
+	{
+		const FLinearColor Cross(1.f, 1.f, 1.f, 0.9f);
+		const float Gap = 7.f * S;
+		const float Len = 8.f * S;
+		const float T = 2.f * S;
+		DrawRect(Cross, CX - T * 0.5f, CY - T * 0.5f, T, T);
+		DrawRect(Cross, CX - Gap - Len, CY - T * 0.5f, Len, T);
+		DrawRect(Cross, CX + Gap, CY - T * 0.5f, Len, T);
+		DrawRect(Cross, CX - T * 0.5f, CY - Gap - Len, T, Len);
+		DrawRect(Cross, CX - T * 0.5f, CY + Gap, T, Len);
+	}
+	if (Now < HitMarkerUntil)
+	{
+		const FLinearColor Mark = bHitMarkerBad ? FLinearColor(1.f, 0.2f, 0.15f) : FLinearColor::White;
+		const float In = 6.f * S;
+		const float Out = 14.f * S;
+		for (const FVector2D Corner : { FVector2D(1.f, 1.f), FVector2D(-1.f, 1.f), FVector2D(1.f, -1.f), FVector2D(-1.f, -1.f) })
+		{
+			DrawLine(CX + Corner.X * In, CY + Corner.Y * In, CX + Corner.X * Out, CY + Corner.Y * Out, Mark, 2.5f * S);
+		}
+	}
+
+	// The three slots, bottom right: what's in each and its ammo, the one in hand lit up.
+	UFont* Font = GEngine->GetSmallFont();
+	const float W = 150.f * S;
+	const float H = 46.f * S;
+	const float Gap = 8.f * S;
+	const float X0 = Canvas->ClipX - (W + Gap) * FTOWeapons::MaxSlots - 12.f * S;
+	const float Y0 = Canvas->ClipY - H - 18.f * S;
+	for (int32 Slot = 0; Slot < FTOWeapons::MaxSlots; ++Slot)
+	{
+		const EFTOWeapon Weapon = Me->GetWeaponInSlot(Slot);
+		const bool bInHand = Slot == Me->GetDrawnSlot() && Weapon != EFTOWeapon::None;
+		const float X = X0 + Slot * (W + Gap);
+		DrawPanel(X, Y0, W, H, bInHand ? FLinearColor(0.1f, 0.25f, 0.55f, 0.85f) : FLinearColor(0.f, 0.f, 0.f, 0.5f));
+		const FLinearColor Ink = Weapon == EFTOWeapon::None ? FLinearColor(0.5f, 0.5f, 0.5f) : FLinearColor::White;
+		DrawText(FString::Printf(TEXT("%d  %s"), Slot + 1, *FTOWeapons::DisplayName(Weapon).ToString().ToUpper()), Ink, X + 8.f * S, Y0 + 5.f * S, Font, S * 1.05f);
+		if (Weapon != EFTOWeapon::None)
+		{
+			const FString Ammo = bInHand && Me->IsReloading() ? TEXT("RELOADING...") : FString::Printf(TEXT("%d / %d"), Me->GetClip(Slot), Me->GetSpare(Slot));
+			const FLinearColor AmmoInk = Me->GetClip(Slot) == 0 && !Me->IsReloading() ? FLinearColor(1.f, 0.4f, 0.3f) : FLinearColor(0.75f, 0.85f, 1.f);
+			DrawText(Ammo, AmmoInk, X + 8.f * S, Y0 + 25.f * S, Font, S);
+		}
+	}
+	DrawText(TEXT("1-3 / wheel: weapons   RMB: raise   LMB: fire   R: reload"), FLinearColor(0.7f, 0.7f, 0.7f, 0.8f), X0, Y0 - 16.f * S, Font, S * 0.85f);
+
+	// Shot down: a banner until a partner comes.
+	if (Me->IsDowned())
+	{
+		const FString Line = TEXT("YOU'RE DOWN!  Hang on: a partner can help you up.");
+		float TW = 0.f, TH = 0.f;
+		GetTextSize(Line, TW, TH, GEngine->GetMediumFont(), S * 1.2f);
+		DrawPanel(CX - TW * 0.5f - 16.f * S, CY + 80.f * S, TW + 32.f * S, TH + 16.f * S, FLinearColor(0.4f, 0.f, 0.f, 0.75f));
+		DrawCenteredText(Line, CX, CY + 88.f * S, FLinearColor(1.f, 0.85f, 0.8f), GEngine->GetMediumFont(), S * 1.2f);
 	}
 }
 

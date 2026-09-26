@@ -187,6 +187,14 @@ void AFTOPlayerController::ClientToast_Implementation(const FText& Message, FLin
 	}
 }
 
+void AFTOPlayerController::ClientHitMarker_Implementation(bool bBadHit)
+{
+	if (AFTOHUD* FTOHud = GetHUD<AFTOHUD>())
+	{
+		FTOHud->ShowHitMarker(bBadHit);
+	}
+}
+
 void AFTOPlayerController::FTODrive()
 {
 	ServerEnterNearestCruiser();

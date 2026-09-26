@@ -220,6 +220,48 @@ def click():
     return normalize(envelope(tone(lambda t: 1800.0, 0.03), 0.001, 0.02, decay=0.01), 0.4)
 
 
+def gunshot(body_hz, crack, tail, weight):
+    """A cartoon bang: a sharp noise crack, a pitch-dropping thump, and a lowpassed rumble tail."""
+    crack_part = envelope(noise(0.03), 0.0005, 0.02, decay=0.008)
+    thump = envelope(tone(lambda t: body_hz * (0.4 + 0.6 * math.exp(-t * 30.0)), 0.18, tri), 0.001, 0.05, decay=0.05)
+    rumble = envelope(lowpass(noise(tail), 500.0 + 1500.0 * weight), 0.002, tail * 0.5, decay=tail * 0.35)
+    return normalize(mix(gain(crack_part, crack), gain(thump, 0.8), gain(rumble, 0.5 + weight)), 0.8)
+
+
+def shot_pistol():
+    return gunshot(220.0, 0.9, 0.35, 0.2)
+
+
+def shot_shotgun():
+    return gunshot(120.0, 0.7, 0.8, 0.8)
+
+
+def shot_rifle():
+    return gunshot(300.0, 1.2, 0.55, 0.45)
+
+
+def taser():
+    # Crackling electric buzz: a 60 Hz square with sparks of noise.
+    buzz = tone(lambda t: 62.0, 0.5, square)
+    sparks = [x * (1.0 if rng.random() < 0.3 else 0.2) for x in noise(0.5)]
+    return normalize(envelope(mix(gain(lowpass(buzz, 3000), 0.5), gain(lowpass(sparks, 7000), 0.5)), 0.005, 0.08), 0.6)
+
+
+def reload():
+    # Mag out, mag in: click-clack.
+    click = lambda f: envelope(mix(tone(lambda t: f, 0.04, square), gain(noise(0.04), 0.4)), 0.001, 0.02, decay=0.01)
+    return normalize(concat(click(1400.0), silence(0.22), gain(click(900.0), 1.2), silence(0.08), click(1600.0)), 0.5)
+
+
+def ricochet():
+    # Pee-yow: a whistle falling in pitch.
+    return normalize(envelope(tone(lambda t: 2600.0 * math.exp(-t * 2.2) + 500.0, 0.45), 0.002, 0.15, decay=0.2), 0.4)
+
+
+def dry_fire():
+    return normalize(envelope(mix(tone(lambda t: 2200.0, 0.02, square), noise(0.02)), 0.0005, 0.01, decay=0.006), 0.35)
+
+
 def bonk():
     # Somebody got knocked flying: a dull thump with a springy cartoon boing on top.
     thump = mix(tone(lambda t: 45.0 + 120.0 * math.exp(-t * 14.0), 0.25),
@@ -244,6 +286,13 @@ SOUNDS = {
     "SW_Fail": (fail, False),
     "SW_Click": (click, False),
     "SW_Bonk": (bonk, False),
+    "SW_ShotPistol": (shot_pistol, False),
+    "SW_ShotShotgun": (shot_shotgun, False),
+    "SW_ShotRifle": (shot_rifle, False),
+    "SW_Taser": (taser, False),
+    "SW_Reload": (reload, False),
+    "SW_Ricochet": (ricochet, False),
+    "SW_DryFire": (dry_fire, False),
 }
 
 

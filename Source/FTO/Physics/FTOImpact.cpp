@@ -1,16 +1,22 @@
 #include "Physics/FTOImpact.h"
 #include "City/FTOOccupant.h"
 #include "City/FTOPedestrian.h"
+#include "Core/FTOCharacter.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
+#include "Crime/FTOPerp.h"
 #include "Engine/World.h"
 #include "Physics/FTOKnockdownComponent.h"
 
 namespace
 {
-	/** Citizens the city minds seeing hurt (crooks had it coming, officers signed up for it). */
+	/** Citizens the city minds seeing hurt (crooks and perps had it coming, officers signed up for it). */
 	bool IsCivilian(const AActor* Victim)
 	{
+		if (const AFTOPerp* Perp = Cast<AFTOPerp>(Victim))
+		{
+			return !Perp->IsCriminal();
+		}
 		if (const AFTOOccupant* Occupant = Cast<AFTOOccupant>(Victim))
 		{
 			return Occupant->GetRole() != EFTOOccupantRole::Crook && Occupant->GetRole() != EFTOOccupantRole::Officer;
@@ -27,6 +33,12 @@ namespace
 		}
 		Knockdown->Knockdown(Launch, Seconds);
 
+		// A perp put on the floor by the police is as good as caught.
+		if (AFTOPerp* Perp = Cast<AFTOPerp>(Victim); Perp && Police)
+		{
+			Perp->Subdued(Police);
+		}
+
 		AFTOGameState* GS = Victim->GetWorld()->GetGameState<AFTOGameState>();
 		if (!GS || !IsCivilian(Victim))
 		{
@@ -34,7 +46,7 @@ namespace
 		}
 		if (!Police)
 		{
-			GS->AddChaos(Chaos * 0.5f); // a getaway car ploughing through: the city gets angrier
+			GS->AddChaos(Chaos * 0.5f); // a getaway car ploughing through, a perp's stray round: the city gets angrier
 			return true;
 		}
 		GS->AddChaos(Chaos);
@@ -73,4 +85,44 @@ bool FTOImpact::Tackle(AActor* Victim, const FVector& Direction, AController* Of
 {
 	const FVector Launch = Direction.GetSafeNormal2D() * 520.f + FVector(0.f, 0.f, 300.f);
 	return Knock(Victim, Launch, 2.8f, Officer, 1.f, INVTEXT("Easy, officer! That was a citizen."));
+}
+
+bool FTOImpact::Shot(AActor* Victim, const FVector& Velocity, EFTOWeapon Weapon, AActor* Shooter)
+{
+	const FFTOWeaponSpec& Spec = FTOWeapons::Spec(Weapon);
+	const AFTOCharacter* ShootingOfficer = Cast<AFTOCharacter>(Shooter);
+	AController* Police = ShootingOfficer ? ShootingOfficer->GetController() : nullptr;
+	AFTOPlayerController* PC = Cast<AFTOPlayerController>(Police);
+	const FVector Launch = Velocity.GetSafeNormal() * Spec.Push + FVector(0.f, 0.f, Spec.Push * 0.4f);
+
+	// Officers hit by gunfire go down until a partner helps them up (or they come round on their own).
+	if (AFTOCharacter* Officer = Cast<AFTOCharacter>(Victim))
+	{
+		if (!Officer->GoDown(Launch, Spec.bStun ? 4.f : 12.f))
+		{
+			return false;
+		}
+		if (PC)
+		{
+			PC->ClientToast(INVTEXT("Friendly fire! Check your target."), FLinearColor(1.f, 0.45f, 0.3f));
+			PC->ClientHitMarker(true);
+		}
+		else if (AFTOGameState* GS = Victim->GetWorld()->GetGameState<AFTOGameState>())
+		{
+			GS->AddChaos(3.f); // officer down: the city notices
+		}
+		return true;
+	}
+
+	const bool bCivilian = IsCivilian(Victim);
+	const FText Scolding = Spec.bStun ? INVTEXT("Zapping citizens isn't community policing.") : INVTEXT("Cease fire! That was a citizen.");
+	if (!Knock(Victim, Launch, Spec.KnockSeconds, Police, Spec.bStun ? 2.f : 5.f, Scolding))
+	{
+		return false;
+	}
+	if (PC)
+	{
+		PC->ClientHitMarker(bCivilian);
+	}
+	return true;
 }
