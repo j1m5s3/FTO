@@ -22,14 +22,14 @@ import os
 import sys
 
 import bpy
-from mathutils import Euler, Vector
+from mathutils import Vector
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fto_blender as fb  # noqa: E402
+from fto_shapes import (BODY, GLASS, GLOW, MATERIALS, Frame, add_sockets, ball, beam, both_flanks, box, cyl,  # noqa: E402
+                        export_static, lettering, prism, star)
 
 # Material slots
-BODY, GLASS, GLOW = 0, 1, 2
-MATERIALS = ["Body", "Glass", "Glow"]
 
 # Colours (sRGB)
 PAINT = (0.85, 0.85, 0.85)          # tinted in game
@@ -78,76 +78,6 @@ HANDS = (0.48, 0.99)                # steering-wheel centre: forward, height (ha
 EYES = (0.16, 1.44)                 # interior camera: forward, height (a touch above the eyes)
 HEADROOM = 1.72                     # roof lining above the root: clears the tallest hat or hairdo
 SEAT_Y = 0.48                       # front seats sit this far either side of the centre line
-
-
-# --------------------------------------------------------------------------------------
-# Part helpers (metres)
-# --------------------------------------------------------------------------------------
-def box(color, center, size, bevel=0.03, tint=False, rot=(0, 0, 0), material=BODY):
-    return fb.make_part('cube', color, loc=center, rot=rot, scale=size, bevel=bevel, tint=tint, smooth=False,
-                        material=material)
-
-
-def cyl(color, center, radius, length, axis='z', rot=None, segments=12, material=BODY, tint=False):
-    rot = rot if rot is not None else {'x': (0, 90, 0), 'y': (90, 0, 0), 'z': (0, 0, 0)}[axis]
-    return fb.make_part('cylinder', color, loc=center, rot=rot, scale=(radius * 2, radius * 2, length),
-                        segments=segments, material=material, tint=tint)
-
-
-def ball(color, center, size, material=BODY):
-    scale = size if isinstance(size, (tuple, list)) else (size, size, size)
-    return fb.make_part('sphere', color, loc=center, scale=scale, material=material, segments=12, rings=8)
-
-
-def beam(color, p0, p1, width, thick, bevel=0.02, tint=False, material=BODY):
-    """A box running from p0 to p1: `width` across (kept horizontal), `thick` through."""
-    a, b = Vector(p0), Vector(p1)
-    d = b - a
-    pitch = -math.degrees(math.atan2(d.z, math.hypot(d.x, d.y)))
-    yaw = math.degrees(math.atan2(d.y, d.x))
-    return fb.make_part('cube', color, loc=(a + b) / 2, rot=(0, pitch, yaw), scale=(d.length, width, thick),
-                        bevel=bevel, tint=tint, smooth=False, material=material)
-
-
-def prism(color, profile, y0, y1, bevel=0.0, tint=False, material=BODY):
-    return fb.make_prism(color, profile, min(y0, y1), max(y0, y1), tint=tint, bevel=bevel, material=material)
-
-
-def star(color, cx, cz, y0, y1, r_out=0.12, r_in=0.05):
-    """Five-pointed star in the XZ plane (a pentagon plus five points), extruded y0..y1."""
-    def point(r, degrees):
-        a = math.radians(degrees)
-        return (cx + r * math.cos(a), cz + r * math.sin(a))
-    parts = [prism(color, [point(r_in, 126 + 72 * k) for k in range(5)], y0, y1)]
-    for k in range(5):
-        tip = 90 + 72 * k
-        parts.append(prism(color, [point(r_in, tip - 36), point(r_out, tip), point(r_in, tip + 36)], y0, y1))
-    return parts
-
-
-# Rotations that stand lettering up on a face so it reads left-to-right to someone looking at that face.
-FACING = {'+y': (90, 0, 180), '-y': (90, 0, 0), '+x': (90, 0, 90), '-x': (90, 0, -90)}
-
-
-def lettering(text, color, center, facing, size, material=BODY):
-    return fb.make_text(text, color, loc=center, rot=FACING[facing], size=size, depth=0.01, material=material)
-
-
-def both_flanks(text, color, x, z, half_width, size):
-    """The same lettering on the left and right flanks."""
-    return [lettering(text, color, (x, half_width, z), '+y', size), lettering(text, color, (x, -half_width, z), '-y', size)]
-
-
-class Frame:
-    """A local frame (centre + XYZ Euler degrees) for parts that sit on something tilted or turned."""
-
-    def __init__(self, center, rot):
-        self.center = Vector(center)
-        self.rot = tuple(rot)
-        self.matrix = Euler([math.radians(a) for a in rot], 'XYZ').to_matrix()
-
-    def at(self, offset):
-        return self.center + self.matrix @ Vector(offset)
 
 
 # --------------------------------------------------------------------------------------
@@ -690,39 +620,6 @@ VEHICLES = {
 # --------------------------------------------------------------------------------------
 # Export + preview
 # --------------------------------------------------------------------------------------
-def add_sockets(mesh_obj, sockets):
-    objects = [mesh_obj]
-    for name, loc in sockets.items():
-        empty = fb.link(bpy.data.objects.new(f"SOCKET_{name}", None))
-        empty.empty_display_type = 'PLAIN_AXES'
-        empty.location = [v * fb.UNIT for v in loc]
-        empty.parent = mesh_obj
-        objects.append(empty)
-    return objects
-
-
-def export_static(path, objects):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    for other in bpy.context.view_layer.objects:
-        other.select_set(False)
-    for obj in objects:
-        obj.select_set(True)
-    bpy.context.view_layer.objects.active = objects[0]
-    bpy.ops.export_scene.fbx(
-        filepath=path,
-        use_selection=True,
-        object_types={'MESH', 'EMPTY'},
-        apply_unit_scale=True,
-        apply_scale_options='FBX_SCALE_UNITS',
-        axis_forward='-Z',
-        axis_up='Y',
-        mesh_smooth_type='FACE',
-        colors_type='LINEAR',
-        bake_anim=False,
-    )
-    print(f"FTO: exported {path}")
-
-
 def seat_occupant(name, pose_fn, loc):
     """A posed officer sat at a seat socket (preview only)."""
     import build_officer as bo

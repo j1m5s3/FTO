@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "City/FTOCityKit.h"
 #include "FTOCityGenerator.generated.h"
 
 class UInstancedStaticMeshComponent;
@@ -35,11 +36,14 @@ struct FFTOCityBlock
 };
 
 /**
- * Builds a toy-box city from engine primitives on a road grid.
+ * Builds the city on a road grid from the in-house building kit (Tools/Blender/build_kit.py): towers
+ * with shopfronts downtown, houses with porches and picket fences, warehouses, the bank and the
+ * precinct, every ground floor enterable and furnished for what goes on inside, plus street dressing.
  *
- * Deterministic from a replicated seed: the server and every client build the same
- * geometry locally (instanced meshes, nothing per-building is replicated). Only the
- * server spawns gameplay actors: player starts at the precinct and crime spawn points.
+ * Deterministic from a replicated seed: the server and every client build the same geometry locally
+ * (nothing per-building is replicated). Everything is instanced (one component per kit piece, painted
+ * per instance, Nanite where opaque). Only the server spawns gameplay actors: player starts at the
+ * precinct and crime spawn points.
  */
 UCLASS()
 class FTO_API AFTOCityGenerator : public AActor
@@ -72,6 +76,10 @@ public:
 	/** Four parking bays in the precinct lot, facing the street. */
 	TArray<FTransform> GetPrecinctParkingSpots() const;
 
+	/** Every enterable ground floor, with its room, door and the spots people use inside. */
+	const TArray<FFTOBuilding>& GetBuildings() const { return Buildings; }
+	const FFTOBuilding* FindBuilding(EFTOBuildingType Type) const;
+
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksY = 8;
@@ -90,11 +98,61 @@ protected:
 	void BuildGeometry();
 	void SpawnGameplayMarkers();
 
-	// Geometry helpers
-	void AddBox(int32 ColorIndex, const FVector& Center, const FVector& Size, float Yaw = 0.f);
-	void AddCylinder(int32 ColorIndex, const FVector& Center, const FVector& Size);
-	void AddSphere(int32 ColorIndex, const FVector& Center, const FVector& Size);
-	UInstancedStaticMeshComponent* GetISM(UStaticMesh* Mesh, int32 ColorIndex);
+	// ---- Instancing: everything is queued, then instanced in one go ----
+	struct FBatch
+	{
+		TArray<FTransform> Transforms;
+		TArray<float> Colors; // RGB per instance, read by MI_FTOCity
+	};
+	/** A kit piece by name (SM_Wall_G_Plain...), loaded on first use. */
+	UStaticMesh* Kit(const TCHAR* Piece);
+	void Place(UStaticMesh* Mesh, const FTransform& Transform, const FLinearColor& Tint = FLinearColor::White, bool bInterior = false);
+	void Place(const TCHAR* Piece, const FTransform& Transform, const FLinearColor& Tint = FLinearColor::White, bool bInterior = false);
+	void FlushInstances();
+
+	// Engine basic shapes (100 cm, centred), for roads, slabs and the like.
+	void AddBox(const FLinearColor& Color, const FVector& Center, const FVector& Size, float Yaw = 0.f, bool bInterior = false);
+	void AddCylinder(const FLinearColor& Color, const FVector& Center, const FVector& Size);
+	void AddSphere(const FLinearColor& Color, const FVector& Center, const FVector& Size);
+	void AddLabel(const FVector& Location, float Yaw, const FText& Text, const FColor& Color, float Size);
+
+	// ---- Buildings (FTOCityBuildings.cpp) ----
+	enum class EFace : uint8 { PosX, NegX, PosY, NegY };
+	/** An axis-aligned building: centre of the footprint at street level, size in kit panels. */
+	struct FFootprint
+	{
+		FVector Center = FVector::ZeroVector;
+		int32 PanelsX = 1;
+		int32 PanelsY = 1;
+		float HalfX() const { return PanelsX * FTOKit::PanelWidth * 0.5f; }
+		float HalfY() const { return PanelsY * FTOKit::PanelWidth * 0.5f; }
+	};
+	/** What each ground-floor panel of a face should be. */
+	enum class EPanel : uint8 { Plain, Window, Door, Shop, ShopDoor, Roller, Skip };
+
+	static FVector FaceNormal(EFace Face);
+	int32 FacePanels(const FFootprint& F, EFace Face) const;
+	/** Pivot of panel Index along a face (outer face, at height Z above the footprint), facing out. */
+	FTransform PanelTransform(const FFootprint& F, EFace Face, float Index, float Z) const;
+
+	void BuildGroundFace(const FFootprint& F, EFace Face, const TArray<EPanel>& Panels, const FLinearColor& Paint);
+	void BuildUpperFloors(const FFootprint& F, int32 Floors, const FLinearColor& Paint, FRandomStream& Rng, bool bWide);
+	void BuildRoof(const FFootprint& F, float RoofZ, const FLinearColor& Paint, FRandomStream& Rng, bool bRooftopClutter);
+	void BuildCorners(const FFootprint& F, int32 Floors, const FLinearColor& Paint);
+	/** Floor, ceiling and lights for a ground floor, and the room record interiors are furnished from. */
+	FFTOBuilding& AddRoom(const FFootprint& F, EFace DoorFace, float DoorIndex, EFTOBuildingType Type, const FString& Name, float CeilingHeight);
+	/** Room-space (X into the room from the door) to world. */
+	FTransform RoomToWorld(const FFTOBuilding& B, float X, float Y, float Yaw, float Z = 0.f) const;
+	void PlaceInRoom(const FFTOBuilding& B, const TCHAR* Piece, float X, float Y, float Yaw, const FLinearColor& Tint = FLinearColor::White, float Z = 0.f);
+	/**
+	 * A partition in room space from From to To, along Y at X = Line (bAlongY) or along X at Y = Line,
+	 * tiled with interior wall panels (doorways where Doors asks, the last panel squeezed to fit).
+	 */
+	void InteriorWall(const FFTOBuilding& B, bool bAlongY, float Line, float From, float To, TArrayView<const float> Doors, const FLinearColor& Paint);
+
+	void BuildTower(const FFTOCityBlock& Block, int32 QuadX, int32 QuadY, FRandomStream& Rng);
+	void BuildHouse(const FVector& FrontCenter, EFace Facing, FRandomStream& Rng);
+	void BuildWarehouse(const FFootprint& F, EFace DoorFace, FRandomStream& Rng);
 
 	void BuildDowntownBlock(const FFTOCityBlock& Block, FRandomStream& Rng);
 	void BuildResidentialBlock(const FFTOCityBlock& Block, FRandomStream& Rng);
@@ -102,21 +160,41 @@ protected:
 	void BuildParkBlock(const FFTOCityBlock& Block, FRandomStream& Rng);
 	void BuildPrecinct(const FFTOCityBlock& Block);
 	void BuildBank(const FFTOCityBlock& Block);
+
+	// ---- Interiors (FTOCityInteriors.cpp) ----
+	void Furnish(FFTOBuilding& B, FRandomStream& Rng);
+	void FurnishShop(FFTOBuilding& B, FRandomStream& Rng);
+	void FurnishDiner(FFTOBuilding& B, FRandomStream& Rng);
+	void FurnishBar(FFTOBuilding& B, FRandomStream& Rng);
+	void FurnishOffice(FFTOBuilding& B, FRandomStream& Rng);
+	void FurnishHome(FFTOBuilding& B, FRandomStream& Rng);
+	void FurnishWarehouse(FFTOBuilding& B, FRandomStream& Rng);
+
+	// ---- Streets (FTOCityStreets.cpp) ----
+	void BuildStreets(FRandomStream& Rng);
+	void DressSidewalks(const FFTOCityBlock& Block, FRandomStream& Rng);
 	void AddTree(const FVector& Base, FRandomStream& Rng);
-	void AddLabel(const FVector& Location, const FText& Text, const FColor& Color, float Size);
+	bool IsDowntownCorner(int32 I, int32 J) const;
 
 	FVector BlockOrigin(int32 X, int32 Y) const;
+	/** Street level on top of the sidewalk slab, where buildings stand. */
+	float StreetZ() const;
 
 	UPROPERTY(ReplicatedUsing=OnRep_Seed) int32 Seed = 0;
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USceneComponent> Root;
 
 	UPROPERTY(Transient) TArray<FFTOCityBlock> Blocks;
-	UPROPERTY(Transient) TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> ISMs;
-	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
+	UPROPERTY(Transient) TArray<FFTOBuilding> Buildings;
+	UPROPERTY(Transient) TMap<FName, TObjectPtr<UStaticMesh>> KitMeshes;
+	UPROPERTY() TObjectPtr<UMaterialInterface> CityMaterial;
+	UPROPERTY() TObjectPtr<UMaterialInterface> InteriorMaterial;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> CubeMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> CylinderMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> SphereMesh;
+
+	TMap<UStaticMesh*, FBatch> ExteriorBatches;
+	TMap<UStaticMesh*, FBatch> InteriorBatches;
 
 	FVector PrecinctLocation = FVector::ZeroVector;
 	bool bGeometryBuilt = false;

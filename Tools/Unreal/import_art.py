@@ -5,6 +5,7 @@ Imports FTO's in-house art (FBX made by Tools/Blender/*) into /Game/FTO. Run hea
 
 Re-running replaces the assets in place, so iterate in Blender, re-export, re-import.
 """
+import json
 import os
 
 import unreal
@@ -14,6 +15,15 @@ ART = os.path.join(REPO, "Art", "Source")
 BASE_MATERIAL = "/Game/FTO/Materials/M_FTOBase"
 # Material slot name (from the Blender material) -> material; anything else gets BASE_MATERIAL.
 SLOT_MATERIALS = {
+    "glass": "/Game/FTO/Materials/M_FTOGlass",
+    "glow": "/Game/FTO/Materials/MI_FTOGlow",
+}
+# The building kit (Tools/Blender/build_kit.py): every FBX in Art/Source/Kit. Instanced by the city
+# generator, so the paint comes from per-instance data (MI_FTOCity) rather than a material per colour.
+KIT_SOURCE = "Kit"
+KIT_DEST = "/Game/FTO/Kit"
+KIT_SLOT_MATERIALS = {
+    "body": "/Game/FTO/Materials/MI_FTOCity",
     "glass": "/Game/FTO/Materials/M_FTOGlass",
     "glow": "/Game/FTO/Materials/MI_FTOGlow",
 }
@@ -119,7 +129,7 @@ def animation_options(skeleton):
     return ui
 
 
-def static_options():
+def static_options(nanite=False):
     ui = unreal.FbxImportUI()
     ui.set_editor_property("automated_import_should_detect_type", False)
     ui.set_editor_property("import_mesh", True)
@@ -133,7 +143,7 @@ def static_options():
     data.set_editor_property("vertex_color_import_option", unreal.VertexColorImportOption.REPLACE)
     data.set_editor_property("combine_meshes", True)
     data.set_editor_property("auto_generate_collision", False)
-    data.set_editor_property("build_nanite", False)
+    data.set_editor_property("build_nanite", nanite)
     data.set_editor_property("convert_scene", True)
     return ui
 
@@ -179,6 +189,46 @@ def import_statics(group):
         unreal.log(f"FTO: {name} extent {bounds.box_extent} slots {slots} sockets {sockets}")
         eal.save_loaded_asset(mesh)
     eal.save_directory(destination, only_if_is_dirty=False, recursive=True)
+
+
+def import_kit():
+    """
+    Building kit: collision comes from the UCX boxes in each FBX. Opaque pieces are Nanite (the city places
+    tens of thousands of them); anything with a translucent Glass section stays a regular mesh.
+    """
+    source = os.path.join(ART, KIT_SOURCE)
+    if not os.path.isdir(source):
+        unreal.log_warning(f"FTO: no kit at {source}")
+        return
+    materials = {slot: eal.load_asset(path) for slot, path in KIT_SLOT_MATERIALS.items()}
+    with open(os.path.join(source, "kit_manifest.json")) as f:
+        manifest = json.load(f)  # written by build_kit.py: the material slots each piece uses
+    names = sorted(f[:-4] for f in os.listdir(source) if f.lower().endswith(".fbx"))
+    nanite_count = 0
+    for name in names:
+        path = f"{KIT_DEST}/{name}"
+        if eal.does_asset_exist(path):
+            eal.delete_asset(path)
+        nanite = "Glass" not in manifest.get(name, {}).get("slots", ["Glass"])
+        run_import(os.path.join(source, name + ".fbx"), KIT_DEST, name, static_options(nanite=nanite))
+        mesh = eal.load_asset(path)
+        if not mesh:
+            unreal.log_error(f"FTO: missing {path} after import")
+            continue
+
+        for index, slot in enumerate(mesh.get_editor_property("static_materials")):
+            slot_name = str(slot.get_editor_property("material_slot_name")).lower()
+            mesh.set_material(index, materials.get(slot_name) or materials["body"])
+
+        nanite_count += int(nanite)
+        body_setup = mesh.get_editor_property("body_setup")
+        geom = body_setup.get_editor_property("agg_geom") if body_setup else None
+        boxes = len(geom.get_editor_property("box_elems")) if geom else 0
+        convex = len(geom.get_editor_property("convex_elems")) if geom else 0
+        unreal.log(f"FTO: kit {name} nanite={nanite} collision={boxes} boxes + {convex} hulls")
+        eal.save_loaded_asset(mesh)
+    eal.save_directory(KIT_DEST, only_if_is_dirty=False, recursive=True)
+    unreal.log(f"FTO: imported {len(names)} kit pieces ({nanite_count} Nanite)")
 
 
 def apply_base_material(mesh):
@@ -253,7 +303,7 @@ def ensure_physics_assets():
             unreal.log(f"FTO: {mesh_name} physics asset has {bodies} bodies")
 
 
-# FTO_IMPORT=characters|statics limits the run (default: everything).
+# FTO_IMPORT=characters|statics|kit limits the run (default: everything).
 ONLY = os.environ.get("FTO_IMPORT", "").lower()
 
 if ONLY in ("", "characters"):
@@ -264,3 +314,6 @@ if ONLY in ("", "characters"):
 if ONLY in ("", "statics"):
     for static_group in STATICS:
         import_statics(static_group)
+
+if ONLY in ("", "kit"):
+    import_kit()

@@ -76,9 +76,16 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
   root goes), `Cam_*` (seat-view camera) and the cruiser's `Lightbar`. Seats are sized from the officer's car-seat
   pose (`build_officer.car_legs`); `--preview <dir>` also renders roofless cutaways with posed occupants and the
   driver's-eye view to check the fit.
+- `Tools/Blender/build_kit.py` builds the city's building kit into `Art/Source/Kit`: wall panels on a 2 m grid (plain,
+  window, door, shopfront, loading door; ground floor 4 m, upper floors 3.2 m), corners, parapets, cornices, awnings,
+  shop signs, rooftop units, gable roofs, porches and fences, furniture for every interior (shop, diner, bar, office,
+  home, warehouse, bank vault, precinct armory and cells), street dressing and trees. Every piece faces +X; collision is
+  `UCX_` boxes, so doorways stay open. Translucent panes are separate `*_Glass` pieces so the walls can be Nanite, and
+  `kit_manifest.json` tells the importer which pieces have glass. `--preview <dir>` renders every piece.
+  `Source/FTO/City/FTOCityKit.h` mirrors the grid, and the `FTOCity*.cpp` files assemble buildings, rooms and streets.
 - **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (vertex colours, materials by slot name,
-  sockets squared up to scale 1 and no rotation) and can be re-run after any Blender change:
-  (`FTO_IMPORT=characters` or `FTO_IMPORT=statics` limits a run to one group)
+  sockets squared up to scale 1 and no rotation, Nanite for opaque kit pieces) and can be re-run after any Blender change:
+  (`FTO_IMPORT=characters`, `statics` or `kit` limits a run to one group)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
 - **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
   radio squelch, chimes, alarm, fanfare, sad trombone) into `Art/Source/Audio` and imports them to `/Game/FTO/Audio`.
@@ -86,8 +93,10 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
   idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) and upper-body aiming
   layered on top. Actors animating several people (a car's driver and passengers) pick each one's action per mesh.
 - **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials`: `M_FTOBase` (vertex colour ×
-  `Color` tint, glowing in its own colour by `Emissive`), `M_FTOGlass` (tinted see-through glass) and `MI_FTOGlow`
-  (the base material, glowing). Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
+  `Color` tint, glowing in its own colour by `Emissive`), `M_FTOGlass` (tinted see-through glass), `MI_FTOGlow`
+  (the base material, glowing), `MI_FTOCity` (tinted per instance from custom data, for the instanced city) and
+  `MI_FTOCityInterior` (the same, a little self-lit for rooms).
+  Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
 - Nearly everything uses `M_FTOBase`. Engine primitives have no vertex colour, so they just take `Color`.
   Blender assets bake flat colours into vertex colours; vertex alpha = 1 marks tintable areas (uniforms, car paint).
 - Only free (CC0) or in-house assets. Record any third-party asset and its licence in `docs/Credits.md`.

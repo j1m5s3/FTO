@@ -1,0 +1,579 @@
+{
+ "SM_AmmoCrate": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Armchair": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Awning": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_BarCounter": {
+  "slots": [
+   "Body",
+   "Glass"
+  ]
+ },
+ "SM_Barrel": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Bench": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Bin": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Bookshelf": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Booth": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_BottleShelf": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_BriefingChair": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_BusStop": {
+  "slots": [
+   "Body",
+   "Glass"
+  ]
+ },
+ "SM_Bush": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_CeilingLight": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_CellBars": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_CellBarsDoor": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_CellBench": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Chair": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Chimney": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_CoffeeStation": {
+  "slots": [
+   "Body",
+   "Glass",
+   "Glow"
+  ]
+ },
+ "SM_CoffeeTable": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Corner_G": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Corner_U": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Cornice": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Crate": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Curb": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Dartboard": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Desk": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_DinerCounter": {
+  "slots": [
+   "Body",
+   "Glass"
+  ]
+ },
+ "SM_DiningTable": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Doormat": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_DrinksFridge": {
+  "slots": [
+   "Body",
+   "Glass",
+   "Glow"
+  ]
+ },
+ "SM_Fence": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_FilingCabinet": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_FloorLamp": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_Forklift": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Fridge": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_FrontDesk": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_GableRoof": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_GunRack": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_HouseMailbox": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Hydrant": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_IWall_Door": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_IWall_Plain": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Jukebox": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_KitchenCounter": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_LampPost": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_Lockers": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Mailbox": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_NewsBox": {
+  "slots": [
+   "Body",
+   "Glass"
+  ]
+ },
+ "SM_OfficeChair": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Pallet": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_PalletRack": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Parapet": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_ParapetCorner": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_ParkingMeter": {
+  "slots": [
+   "Body",
+   "Glass"
+  ]
+ },
+ "SM_Plant": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Planter": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Podium": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_PoolTable": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Porch": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_QueuePost": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_ReceptionDesk": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_Roof_AC": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Roof_Antenna": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_Roof_Hut": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Roof_Vent": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Roof_WaterTower": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_RoundTable": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Rug": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Shelf": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_ShopCounter": {
+  "slots": [
+   "Body",
+   "Glass",
+   "Glow"
+  ]
+ },
+ "SM_Sign_Bank": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Bar": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Books": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Coffee": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Diner": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Donuts": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Laundry": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Market": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Offices": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Pizza": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Police": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sign_Toys": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Sofa": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Stool": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_StreetBench": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_TVStand": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_TellerCounter": {
+  "slots": [
+   "Body",
+   "Glass"
+  ]
+ },
+ "SM_Toilet": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_TrafficLight": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Tree_Pine": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Tree_Round": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Tree_Tall": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_VaultShelf": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_VaultWall": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_WallShelf": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_G_Door": {
+  "slots": [
+   "Body",
+   "Glow"
+  ]
+ },
+ "SM_Wall_G_Plain": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_G_Roller": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_G_Shop": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_G_ShopDoor": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_G_Shop_Glass": {
+  "slots": [
+   "Glass"
+  ]
+ },
+ "SM_Wall_G_Window": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_G_Window_Glass": {
+  "slots": [
+   "Glass"
+  ]
+ },
+ "SM_Wall_U_Plain": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_U_Wide": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Wall_U_Window": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_WantedBoard": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_WaterCooler": {
+  "slots": [
+   "Body"
+  ]
+ },
+ "SM_Whiteboard": {
+  "slots": [
+   "Body"
+  ]
+ }
+}
