@@ -50,6 +50,10 @@ Each line is one PR. Done so far: 1 to 6.
 10. **Scoring.** Per-officer points for everything (arrests by tier, catches in the act, tickets, busts, revives;
     penalties for collateral and friendly fire), animated "+250 ARREST!" popups with combo multipliers, and an
     end-of-shift scoreboard that counts up with awards and grades while the squad dances (or slumps on a loss).
+11. **Shift extension.** When the 20-minute clock runs out, the squad votes to extend the shift (chaos carries over)
+    or clock off to the scoreboard; the host settles ties and unanswered votes.
+
+Progress is tracked in [TODO.md](TODO.md).
 
 ## Steam invites: plan (not implemented yet)
 Goal: friends join from the Steam friends list or an invite, and nobody types an IP.
