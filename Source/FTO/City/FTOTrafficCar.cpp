@@ -122,6 +122,7 @@ void AFTOTrafficCar::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AFTOTrafficCar, LookSeed);
 	DOREPLIFETIME(AFTOTrafficCar, CarState);
 	DOREPLIFETIME(AFTOTrafficCar, Violation);
+	DOREPLIFETIME(AFTOTrafficCar, bDriverOut);
 }
 
 void AFTOTrafficCar::BeginPlay()
@@ -202,6 +203,10 @@ void AFTOTrafficCar::SeatOccupants(FRandomStream& LookRng, int32 Style)
 			Occupant->SetMaterial(Slot, Shirt);
 		}
 	}
+	if (bDriverOut && Occupants.Num() > 0)
+	{
+		Occupants[0]->SetVisibility(false); // out on the road, giving themselves up
+	}
 }
 
 EFTOAnimAction AFTOTrafficCar::GetAnimActionFor(const USkeletalMeshComponent* Mesh) const
@@ -216,6 +221,10 @@ EFTOAnimAction AFTOTrafficCar::GetAnimActionFor(const USkeletalMeshComponent* Me
 void AFTOTrafficCar::OnRep_CarState()
 {
 	RefreshIndicator();
+	if (bDriverOut && Occupants.Num() > 0)
+	{
+		Occupants[0]->SetVisibility(false);
+	}
 }
 
 void AFTOTrafficCar::RefreshIndicator()
@@ -390,10 +399,10 @@ void AFTOTrafficCar::Tick(float DeltaSeconds)
 		}
 	}
 
-	// Server: chases end when the incident does.
+	// Server: chases end when the incident does (normally with the driver climbing out to give up).
 	if (HasAuthority() && CarState == EFTOCarState::Fleeing && ChaseIncident)
 	{
-		if (ChaseIncident->GetState() == EFTOIncidentState::Resolved)
+		if (ChaseIncident->GetState() == EFTOIncidentState::Resolved || ChaseIncident->IsSubdued())
 		{
 			Bust();
 		}
@@ -529,27 +538,8 @@ void AFTOTrafficCar::FinishTicket()
 
 	if (Rng.FRand() < WantedChance)
 	{
-		// Plot twist: the driver is wanted. Floor it! The chase incident rides along with us.
-		CarState = EFTOCarState::Fleeing;
-		FleeUntil = GetWorld()->GetTimeSeconds() + 120.f;
-		Violation = EFTOCarViolation::None;
-		RefreshIndicator();
-
-		if (AFTOGameMode* GM = GetWorld()->GetAuthGameMode<AFTOGameMode>())
-		{
-			ChaseIncident = GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("CarChase"), GetActorLocation(), true);
-			if (ChaseIncident)
-			{
-				ChaseIncident->FollowActor(this);
-			}
-		}
-		if (GS)
-		{
-			GS->AddChaos(3.f);
-		}
-
-		// Rejoin the grid from the nearest intersection in our direction of travel.
-		DriveToNextIntersection();
+		// Plot twist: the driver is wanted.
+		MakeGetaway();
 		return;
 	}
 
@@ -568,11 +558,56 @@ void AFTOTrafficCar::FinishTicket()
 	MoveTo(PendingTarget, CruiseSpeed);
 }
 
+void AFTOTrafficCar::MakeGetaway()
+{
+	check(HasAuthority());
+	// Floor it! The chase incident rides along with us.
+	CarState = EFTOCarState::Fleeing;
+	FleeUntil = GetWorld()->GetTimeSeconds() + 120.f;
+	Violation = EFTOCarViolation::None;
+	bWaitingForClearRoad = false;
+	RefreshIndicator();
+
+	if (AFTOGameMode* GM = GetWorld()->GetAuthGameMode<AFTOGameMode>())
+	{
+		ChaseIncident = GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("CarChase"), GetActorLocation(), true);
+		if (ChaseIncident)
+		{
+			ChaseIncident->FollowActor(this);
+		}
+	}
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->AddChaos(3.f);
+	}
+
+	// Rejoin the grid from the nearest intersection in our direction of travel.
+	DriveToNextIntersection();
+}
+
+void AFTOTrafficCar::DriverSurrenders()
+{
+	check(HasAuthority());
+	bDriverOut = true;
+	Bust();
+}
+
+FVector AFTOTrafficCar::GetDriverDoorLocation() const
+{
+	// Out from the driver's seat, clear of the door, down on the road.
+	const FVector Seat = Occupants.Num() > 0 ? Occupants[0]->GetComponentLocation() : GetActorLocation();
+	const FVector Right = GetActorRightVector();
+	const float Side = FVector::DotProduct(Seat - GetActorLocation(), Right) >= 0.f ? 1.f : -1.f;
+	FVector Door = Seat + Right * Side * 150.f;
+	Door.Z = GetActorLocation().Z - RideHeight;
+	return Door;
+}
+
 void AFTOTrafficCar::Bust()
 {
 	CarState = EFTOCarState::Busted;
 	ChaseIncident = nullptr;
 	Hold();
 	RefreshIndicator();
-	SetLifeSpan(10.f); // towed away
+	SetLifeSpan(20.f); // towed away
 }

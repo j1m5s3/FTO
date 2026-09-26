@@ -272,6 +272,33 @@ def bonk():
     return normalize(mix(thump, gain(boing, 0.5)), 0.6)
 
 
+def cuffs():
+    # Handcuffs going on: two quick ratchets, then a solid clunk.
+    def tick(f):
+        return envelope(mix(tone(lambda t: f, 0.012, square), gain(noise(0.012), 0.6)), 0.0005, 0.006, decay=0.004)
+
+    def ratchet(base):
+        return concat(*[concat(tick(base + 120.0 * k), silence(0.018)) for k in range(6)])
+
+    clunk = envelope(mix(tone(lambda t: 700.0, 0.06, square), gain(noise(0.06), 0.5)), 0.0005, 0.03, decay=0.015)
+    return normalize(lowpass(concat(ratchet(2600.0), silence(0.12), ratchet(2800.0), silence(0.05), gain(clunk, 1.3)), 9000), 0.55)
+
+
+def scuffle():
+    # A cartoon dust-up: a flurry of thumps and slaps, with a "hup!" in the middle.
+    def hit():
+        f = rng.uniform(80.0, 160.0)
+        body = mix(tone(lambda t: f * (1.0 - 4.0 * t), 0.09, tri), gain(lowpass(noise(0.09), rng.uniform(900.0, 2500.0)), 0.8))
+        return gain(envelope(body, 0.001, 0.04, decay=0.03), rng.uniform(0.5, 1.0))
+
+    parts = []
+    for _ in range(9):
+        parts.append(hit())
+        parts.append(silence(rng.uniform(0.03, 0.1)))
+    grunt = envelope(lowpass(tone(lambda t: 140.0 - 60.0 * t, 0.16, saw), 900.0), 0.01, 0.06)
+    return normalize(concat(*parts[:8], gain(grunt, 0.6), *parts[8:]), 0.6)
+
+
 SOUNDS = {
     "SW_SirenLoop": (siren_loop, True),
     "SW_Whistle": (whistle, False),
@@ -293,6 +320,8 @@ SOUNDS = {
     "SW_Reload": (reload, False),
     "SW_Ricochet": (ricochet, False),
     "SW_DryFire": (dry_fire, False),
+    "SW_Cuffs": (cuffs, False),
+    "SW_Scuffle": (scuffle, False),
 }
 
 

@@ -48,6 +48,8 @@ protected:
 	void DrawEscortPanel();
 	/** Crosshair, hit marker, the three weapon slots and their ammo, and the "you're down" banner. */
 	void DrawWeaponPanel();
+	/** Arrests in progress: the struggle meter (mash!), the cuffing bar, and a suspect on the run. */
+	void DrawArrestPanel(const AFTOGameState* GS);
 
 	/** Local stingers: radio chatter, chimes, alarms, shift fanfares. */
 	void UpdateAudioCues(const AFTOGameState* GS);

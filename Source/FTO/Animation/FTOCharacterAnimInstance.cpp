@@ -39,6 +39,27 @@ UAnimSequence* FFTOCharacterAnimProxy::ClipFor(EFTOAnimAction InAction) const
 	return Found ? *Found : nullptr;
 }
 
+UAnimSequence* FFTOCharacterAnimProxy::ClipFor(EFTOAimPose InAim) const
+{
+	switch (InAim)
+	{
+	case EFTOAimPose::Pistol: return AimPistol;
+	case EFTOAimPose::Rifle:  return AimRifle;
+	case EFTOAimPose::Cuffed: return HandsBehind;
+	default:                  return nullptr;
+	}
+}
+
+void FFTOCharacterAnimProxy::SnapToAction(EFTOAnimAction InAction)
+{
+	Action = InAction;
+	ShownAction = InAction;
+	ActionTime = 0.f;
+	ActionWeight = InAction != EFTOAnimAction::None ? 1.f : 0.f;
+	FadingAction = EFTOAnimAction::None;
+	CrossAlpha = 1.f;
+}
+
 void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 {
 	FAnimInstanceProxy::Update(DeltaSeconds);
@@ -59,11 +80,16 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	AirWeight = FMath::FInterpTo(AirWeight, bInAir ? 1.f : 0.f, DeltaSeconds, 12.f);
 	AirTime = bInAir ? Wrap(AirTime + DeltaSeconds, Jump) : 0.f;
 
-	// Fade actions in and out; switching action restarts it once the old one has faded.
-	if (Action != EFTOAnimAction::None && (ShownAction == Action || ActionWeight < 0.05f))
+	// Fade actions in and out. Going from one action straight to another crossfades between the two (kneeling to
+	// kneeling in cuffs mustn't stand up in between).
+	if (Action != EFTOAnimAction::None)
 	{
 		if (ShownAction != Action)
 		{
+			const bool bCrossfade = ShownAction != EFTOAnimAction::None && ActionWeight > 0.05f;
+			FadingAction = bCrossfade ? ShownAction : EFTOAnimAction::None;
+			FadingTime = ActionTime;
+			CrossAlpha = bCrossfade ? 0.f : 1.f;
 			ShownAction = Action;
 			ActionTime = 0.f;
 		}
@@ -74,8 +100,14 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 		ActionWeight = FMath::FInterpTo(ActionWeight, 0.f, DeltaSeconds, 8.f);
 	}
 	ActionTime = Wrap(ActionTime + DeltaSeconds, ClipFor(ShownAction));
+	CrossAlpha = FMath::Min(1.f, CrossAlpha + DeltaSeconds * 4.f);
+	FadingTime = Wrap(FadingTime + DeltaSeconds, ClipFor(FadingAction));
+	if (CrossAlpha >= 1.f)
+	{
+		FadingAction = EFTOAnimAction::None;
+	}
 
-	// Weapon pose over the top: same fade-and-switch rule.
+	// Upper-body pose over the top: fade out the old one before switching.
 	if (Aim != EFTOAimPose::None && (ShownAim == Aim || AimWeight < 0.05f))
 	{
 		ShownAim = Aim;
@@ -85,7 +117,7 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	{
 		AimWeight = FMath::FInterpTo(AimWeight, 0.f, DeltaSeconds, 12.f);
 	}
-	AimTime = Wrap(AimTime + DeltaSeconds, ShownAim == EFTOAimPose::Rifle ? AimRifle : AimPistol);
+	AimTime = Wrap(AimTime + DeltaSeconds, ClipFor(ShownAim));
 	SmoothedPitch = FMath::FInterpTo(SmoothedPitch, AimPitch, DeltaSeconds, 15.f);
 
 	FromWeight = FMath::Max(0.f, FromWeight - DeltaSeconds * FromFadeRate);
@@ -124,7 +156,7 @@ void FFTOCharacterAnimProxy::ApplyAimLayer(FPoseContext& Output)
 	}
 
 	FPoseContext AimPose(this);
-	Sample(ShownAim == EFTOAimPose::Rifle ? AimRifle : AimPistol, AimTime, AimPose);
+	Sample(ClipFor(ShownAim), AimTime, AimPose);
 
 	const FBoneContainer& Bones = Output.Pose.GetBoneContainer();
 	auto ToCompact = [&Bones](FName Name) -> FCompactPoseBoneIndex
@@ -187,14 +219,25 @@ bool FFTOCharacterAnimProxy::Evaluate(FPoseContext& Output)
 		Blend(Output, Air, AirWeight);
 	}
 
-	// 3. Full-body action.
+	// 3. Full-body action (mid-crossfade, a mix of the old one and the new).
 	if (ActionWeight > 0.01f && ShownAction != EFTOAnimAction::None)
 	{
 		if (UAnimSequence* Clip = ClipFor(ShownAction))
 		{
 			FPoseContext ActionPose(this);
 			Sample(Clip, ActionTime, ActionPose);
-			Blend(Output, ActionPose, ActionWeight);
+			UAnimSequence* Fading = FadingAction != EFTOAnimAction::None ? ClipFor(FadingAction) : nullptr;
+			if (Fading && CrossAlpha < 1.f)
+			{
+				FPoseContext FadingPose(this);
+				Sample(Fading, FadingTime, FadingPose);
+				Blend(FadingPose, ActionPose, CrossAlpha * CrossAlpha * (3.f - 2.f * CrossAlpha));
+				Blend(Output, FadingPose, ActionWeight);
+			}
+			else
+			{
+				Blend(Output, ActionPose, ActionWeight);
+			}
 		}
 	}
 
@@ -233,6 +276,7 @@ UFTOCharacterAnimInstance::UFTOCharacterAnimInstance()
 	JumpClip = FindClip(TEXT("Jump"));
 	AimPistolClip = FindClip(TEXT("AimPistol"));
 	AimRifleClip = FindClip(TEXT("AimRifle"));
+	HandsBehindClip = FindClip(TEXT("HandsBehind"));
 
 	// Every action plays the clip named after it.
 	const UEnum* Actions = StaticEnum<EFTOAnimAction>();
@@ -270,6 +314,7 @@ void UFTOCharacterAnimInstance::NativeInitializeAnimation()
 	Proxy.Jump = JumpClip;
 	Proxy.AimPistol = AimPistolClip;
 	Proxy.AimRifle = AimRifleClip;
+	Proxy.HandsBehind = HandsBehindClip;
 	Proxy.ActionClips.Reset();
 	for (const TPair<EFTOAnimAction, TObjectPtr<UAnimSequence>>& Pair : ActionClips)
 	{
@@ -283,6 +328,11 @@ void UFTOCharacterAnimInstance::BlendFromPose(const TArray<FTransform>& LocalPos
 	Proxy.FromPose = LocalPose;
 	Proxy.FromWeight = 1.f;
 	Proxy.FromFadeRate = 1.f / FMath::Max(0.05f, Duration);
+}
+
+void UFTOCharacterAnimInstance::SnapToAction(EFTOAnimAction Action)
+{
+	GetProxyOnGameThread<FFTOCharacterAnimProxy>().SnapToAction(Action);
 }
 
 void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)

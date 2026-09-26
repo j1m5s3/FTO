@@ -51,9 +51,13 @@ public:
 	AActor* GetRideVehicle() const { return RideVehicle; }
 	EFTOSeat GetRideSeat() const { return RideSeat; }
 
-	// IFTOAnimatedActor: trot along, hands up whenever we stop (it's a fair cop), sulk in the back seat and the cell.
+	// IFTOAnimatedActor: up off our knees, then trot along with hands cuffed behind; sulk in the back seat and the cell.
 	virtual EFTOAnimAction GetAnimAction() const override;
+	virtual EFTOAimPose GetAimPose() const override;
 	virtual float GetAnimSpeed() const override { return AnimSpeed; }
+
+	/** From kneeling in cuffs (where the perp was) to on our feet and following. */
+	UPROPERTY(EditDefaultsOnly, Category="Arrest") float GetUpSeconds = 0.8f;
 
 	/** Within this distance of the holding cells (inside the precinct) a suspect gets booked. */
 	UPROPERTY(EditDefaultsOnly, Category="Arrest") float CellRadius = 450.f;
@@ -65,6 +69,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Arrest") float CellTime = 120.f;
 
 protected:
+	virtual void BeginPlay() override;
+
+	/** Still getting up off our knees (every machine, by its own clock). */
+	bool IsGettingUp() const;
 	void ServerTick(float DeltaSeconds);
 	/** Server: step along the escort's trail, keeping FollowDistance behind them. */
 	void FollowTrail(float DeltaSeconds);

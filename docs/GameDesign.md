@@ -110,7 +110,15 @@ Done:
   stand-offs, the heist) draw on officers who come close; floor one and the call is handled on the spot. Hitting a
   citizen costs chaos, and an officer hit by gunfire stays down until a partner helps them up.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (arrests v2, destruction, radio, scoring, Steam invites).
+- Phase 2: arrests v2. Every arrest is a two-person animation: the suspect drops to their knees, hands on head, the
+  officer steps in behind them and cuffs them, and the cuffed suspect gets up and walks to the cells with their hands
+  behind their back. Talk a crook down (stand at the scene) and they give up; try to arrest them sooner and they
+  might come quietly, fight back (a struggle: mash E to wrestle them down, partners can pile in, and lose and you're
+  shoved over) or bolt on foot (sprint after them and tackle them, or whistle to stop them for a moment). Floored
+  suspects (shot, tased, tackled or run over) kneel for the cuffs; car chases end with the driver climbing out and
+  giving up beside the car. A suspect who outruns everyone, or is left kneeling alone, gets away.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (destruction, radio, scoring, Steam invites).
 
 Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame

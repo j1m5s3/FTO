@@ -12,6 +12,7 @@
 #include "Vehicles/FTOCruiser.h"
 #include "City/FTOCityGenerator.h"
 #include "Crime/FTOArrestee.h"
+#include "Crime/FTOPerp.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -94,6 +95,7 @@ void AFTOHUD::DrawHUD()
 		DrawCruiserPanel();
 		DrawEscortPanel();
 		DrawWeaponPanel();
+		DrawArrestPanel(GS);
 		break;
 
 	default:
@@ -293,8 +295,9 @@ void AFTOHUD::DrawIncidentMarkers(const AFTOGameState* GS)
 		FVector2D Screen;
 		const bool bOnScreen = ProjectToScreenEdge(Incident->GetActorLocation() + FVector(0.f, 0.f, 300.f), 40.f * S, Screen);
 
-		// Critical incidents pulse.
-		const float Pulse = Info.Tier == EFTOCrimeTier::Critical ? 1.f + 0.25f * FMath::Sin(Time * 8.f) : 1.f;
+		// Critical incidents (and suspects on the run) pulse.
+		const bool bRunning = Incident->IsFootChase() && !Incident->IsSubdued();
+		const float Pulse = Info.Tier == EFTOCrimeTier::Critical || bRunning ? 1.f + 0.25f * FMath::Sin(Time * 8.f) : 1.f;
 		const float Size = (bOnScreen ? 14.f : 11.f) * S * Pulse;
 		DrawDiamond(Screen, Size + 3.f * S, FLinearColor(0.f, 0.f, 0.f, 0.7f));
 		DrawDiamond(Screen, Size, FTOCrime::TierColor(Info.Tier));
@@ -302,7 +305,8 @@ void AFTOHUD::DrawIncidentMarkers(const AFTOGameState* GS)
 		if (Me)
 		{
 			const int32 Meters = FMath::RoundToInt(FVector::Dist2D(Me->GetActorLocation(), Incident->GetActorLocation()) / 100.f);
-			const FString Label = bOnScreen ? FString::Printf(TEXT("%s  %dm"), *Info.Title.ToString(), Meters) : FString::Printf(TEXT("%dm"), Meters);
+			const FString Title = bRunning ? Info.Title.ToString() + TEXT(" (on the run)") : Info.Title.ToString();
+			const FString Label = bOnScreen ? FString::Printf(TEXT("%s  %dm"), *Title, Meters) : FString::Printf(TEXT("%dm"), Meters);
 			DrawCenteredText(Label, Screen.X, Screen.Y + Size + 4.f * S, FLinearColor::White, Font, S);
 		}
 	}
@@ -417,9 +421,10 @@ void AFTOHUD::DrawWeaponPanel()
 void AFTOHUD::DrawOnSceneProgress(const AFTOGameState* GS)
 {
 	const APawn* Me = GetOwningPawn();
-	if (!Me)
+	const AFTOCharacter* MeOnFoot = Cast<AFTOCharacter>(Me);
+	if (!Me || (MeOnFoot && MeOnFoot->IsInSyncedAction()))
 	{
-		return;
+		return; // busy wrestling or cuffing: the arrest panel has the floor
 	}
 
 	const AFTOIncident* Nearest = nullptr;
@@ -457,11 +462,108 @@ void AFTOHUD::DrawOnSceneProgress(const AFTOGameState* GS)
 	DrawRect(FLinearColor(0.1f, 0.1f, 0.1f, 0.9f), X, Y, W, H);
 	DrawRect(FLinearColor(0.2f, 0.7f, 1.f), X, Y, W * Nearest->GetProgress(), H);
 
+	// Calls are handled by being there; crimes end with the cuffs (talk them down, or chance an arrest right away).
 	const bool bUnderstaffed = Nearest->GetOfficersOnScene() < Info.OfficersRequired;
-	const FString Status = bUnderstaffed
-		? FString::Printf(TEXT("Need backup! %d/%d officers on scene"), Nearest->GetOfficersOnScene(), Info.OfficersRequired)
-		: FString::Printf(TEXT("Handling it... %d/%d officers"), Nearest->GetOfficersOnScene(), Info.OfficersRequired);
-	DrawCenteredText(Status, X + W * 0.5f, Y + H + 8.f * S, bUnderstaffed ? FLinearColor(1.f, 0.6f, 0.2f) : FLinearColor::White, GEngine->GetSmallFont(), S * 1.2f);
+	FString Status;
+	FLinearColor StatusColor = FLinearColor::White;
+	const AFTOPerp* Perp = Nearest->GetPerp();
+	if (Perp && Perp->GetArrestState() == EFTOPerpArrest::Struggling)
+	{
+		Status = TEXT("They're fighting your partner: pile in and help! [E]");
+		StatusColor = FLinearColor(1.f, 0.6f, 0.2f);
+	}
+	else if (Perp && Perp->GetArrestState() == EFTOPerpArrest::Cuffing)
+	{
+		Status = TEXT("Cuffing...");
+		StatusColor = FLinearColor(0.6f, 0.85f, 1.f);
+	}
+	else if (Nearest->IsSubdued())
+	{
+		Status = TEXT("They've given up: cuff them! [E]");
+		StatusColor = FLinearColor(0.6f, 0.85f, 1.f);
+	}
+	else if (Nearest->IsFootChase())
+	{
+		Status = TEXT("They're getting away! Sprint (Shift) and tackle (F)");
+		StatusColor = FLinearColor(1.f, 0.6f, 0.2f);
+	}
+	else if (bUnderstaffed)
+	{
+		Status = FString::Printf(TEXT("Need backup! %d/%d officers on scene%s"), Nearest->GetOfficersOnScene(), Info.OfficersRequired,
+			Info.bArrest ? TEXT("  |  [E] arrest them now") : TEXT(""));
+		StatusColor = FLinearColor(1.f, 0.6f, 0.2f);
+	}
+	else
+	{
+		Status = Info.bArrest
+			? FString::Printf(TEXT("Talking them down... %d/%d officers  |  [E] arrest them now"), Nearest->GetOfficersOnScene(), Info.OfficersRequired)
+			: FString::Printf(TEXT("Handling it... %d/%d officers"), Nearest->GetOfficersOnScene(), Info.OfficersRequired);
+	}
+	DrawCenteredText(Status, X + W * 0.5f, Y + H + 8.f * S, StatusColor, GEngine->GetSmallFont(), S * 1.2f);
+}
+
+void AFTOHUD::DrawArrestPanel(const AFTOGameState* GS)
+{
+	const APawn* MyPawn = GetOwningPawn();
+	if (!MyPawn)
+	{
+		return;
+	}
+	const float S = UIScale();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float Time = GetWorld()->GetTimeSeconds();
+	UFont* Medium = GEngine->GetMediumFont();
+
+	// In the middle of an arrest: wrestling (the meter, and keep mashing) or putting the cuffs on.
+	const AFTOCharacter* Me = Cast<AFTOCharacter>(MyPawn);
+	if (const AFTOPerp* Perp = Me ? Cast<AFTOPerp>(Me->GetSyncedPartner()) : nullptr)
+	{
+		const bool bStruggle = Me->GetSyncedAction() == EFTOAnimAction::Struggle;
+		const float W = 460.f * S;
+		const float H = 24.f * S;
+		const float X = CX - W * 0.5f;
+		const float Y = Canvas->ClipY - 150.f * S;
+		DrawPanel(X - 12.f * S, Y - 50.f * S, W + 24.f * S, H + 88.f * S, bStruggle ? FLinearColor(0.25f, 0.05f, 0.f, 0.7f) : FLinearColor(0.02f, 0.08f, 0.2f, 0.7f));
+		DrawCenteredText(bStruggle ? TEXT("THEY'RE FIGHTING BACK!") : TEXT("CUFFING..."), CX, Y - 44.f * S,
+			bStruggle ? FLinearColor(1.f, 0.6f, 0.25f) : FLinearColor(0.6f, 0.85f, 1.f), Medium, S * 1.3f);
+		DrawRect(FLinearColor(0.1f, 0.1f, 0.1f, 0.9f), X, Y, W, H);
+		if (bStruggle)
+		{
+			const float Meter = Perp->GetStruggleMeter();
+			DrawRect(FMath::Lerp(FLinearColor(1.f, 0.25f, 0.15f), FLinearColor(0.3f, 1.f, 0.4f), Meter), X, Y, W * Meter, H);
+			const bool bFlash = FMath::Fmod(Time * 6.f, 1.f) < 0.5f;
+			DrawCenteredText(TEXT("MASH [E] TO WRESTLE THEM DOWN!"), CX, Y + H + 8.f * S, bFlash ? FLinearColor::White : FLinearColor(1.f, 0.9f, 0.4f), Medium, S * 1.1f);
+		}
+		else
+		{
+			DrawRect(FLinearColor(0.3f, 0.6f, 1.f), X, Y, W * Perp->GetCuffProgress(), H);
+			DrawCenteredText(TEXT("You have the right to remain silly."), CX, Y + H + 8.f * S, FLinearColor(0.8f, 0.8f, 0.8f), GEngine->GetSmallFont(), S * 1.2f);
+		}
+		return;
+	}
+
+	// A suspect on the run nearby (on foot, or at the wheel: a bumper stops them too).
+	for (const AFTOIncident* Incident : GS->GetIncidents())
+	{
+		const AFTOPerp* Runner = Incident && Incident->IsActive() ? Incident->GetPerp() : nullptr;
+		if (!Runner || !Runner->IsFleeing())
+		{
+			continue;
+		}
+		const float Distance = FVector::Dist2D(MyPawn->GetActorLocation(), Runner->GetActorLocation());
+		if (Distance > 6000.f)
+		{
+			continue;
+		}
+		const FString Line = FString::Printf(TEXT("SUSPECT ON THE RUN!  %dm  |  Sprint (Shift) and tackle (F)"), FMath::RoundToInt(Distance / 100.f));
+		const float Y = 150.f * S;
+		float TW = 0.f, TH = 0.f;
+		GetTextSize(Line, TW, TH, Medium, S * 1.1f);
+		const bool bFlash = FMath::Fmod(Time * 3.f, 1.f) < 0.5f;
+		DrawPanel(CX - TW * 0.5f - 14.f * S, Y - 6.f * S, TW + 28.f * S, TH + 12.f * S, bFlash ? FLinearColor(0.45f, 0.08f, 0.f, 0.8f) : FLinearColor(0.25f, 0.04f, 0.f, 0.8f));
+		DrawCenteredText(Line, CX, Y, FLinearColor(1.f, 0.8f, 0.5f), Medium, S * 1.1f);
+		break;
+	}
 }
 
 void AFTOHUD::DrawBriefing(const AFTOGameState* GS)
@@ -474,7 +576,7 @@ void AFTOHUD::DrawBriefing(const AFTOGameState* GS)
 	DrawCenteredText(TEXT("ROLL CALL"), CX, CY - 20.f * S, FLinearColor(0.6f, 0.8f, 1.f), GEngine->GetLargeFont(), S * 1.5f);
 	DrawCenteredText(TEXT("Keep the city's chaos under 100% until the end of the shift."), CX, CY + 30.f * S, FLinearColor::White, GEngine->GetMediumFont(), S);
 	DrawCenteredText(FString::Printf(TEXT("On duty in %s"), *FormatClock(GS->GetBriefingTimeRemaining())), CX, CY + 70.f * S, FLinearColor(1.f, 0.85f, 0.2f), GEngine->GetLargeFont(), S);
-	DrawCenteredText(TEXT("WASD move  |  Shift sprint  |  Space jump  |  E interact / drive  |  stand at a scene to handle it"), CX, CY + 110.f * S, FLinearColor(0.7f, 0.7f, 0.7f), GEngine->GetSmallFont(), S * 1.1f);
+	DrawCenteredText(TEXT("WASD move  |  Shift sprint  |  Space jump  |  E interact, arrest, drive  |  F tackle  |  stand at a scene to handle it"), CX, CY + 110.f * S, FLinearColor(0.7f, 0.7f, 0.7f), GEngine->GetSmallFont(), S * 1.1f);
 }
 
 void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)

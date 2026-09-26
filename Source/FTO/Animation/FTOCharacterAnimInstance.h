@@ -13,7 +13,7 @@ class UAnimSequence;
  * them per bone, so characters animate without any Animation Blueprint asset.
  *
  * Layers, bottom to top: locomotion (idle/walk/run by speed) -> airborne -> full-body action
- * -> upper-body aim (weapons) with pitch bent through the spine and head.
+ * -> upper-body pose (a weapon up, or hands cuffed behind) with aim pitch bent through the spine and head.
  */
 struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 {
@@ -30,6 +30,7 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	UAnimSequence* Jump = nullptr;
 	UAnimSequence* AimPistol = nullptr;
 	UAnimSequence* AimRifle = nullptr;
+	UAnimSequence* HandsBehind = nullptr;
 	TMap<EFTOAnimAction, UAnimSequence*> ActionClips;
 
 	// Inputs, written on the game thread each frame
@@ -49,11 +50,15 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	float FromWeight = 0.f;
 	float FromFadeRate = 0.f;
 
+	/** Show Action fully from this frame on, with no fade in (someone who appears already mid-pose). */
+	void SnapToAction(EFTOAnimAction InAction);
+
 private:
 	void Sample(UAnimSequence* Sequence, float Time, FPoseContext& Out) const;
 	static void Blend(FPoseContext& InOut, const FPoseContext& Other, float Alpha);
 	void ApplyAimLayer(FPoseContext& Output);
 	UAnimSequence* ClipFor(EFTOAnimAction InAction) const;
+	UAnimSequence* ClipFor(EFTOAimPose InAim) const;
 
 	float SmoothedSpeed = 0.f;
 	float IdleTime = 0.f;
@@ -63,6 +68,11 @@ private:
 	float ActionTime = 0.f;
 	float ActionWeight = 0.f;
 	EFTOAnimAction ShownAction = EFTOAnimAction::None;
+	/** The action being crossfaded out of (straight into the next, without standing up in between). */
+	EFTOAnimAction FadingAction = EFTOAnimAction::None;
+	float FadingTime = 0.f;
+	/** 0 = all FadingAction, 1 = all ShownAction. */
+	float CrossAlpha = 1.f;
 	float AimTime = 0.f;
 	float AimWeight = 0.f;
 	float SmoothedPitch = 0.f;
@@ -87,6 +97,7 @@ public:
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> JumpClip;
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> AimPistolClip;
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> AimRifleClip;
+	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> HandsBehindClip;
 	/** One clip per EFTOAnimAction (A_Officer_<ActionName>). */
 	UPROPERTY(EditAnywhere, Category="Clips") TMap<EFTOAnimAction, TObjectPtr<UAnimSequence>> ActionClips;
 
@@ -95,6 +106,9 @@ public:
 	 * Duration seconds, so a character getting up from a ragdoll doesn't snap upright.
 	 */
 	void BlendFromPose(const TArray<FTransform>& LocalPose, float Duration);
+
+	/** Start out fully in Action (no fade in), e.g. a suspect who appears already kneeling in cuffs. */
+	void SnapToAction(EFTOAnimAction Action);
 
 protected:
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
