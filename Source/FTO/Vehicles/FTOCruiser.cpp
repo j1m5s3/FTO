@@ -2,6 +2,8 @@
 #include "Art/FTOArt.h"
 #include "City/FTOTrafficCar.h"
 #include "Core/FTOCharacter.h"
+#include "Core/FTOGameState.h"
+#include "Components/AudioComponent.h"
 #include "Core/FTOInputConfig.h"
 #include "Core/FTOPlayerController.h"
 #include "Camera/CameraComponent.h"
@@ -91,6 +93,14 @@ AFTOCruiser::AFTOCruiser()
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+
+	// Sounds are assigned in BeginPlay from the shared sound set.
+	EngineAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("EngineAudio"));
+	EngineAudio->SetupAttachment(Collision);
+	EngineAudio->bAutoActivate = false;
+	SirenAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("SirenAudio"));
+	SirenAudio->SetupAttachment(Collision);
+	SirenAudio->bAutoActivate = false;
 }
 
 void AFTOCruiser::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -108,6 +118,14 @@ void AFTOCruiser::BeginPlay()
 	Super::BeginPlay();
 
 	PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, StripeColor);
+	const FFTOSoundSet& Sounds = AFTOGameState::Sounds();
+	EngineAudio->SetSound(Sounds.EngineLoop);
+	EngineAudio->AttenuationSettings = Sounds.World;
+	EngineAudio->SetVolumeMultiplier(0.35f);
+	SirenAudio->SetSound(Sounds.SirenLoop);
+	SirenAudio->AttenuationSettings = Sounds.World;
+	SirenAudio->SetVolumeMultiplier(0.8f);
+
 	RedMaterial = FTOArt::ApplyColor(LightRed, BaseMaterial, FLinearColor(1.f, 0.05f, 0.05f));
 	BlueMaterial = FTOArt::ApplyColor(LightBlue, BaseMaterial, FLinearColor(0.1f, 0.25f, 1.f));
 
@@ -247,6 +265,7 @@ void AFTOCruiser::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 	EIC->BindAction(Input->Jump, ETriggerEvent::Completed, this, &AFTOCruiser::OnHandbrakeReleased);
 	EIC->BindAction(Input->Interact, ETriggerEvent::Started, this, &AFTOCruiser::OnExit);
 	EIC->BindAction(Input->Whistle, ETriggerEvent::Started, this, &AFTOCruiser::OnSiren);
+	EIC->BindAction(Input->Horn, ETriggerEvent::Started, this, &AFTOCruiser::OnHorn);
 }
 
 void AFTOCruiser::OnMove(const FInputActionValue& Value)
@@ -287,6 +306,25 @@ void AFTOCruiser::OnSiren()
 void AFTOCruiser::ServerSetSiren_Implementation(bool bOn)
 {
 	bSiren = bOn;
+}
+
+void AFTOCruiser::OnHorn()
+{
+	ServerHorn();
+}
+
+void AFTOCruiser::ServerHorn_Implementation()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextHornTime)
+	{
+		return;
+	}
+	NextHornTime = Now + 0.4f;
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Horn, GetActorLocation(), 0.9f);
+	}
 }
 
 // ------------------------------------------------------------------------------------------
@@ -446,6 +484,21 @@ void AFTOCruiser::UpdateCosmetics(float DeltaSeconds)
 	for (int32 i = 0; i < Wheels.Num(); ++i)
 	{
 		Wheels[i]->SetRelativeRotation(FRotator(-WheelSpin, i < 2 ? SteerVisual : 0.f, 0.f));
+	}
+
+	// Engine note rises with speed; the siren loop follows the replicated switch.
+	const bool bEngineRunning = Driver != nullptr || FMath::Abs(ForwardSpeed) > 30.f;
+	if (EngineAudio && EngineAudio->IsPlaying() != bEngineRunning)
+	{
+		bEngineRunning ? EngineAudio->Play() : EngineAudio->Stop();
+	}
+	if (EngineAudio)
+	{
+		EngineAudio->SetPitchMultiplier(0.7f + 1.5f * FMath::Clamp(FMath::Abs(ForwardSpeed) / MaxSpeed, 0.f, 1.f));
+	}
+	if (SirenAudio && SirenAudio->IsPlaying() != bSiren)
+	{
+		bSiren ? SirenAudio->Play() : SirenAudio->Stop();
 	}
 
 	// Wee-woo: alternate the lenses while the siren is on.

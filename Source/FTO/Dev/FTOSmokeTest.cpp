@@ -2,17 +2,17 @@
 #include "City/FTOCityGenerator.h"
 #include "City/FTOTrafficCar.h"
 #include "Core/FTOCharacter.h"
-#include "Core/FTOPlayerController.h"
-#include "Vehicles/FTOCruiser.h"
 #include "Core/FTOGameMode.h"
 #include "Core/FTOGameState.h"
+#include "Core/FTOPlayerController.h"
 #include "Crime/FTOCrimeDirector.h"
+#include "Vehicles/FTOCruiser.h"
 #include "Camera/CameraActor.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
+#include "GameFramework/HUD.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
-#include "GameFramework/HUD.h"
 #include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
@@ -21,12 +21,6 @@
 #if WITH_EDITOR
 #include "ShaderCompiler.h"
 #endif
-
-namespace
-{
-	// Seconds to wait after each step before running the next one.
-	const float StepDelays[] = { 1.f, 1.5f, 0.5f, 0.8f, 0.5f, 0.5f, 4.f, 1.f, 3.f, 1.f, 3.f, 1.f, 3.f, 2.f, 1.5f, 1.f, 2.f, 1.f, 0.05f, 1.f, 2.5f, 1.5f, 1.2f, 1.f, 0.f };
-}
 
 AFTOSmokeTest::AFTOSmokeTest()
 {
@@ -39,6 +33,41 @@ bool AFTOSmokeTest::IsRequested()
 	return FParse::Param(FCommandLine::Get(), TEXT("FTOSmokeTest"));
 }
 
+void AFTOSmokeTest::BeginPlay()
+{
+	Super::BeginPlay();
+	BuildSteps();
+}
+
+// ------------------------------------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------------------------------------
+
+APlayerController* AFTOSmokeTest::GetPC() const
+{
+	return GetWorld()->GetFirstPlayerController();
+}
+
+APawn* AFTOSmokeTest::GetPawn() const
+{
+	const APlayerController* PC = GetPC();
+	return PC ? PC->GetPawn() : nullptr;
+}
+
+AFTOGameMode* AFTOSmokeTest::GetAuthGameMode() const
+{
+	return GetWorld()->GetAuthGameMode<AFTOGameMode>();
+}
+
+AFTOCityGenerator* AFTOSmokeTest::GetCity() const
+{
+	for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
+	{
+		return *It;
+	}
+	return nullptr;
+}
+
 bool AFTOSmokeTest::AreShadersReady() const
 {
 #if WITH_EDITOR
@@ -48,6 +77,270 @@ bool AFTOSmokeTest::AreShadersReady() const
 	}
 #endif
 	return true;
+}
+
+void AFTOSmokeTest::Shot(const TCHAR* Name, bool bShowUI)
+{
+	const FString Dir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), TEXT("SmokeTest"));
+	IFileManager::Get().MakeDirectory(*Dir, true);
+	FString Tag;
+	FParse::Value(FCommandLine::Get(), TEXT("FTOSmokeTag="), Tag);
+	const FString Path = FPaths::Combine(Dir, (Tag.IsEmpty() ? FString() : Tag + TEXT("_")) + FString(Name) + TEXT(".png"));
+	FScreenshotRequest::RequestScreenshot(Path, bShowUI, false);
+	UE_LOG(LogFTO, Display, TEXT("SMOKE: screenshot %s"), *Path);
+}
+
+void AFTOSmokeTest::ViewFrom(const FVector& Location, const FVector& LookAt)
+{
+	APlayerController* PC = GetPC();
+	if (!PC)
+	{
+		return;
+	}
+	if (!Camera)
+	{
+		Camera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
+	}
+	Camera->SetActorLocationAndRotation(Location, (LookAt - Location).Rotation());
+	PC->SetViewTargetWithBlend(Camera, 0.f);
+}
+
+void AFTOSmokeTest::SetHUDVisible(bool bVisible)
+{
+	if (APlayerController* PC = GetPC())
+	{
+		if (AHUD* HUD = PC->GetHUD())
+		{
+			HUD->bShowHUD = bVisible;
+		}
+	}
+}
+
+void AFTOSmokeTest::AddStep(const TCHAR* Name, float Delay, TFunction<void()> Action)
+{
+	Steps.Add({ Name, Delay, MoveTemp(Action) });
+}
+
+void AFTOSmokeTest::AddShot(const TCHAR* Name, float Delay, bool bShowUI)
+{
+	const FString ShotName = Name;
+	AddStep(Name, Delay, [this, ShotName, bShowUI]() { Shot(*ShotName, bShowUI); });
+}
+
+// ------------------------------------------------------------------------------------------
+// The tour
+// ------------------------------------------------------------------------------------------
+
+void AFTOSmokeTest::BuildSteps()
+{
+	// Menu, then the lobby.
+	AddStep(TEXT("open menu"), 0.8f, [this]()
+	{
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->SetMenuVisible(true); }
+	});
+	AddShot(TEXT("00_menu"), 0.3f);
+	AddStep(TEXT("close menu"), 0.5f, [this]()
+	{
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->SetMenuVisible(false); }
+	});
+	AddShot(TEXT("01_roll_call"), 1.f);
+
+	// Officer close-up, walking, and the whistle.
+	AddStep(TEXT("officer close-up"), 1.5f, [this]()
+	{
+		if (APawn* Officer = GetPawn())
+		{
+			SetHUDVisible(false);
+			const FVector Fwd = Officer->GetActorForwardVector();
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+			ViewFrom(Officer->GetActorLocation() + Fwd * 330.f - Right * 160.f + FVector(0.f, 0.f, 40.f), Officer->GetActorLocation() + FVector(0.f, 0.f, 10.f));
+		}
+	});
+	AddShot(TEXT("01b_officer"), 0.5f, false);
+	AddStep(TEXT("walk"), 0.8f, [this]()
+	{
+		if (APawn* Officer = GetPawn())
+		{
+			WalkDirection = Officer->GetActorForwardVector();
+			const FVector Right = FVector::CrossProduct(FVector::UpVector, WalkDirection);
+			const FVector Mid = Officer->GetActorLocation() + WalkDirection * 380.f;
+			ViewFrom(Mid + Right * 480.f + FVector(0.f, 0.f, 60.f), Mid + FVector(0.f, 0.f, 10.f));
+			bWalkOfficer = true;
+		}
+	});
+	AddShot(TEXT("01c_officer_walk"), 0.5f, false);
+	AddStep(TEXT("whistle"), 1.2f, [this]()
+	{
+		bWalkOfficer = false;
+		SetHUDVisible(true);
+		if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		if (AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn())) { Officer->BlowWhistle(); }
+	});
+	AddShot(TEXT("01d_whistle"), 0.5f);
+
+	// Start the shift and stage a few incidents in view (server/standalone only).
+	AddStep(TEXT("stage incidents"), 4.f, [this]()
+	{
+		AFTOGameMode* GM = GetAuthGameMode();
+		APawn* Officer = GetPawn();
+		if (!GM || !Officer)
+		{
+			return;
+		}
+		GM->FTOSkipBriefing();
+		const FVector Fwd = Officer->GetActorForwardVector();
+		const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+		IncidentSpot = Officer->GetActorLocation() + Fwd * 1400.f;
+		GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("BarFight"), IncidentSpot, true);
+		GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("CatInTree"), Officer->GetActorLocation() + Fwd * 900.f + Right * 900.f, true);
+		GM->GetCrimeDirector()->SpawnIncident(TEXT("BankHeist"), true);
+		GM->GetCrimeDirector()->SpawnIncident(TEXT("DomesticDispute"), true);
+		GM->GetCrimeDirector()->SpawnIncident(TEXT("Shoplifting"), true);
+		GM->FTOAddChaos(35.f);
+	});
+	AddShot(TEXT("02_on_duty"), 1.f);
+
+	// City views.
+	AddStep(TEXT("aerial"), 3.f, [this]()
+	{
+		if (AFTOCityGenerator* City = GetCity())
+		{
+			const FVector Extent = City->GetCityExtent();
+			const FVector Center = City->GetActorLocation();
+			ViewFrom(Center + FVector(-Extent.X * 1.1f, -Extent.Y * 0.6f, 14000.f), Center);
+		}
+	});
+	AddShot(TEXT("03_city_aerial"), 1.f);
+	AddStep(TEXT("street level"), 3.f, [this]()
+	{
+		if (AFTOCityGenerator* City = GetCity())
+		{
+			const int32 MidI = City->NumIntersectionsX() / 2;
+			const int32 MidJ = City->NumIntersectionsY() / 2;
+			ViewFrom(City->GetIntersection(MidI, 0) + FVector(0.f, -400.f, 350.f), City->GetIntersection(MidI, MidJ) + FVector(0.f, 0.f, 150.f));
+		}
+	});
+	AddShot(TEXT("04_street_level"), 1.f);
+	AddStep(TEXT("incident"), 3.f, [this]()
+	{
+		if (IncidentSpot.IsZero())
+		{
+			return;
+		}
+		// From the officer's side of the scene, raised so buildings don't get in the way.
+		const APawn* Officer = GetPawn();
+		const FVector Dir = Officer ? (IncidentSpot - Officer->GetActorLocation()).GetSafeNormal2D() : FVector::ForwardVector;
+		ViewFrom(IncidentSpot - Dir * 750.f + FVector(0.f, 0.f, 420.f), IncidentSpot + FVector(0.f, 0.f, 100.f));
+	});
+	AddShot(TEXT("05_incident"), 2.f);
+
+	// Win the shift: report card up, officers cheering.
+	AddStep(TEXT("end shift"), 1.5f, [this]()
+	{
+		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOEndShift(true); }
+		if (APawn* Officer = GetPawn())
+		{
+			const FVector Fwd = Officer->GetActorForwardVector();
+			ViewFrom(Officer->GetActorLocation() + Fwd * 420.f + FVector(0.f, 0.f, 80.f), Officer->GetActorLocation() + FVector(0.f, 0.f, 40.f));
+		}
+	});
+	AddShot(TEXT("06_shift_report"), 1.f);
+
+	// Eye level on a busy downtown sidewalk.
+	AddStep(TEXT("sidewalk"), 2.f, [this]()
+	{
+		SetHUDVisible(false);
+		AFTOCityGenerator* City = GetCity();
+		if (!City)
+		{
+			return;
+		}
+		for (const FFTOCityBlock& Block : City->GetBlocks())
+		{
+			if (Block.District == EFTODistrict::Downtown && !Block.bPrecinct && !Block.bBank)
+			{
+				ViewFrom(City->GetSidewalkCorner(Block.X, Block.Y, 0) + FVector(0.f, 0.f, 170.f), City->GetSidewalkCorner(Block.X, Block.Y, 1) + FVector(0.f, 0.f, 120.f));
+				break;
+			}
+		}
+	});
+	AddShot(TEXT("07_sidewalk"), 1.f);
+
+	// Side-on look at a passing car.
+	AddStep(TEXT("traffic"), 0.05f, [this]()
+	{
+		for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It; ++It)
+		{
+			const FVector CarLoc = It->GetActorLocation();
+			ViewFrom(CarLoc + It->GetActorRightVector() * 700.f + It->GetActorForwardVector() * 250.f + FVector(0.f, 0.f, 150.f), CarLoc);
+			break;
+		}
+	});
+	AddShot(TEXT("08_traffic"), 1.f, false);
+
+	// Drive: the host takes the nearest cruiser; a client asks the server for one and drives it itself.
+	AddStep(TEXT("get in"), 2.5f, [this]()
+	{
+		SetHUDVisible(true);
+		APlayerController* PC = GetPC();
+		AFTOGameMode* GM = GetAuthGameMode();
+		if (GM)
+		{
+			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>()) { GS->SetShiftPhase(EFTOShiftPhase::OnDuty); }
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOCruiser* Nearest = nullptr;
+			for (TActorIterator<AFTOCruiser> It(GetWorld()); It && Cop; ++It)
+			{
+				if (!Nearest || FVector::DistSquared(It->GetActorLocation(), Cop->GetActorLocation()) < FVector::DistSquared(Nearest->GetActorLocation(), Cop->GetActorLocation()))
+				{
+					Nearest = *It;
+				}
+			}
+			if (Nearest && Cop)
+			{
+				Nearest->Interact(Cop);
+				Nearest->SetSiren(true);
+				Nearest->SetAutopilot(true, 1.f, 0.35f);
+				TestCruiser = Nearest;
+			}
+		}
+		else if (AFTOPlayerController* FTOPC = Cast<AFTOPlayerController>(PC))
+		{
+			FTOPC->ServerEnterNearestCruiser();
+		}
+	});
+	AddStep(TEXT("client drives"), 1.5f, [this]()
+	{
+		if (!GetAuthGameMode())
+		{
+			if (AFTOCruiser* Mine = Cast<AFTOCruiser>(GetPawn()))
+			{
+				Mine->SetAutopilot(true, 1.f, 0.2f);
+				TestCruiser = Mine;
+			}
+		}
+		Shot(TEXT("09_driving"));
+	});
+	AddStep(TEXT("get out"), 1.2f, [this]()
+	{
+		if (TestCruiser)
+		{
+			TestCruiser->SetAutopilot(false);
+			TestCruiser->RequestExit();
+		}
+	});
+	AddShot(TEXT("10_got_out"), 1.f);
+
+	AddStep(TEXT("done"), 0.f, [this]()
+	{
+		if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		const float Elapsed = GetWorld()->GetRealTimeSeconds() - ReadyTime;
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: tour complete. Average %.1f fps over %.1f s."), FramesSinceReady / FMath::Max(0.01f, Elapsed), Elapsed);
+		if (FParse::Param(FCommandLine::Get(), TEXT("FTOSmokeTestQuit")))
+		{
+			FPlatformMisc::RequestExit(false, TEXT("FTOSmokeTest"));
+		}
+	});
 }
 
 void AFTOSmokeTest::Tick(float DeltaSeconds)
@@ -75,355 +368,30 @@ void AFTOSmokeTest::Tick(float DeltaSeconds)
 		}
 		ReadyTime = Now;
 		NextStepTime = Now + 2.f;
-		// Crisp stills.
-		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		if (APlayerController* PC = GetPC())
 		{
-			PC->ConsoleCommand(TEXT("r.MotionBlurQuality 0"));
+			PC->ConsoleCommand(TEXT("r.MotionBlurQuality 0")); // crisp stills
 		}
 		UE_LOG(LogFTO, Display, TEXT("SMOKE: world ready, starting tour."));
 	}
 
-	if (bWalkOfficer)
-	{
-		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
-		{
-			if (APawn* Officer = PC->GetPawn())
-			{
-				Officer->AddMovementInput(WalkDirection, 1.f);
-			}
-		}
-	}
-
 	++FramesSinceReady;
 
-	// Prologue: a shot of the menu before the tour proper.
-	if (MenuShotPhase < 3)
+	if (bWalkOfficer)
 	{
-		AFTOPlayerController* MenuPC = Cast<AFTOPlayerController>(GetWorld()->GetFirstPlayerController());
-		if (!MenuPC)
+		if (APawn* Officer = GetPawn())
 		{
-			MenuShotPhase = 3;
+			Officer->AddMovementInput(WalkDirection, 1.f);
 		}
-		else if (MenuShotPhase == 0)
-		{
-			MenuPC->SetMenuVisible(true);
-			MenuShotTime = Now + 0.8f;
-			MenuShotPhase = 1;
-		}
-		else if (MenuShotPhase == 1 && Now >= MenuShotTime && AreShadersReady())
-		{
-			Shot(TEXT("00_menu"));
-			MenuShotTime = Now + 0.3f;
-			MenuShotPhase = 2;
-		}
-		else if (MenuShotPhase == 2 && Now >= MenuShotTime)
-		{
-			MenuPC->SetMenuVisible(false);
-			NextStepTime = Now + 0.5f;
-			MenuShotPhase = 3;
-		}
-		return;
 	}
 
 	// One step per frame, and never while shaders are still compiling (the shot would be grey).
-	if (NextStep < int32(UE_ARRAY_COUNT(StepDelays)) && Now >= NextStepTime && AreShadersReady())
+	if (Steps.IsValidIndex(NextStep) && Now >= NextStepTime && AreShadersReady())
 	{
-		RunStep(NextStep);
-		NextStepTime = Now + StepDelays[NextStep];
+		const FStep& Step = Steps[NextStep];
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: %s"), *Step.Name);
+		Step.Action();
+		NextStepTime = Now + Step.Delay;
 		++NextStep;
-	}
-}
-
-void AFTOSmokeTest::Shot(const TCHAR* Name, bool bShowUI)
-{
-	const FString Dir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), TEXT("SmokeTest"));
-	IFileManager::Get().MakeDirectory(*Dir, true);
-	// -FTOSmokeTag=client keeps screenshots from several instances apart.
-	FString Tag;
-	FParse::Value(FCommandLine::Get(), TEXT("FTOSmokeTag="), Tag);
-	const FString Path = FPaths::Combine(Dir, (Tag.IsEmpty() ? FString() : Tag + TEXT("_")) + FString(Name) + TEXT(".png"));
-	FScreenshotRequest::RequestScreenshot(Path, bShowUI, false);
-	UE_LOG(LogFTO, Display, TEXT("SMOKE: screenshot %s"), *Path);
-}
-
-void AFTOSmokeTest::ViewFrom(const FVector& Location, const FVector& LookAt)
-{
-	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!PC)
-	{
-		return;
-	}
-	if (!Camera)
-	{
-		Camera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
-	}
-	Camera->SetActorLocationAndRotation(Location, (LookAt - Location).Rotation());
-	PC->SetViewTargetWithBlend(Camera, 0.f);
-}
-
-void AFTOSmokeTest::RunStep(int32 Step)
-{
-	UWorld* World = GetWorld();
-	APlayerController* PC = World->GetFirstPlayerController();
-	APawn* Officer = PC ? PC->GetPawn() : nullptr;
-	AFTOGameMode* GM = World->GetAuthGameMode<AFTOGameMode>();
-	AFTOCityGenerator* City = nullptr;
-	for (TActorIterator<AFTOCityGenerator> It(World); It; ++It)
-	{
-		City = *It;
-		break;
-	}
-
-	UE_LOG(LogFTO, Display, TEXT("SMOKE: step %d"), Step);
-
-	switch (Step)
-	{
-	case 0:
-		Shot(TEXT("01_roll_call"));
-		break;
-
-	case 1:
-		// Close-up of our officer from the front-left.
-		if (Officer)
-		{
-			if (PC && PC->GetHUD())
-			{
-				PC->GetHUD()->bShowHUD = false;
-			}
-			const FVector Fwd = Officer->GetActorForwardVector();
-			const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
-			ViewFrom(Officer->GetActorLocation() + Fwd * 330.f - Right * 160.f + FVector(0.f, 0.f, 40.f), Officer->GetActorLocation() + FVector(0.f, 0.f, 10.f));
-		}
-		break;
-
-	case 2:
-		Shot(TEXT("01b_officer"), false);
-		break;
-
-	case 3:
-		// Walk forward past a side-on camera to check locomotion.
-		if (Officer)
-		{
-			WalkDirection = Officer->GetActorForwardVector();
-			const FVector Right = FVector::CrossProduct(FVector::UpVector, WalkDirection);
-			const FVector Mid = Officer->GetActorLocation() + WalkDirection * 380.f;
-			ViewFrom(Mid + Right * 480.f + FVector(0.f, 0.f, 60.f), Mid + FVector(0.f, 0.f, 10.f));
-			bWalkOfficer = true;
-		}
-		break;
-
-	case 4:
-		Shot(TEXT("01c_officer_walk"), false);
-		break;
-
-	case 5:
-		bWalkOfficer = false;
-		if (PC && Officer)
-		{
-			PC->SetViewTargetWithBlend(Officer, 0.f);
-			if (PC->GetHUD())
-			{
-				PC->GetHUD()->bShowHUD = true;
-			}
-		}
-		break;
-
-	case 6:
-		// Skip the briefing and stage a few incidents in view (server/standalone only).
-		if (GM && Officer)
-		{
-			GM->FTOSkipBriefing();
-			const FVector Fwd = Officer->GetActorForwardVector();
-			const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
-			IncidentSpot = Officer->GetActorLocation() + Fwd * 1400.f;
-			GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("BarFight"), IncidentSpot, true);
-			GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("CatInTree"), Officer->GetActorLocation() + Fwd * 900.f + Right * 900.f, true);
-			GM->GetCrimeDirector()->SpawnIncident(TEXT("BankHeist"), true);
-			GM->GetCrimeDirector()->SpawnIncident(TEXT("DomesticDispute"), true);
-			GM->GetCrimeDirector()->SpawnIncident(TEXT("Shoplifting"), true);
-			GM->FTOAddChaos(35.f);
-		}
-		break;
-
-	case 7:
-		Shot(TEXT("02_on_duty"));
-		break;
-
-	case 8:
-		if (City)
-		{
-			const FVector Extent = City->GetCityExtent();
-			const FVector Center = City->GetActorLocation();
-			ViewFrom(Center + FVector(-Extent.X * 1.1f, -Extent.Y * 0.6f, 14000.f), Center + FVector(0.f, 0.f, 0.f));
-		}
-		break;
-
-	case 9:
-		Shot(TEXT("03_city_aerial"));
-		break;
-
-	case 10:
-		if (City)
-		{
-			// Street level, looking down an avenue near the middle of town.
-			const int32 MidI = City->NumIntersectionsX() / 2;
-			const int32 MidJ = City->NumIntersectionsY() / 2;
-			const FVector From = City->GetIntersection(MidI, 0) + FVector(0.f, -400.f, 350.f);
-			const FVector To = City->GetIntersection(MidI, MidJ) + FVector(0.f, 0.f, 150.f);
-			ViewFrom(From, To);
-		}
-		break;
-
-	case 11:
-		Shot(TEXT("04_street_level"));
-		break;
-
-	case 12:
-		if (!IncidentSpot.IsZero())
-		{
-			// From the officer's side of the scene, raised so buildings don't get in the way.
-			const FVector Dir = Officer ? (IncidentSpot - Officer->GetActorLocation()).GetSafeNormal2D() : FVector::ForwardVector;
-			ViewFrom(IncidentSpot - Dir * 750.f + FVector(0.f, 0.f, 420.f), IncidentSpot + FVector(0.f, 0.f, 100.f));
-		}
-		break;
-
-	case 13:
-		Shot(TEXT("05_incident"));
-		break;
-
-	case 14:
-		// Win the shift: report card up, officers cheering.
-		if (GM)
-		{
-			GM->FTOEndShift(true);
-		}
-		if (Officer)
-		{
-			const FVector Fwd = Officer->GetActorForwardVector();
-			ViewFrom(Officer->GetActorLocation() + Fwd * 420.f + FVector(0.f, 0.f, 80.f), Officer->GetActorLocation() + FVector(0.f, 0.f, 40.f));
-		}
-		break;
-
-	case 15:
-		Shot(TEXT("06_shift_report"));
-		break;
-
-	case 16:
-		// Eye level on a busy downtown sidewalk.
-		if (PC && PC->GetHUD())
-		{
-			PC->GetHUD()->bShowHUD = false;
-		}
-		if (City)
-		{
-			for (const FFTOCityBlock& Block : City->GetBlocks())
-			{
-				if (Block.District == EFTODistrict::Downtown && !Block.bPrecinct && !Block.bBank)
-				{
-					const FVector From = City->GetSidewalkCorner(Block.X, Block.Y, 0) + FVector(0.f, 0.f, 170.f);
-					const FVector To = City->GetSidewalkCorner(Block.X, Block.Y, 1) + FVector(0.f, 0.f, 120.f);
-					ViewFrom(From, To);
-					break;
-				}
-			}
-		}
-		break;
-
-	case 17:
-		Shot(TEXT("07_sidewalk"));
-		break;
-
-	case 18:
-		// Side-on look at a passing car.
-		for (TActorIterator<AFTOTrafficCar> It(World); It; ++It)
-		{
-			const FVector CarLoc = It->GetActorLocation();
-			const FVector Side = It->GetActorRightVector();
-			ViewFrom(CarLoc + Side * 700.f + It->GetActorForwardVector() * 250.f + FVector(0.f, 0.f, 150.f), CarLoc);
-			break;
-		}
-		break;
-
-	case 19:
-		Shot(TEXT("08_traffic"), false);
-		break;
-
-	case 20:
-		// Hop in the nearest cruiser and floor it with the lights on (server/standalone only).
-		if (PC && PC->GetHUD())
-		{
-			PC->GetHUD()->bShowHUD = true;
-		}
-		if (GM && Officer)
-		{
-			if (AFTOGameState* GS = World->GetGameState<AFTOGameState>())
-			{
-				GS->SetShiftPhase(EFTOShiftPhase::OnDuty);
-			}
-			AFTOCruiser* Nearest = nullptr;
-			for (TActorIterator<AFTOCruiser> It(World); It; ++It)
-			{
-				if (!Nearest || FVector::DistSquared(It->GetActorLocation(), Officer->GetActorLocation()) < FVector::DistSquared(Nearest->GetActorLocation(), Officer->GetActorLocation()))
-				{
-					Nearest = *It;
-				}
-			}
-			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(Officer); Nearest && Cop)
-			{
-				Nearest->Interact(Cop);
-				Nearest->SetSiren(true);
-				Nearest->SetAutopilot(true, 1.f, 0.35f);
-				TestCruiser = Nearest;
-			}
-		}
-		else if (!GM && PC)
-		{
-			// Client: ask the server for a car; we'll drive it ourselves next step.
-			if (AFTOPlayerController* FTOPC = Cast<AFTOPlayerController>(PC))
-			{
-				FTOPC->ServerEnterNearestCruiser();
-			}
-		}
-		break;
-
-	case 21:
-		if (!GM && PC)
-		{
-			if (AFTOCruiser* Mine = Cast<AFTOCruiser>(PC->GetPawn()))
-			{
-				Mine->SetAutopilot(true, 1.f, 0.2f);
-				TestCruiser = Mine;
-			}
-		}
-		Shot(TEXT("09_driving"));
-		break;
-
-	case 22:
-		if (TestCruiser)
-		{
-			TestCruiser->SetAutopilot(false);
-			TestCruiser->RequestExit();
-		}
-		break;
-
-	case 23:
-		Shot(TEXT("10_got_out"));
-		break;
-
-	case 24:
-		if (PC && PC->GetPawn())
-		{
-			PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
-		}
-		UE_LOG(LogFTO, Display, TEXT("SMOKE: tour complete. Average %.1f fps over %.1f s."),
-			FramesSinceReady / FMath::Max(0.01f, GetWorld()->GetRealTimeSeconds() - ReadyTime), GetWorld()->GetRealTimeSeconds() - ReadyTime);
-		if (FParse::Param(FCommandLine::Get(), TEXT("FTOSmokeTestQuit")))
-		{
-			FPlatformMisc::RequestExit(false, TEXT("FTOSmokeTest"));
-		}
-		break;
-
-	default:
-		break;
 	}
 }

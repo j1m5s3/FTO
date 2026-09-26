@@ -34,6 +34,7 @@ protected:
 
 	/** Refreshes which options apply (host vs client, lobby vs on duty). */
 	void RefreshState();
+	void PlayClick();
 
 	UPROPERTY(Transient) TObjectPtr<UTextBlock> StatusText;
 	UPROPERTY(Transient) TObjectPtr<UButton> StartButton;

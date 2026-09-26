@@ -5,6 +5,8 @@
 #include "FTOGameState.generated.h"
 
 class AFTOIncident;
+class USoundBase;
+class USoundAttenuation;
 
 UENUM(BlueprintType)
 enum class EFTOShiftPhase : uint8
@@ -18,6 +20,28 @@ enum class EFTOShiftPhase : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFTOShiftPhaseChanged, EFTOShiftPhase, NewPhase);
 
+/** Every in-house synthesised sound (Tools/Unreal/make_audio.py). */
+USTRUCT(BlueprintType)
+struct FFTOSoundSet
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> SirenLoop;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> EngineLoop;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Whistle;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Horn;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Chime;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Radio;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Alarm;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Fanfare;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Womp;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Bugle;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Fail;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Click;
+	/** Shared 3D falloff for sounds in the world. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundAttenuation> World;
+};
+
 /** Replicated, city-wide state every officer can see. */
 UCLASS()
 class FTO_API AFTOGameState : public AGameStateBase
@@ -30,6 +54,16 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	static constexpr float MaxChaos = 100.f;
+
+	/** The sound set (available even before a game state exists). */
+	static const FFTOSoundSet& Sounds() { return GetDefault<AFTOGameState>()->SoundSet; }
+
+	/** Server: play a sound in the world for everyone. */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastPlaySound(USoundBase* Sound, FVector_NetQuantize Location, float Volume = 1.f);
+
+	UPROPERTY(EditDefaultsOnly, Category="FTO|Audio")
+	FFTOSoundSet SoundSet;
 
 	// ---- Chaos meter ----
 	UFUNCTION(BlueprintPure, Category="FTO|Chaos") float GetChaos() const { return Chaos; }

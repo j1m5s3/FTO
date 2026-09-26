@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
+#include "Core/FTOGameState.h"
+#include "Crime/FTOCrimeTypes.h"
 #include "FTOHUD.generated.h"
 
 class AFTOGameState;
@@ -40,6 +42,9 @@ protected:
 	void DrawShiftReport(const AFTOGameState* GS);
 	void DrawInteractPrompt();
 	void DrawCruiserPanel();
+
+	/** Local stingers: radio chatter, chimes, alarms, shift fanfares. */
+	void UpdateAudioCues(const AFTOGameState* GS);
 	void DrawToasts();
 
 	/** Projects a world point, clamping to the screen edge when off-screen. Returns true if on-screen. */
@@ -63,4 +68,11 @@ protected:
 		float ExpireTime = 0.f;
 	};
 	TArray<FToast> Toasts;
+
+	// Audio cue bookkeeping
+	TMap<TWeakObjectPtr<const AFTOIncident>, EFTOIncidentState> SeenIncidentStates;
+	EFTOShiftPhase LastPhase = EFTOShiftPhase::Lobby;
+	bool bPhaseKnown = false;
+	bool bAlarmArmed = true;
+	float LastRadioTime = -10.f;
 };

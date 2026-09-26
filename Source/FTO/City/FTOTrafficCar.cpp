@@ -458,6 +458,7 @@ void AFTOTrafficCar::FinishTicket()
 	{
 		GS->AddChaos(-TicketChaosRelief);
 		++GS->TrafficStops;
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Chime, GetActorLocation(), 0.8f);
 	}
 
 	Violation = EFTOCarViolation::None;

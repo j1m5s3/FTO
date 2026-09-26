@@ -8,6 +8,7 @@
 class AFTOCharacter;
 class UBoxComponent;
 class UCameraComponent;
+class UAudioComponent;
 class USpringArmComponent;
 class UStaticMesh;
 class UStaticMeshComponent;
@@ -120,6 +121,12 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSetSiren(bool bOn);
 
+	void OnHorn();
+
+	UFUNCTION(Server, Unreliable)
+	void ServerHorn();
+	float NextHornTime = 0.f;
+
 	UFUNCTION() void OnRep_Siren();
 	UFUNCTION() void OnRep_StripeColor();
 
@@ -134,6 +141,8 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> LightBlue;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USpringArmComponent> CameraBoom;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCameraComponent> Camera;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> EngineAudio;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SirenAudio;
 
 	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> PaintMaterial;

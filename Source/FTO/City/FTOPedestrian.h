@@ -30,6 +30,9 @@ public:
 	/** Server: start walking the ring around this block. */
 	void StartWandering(AFTOCityGenerator* InCity, int32 InBlockX, int32 InBlockY, int32 InCorner, int32 InSeed);
 
+	/** Server: an officer blew a whistle: stop, hands up, look at them for a moment. */
+	void FreezeFor(const AActor* Officer, float Seconds);
+
 	// IFTOInteractable
 	virtual bool CanInteract(const AFTOCharacter* Officer) const override;
 	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
@@ -37,7 +40,10 @@ public:
 	virtual FVector GetInteractLocation() const override { return GetActorLocation(); }
 
 	// IFTOAnimatedActor
-	virtual EFTOAnimAction GetAnimAction() const override { return bChatting ? EFTOAnimAction::Interact : EFTOAnimAction::None; }
+	virtual EFTOAnimAction GetAnimAction() const override
+	{
+		return bHandsUp ? EFTOAnimAction::Cheer : (bChatting ? EFTOAnimAction::Interact : EFTOAnimAction::None);
+	}
 	virtual float GetAnimSpeed() const override { return GetCurrentSpeed(); }
 
 	/** Capsule half-height; the path runs this far above the sidewalk. */
@@ -65,6 +71,9 @@ protected:
 
 	/** Stopped for a chat with an officer. */
 	UPROPERTY(Replicated) bool bChatting = false;
+
+	/** Startled by a whistle. */
+	UPROPERTY(Replicated) bool bHandsUp = false;
 
 	UPROPERTY(Transient) TObjectPtr<AFTOCityGenerator> City;
 

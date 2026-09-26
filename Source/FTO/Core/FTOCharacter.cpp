@@ -15,6 +15,8 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Interaction/FTOInteractable.h"
 #include "Engine/OverlapResult.h"
+#include "City/FTOPedestrian.h"
+#include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Animation/FTOCharacterAnimInstance.h"
 #include "Art/FTOArt.h"
@@ -228,7 +230,47 @@ void AFTOCharacter::ApplySprint()
 }
 
 void AFTOCharacter::InteractReleased() {}
-void AFTOCharacter::WhistlePressed() {}
+void AFTOCharacter::WhistlePressed()
+{
+	ServerWhistle();
+}
+
+void AFTOCharacter::ServerWhistle_Implementation()
+{
+	// FWEEEET! Everyone nearby stops and looks, and anything shady nearby gets called in.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextWhistleTime)
+	{
+		return;
+	}
+	NextWhistleTime = Now + 2.f;
+
+	AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	if (GS)
+	{
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Whistle, GetActorLocation(), 1.f);
+	}
+	PlayTimedAction(EFTOAnimAction::Cheer, 0.6f); // arm up, whistle in mouth
+
+	for (TActorIterator<AFTOPedestrian> It(GetWorld()); It; ++It)
+	{
+		if (FVector::DistSquared2D(It->GetActorLocation(), GetActorLocation()) < FMath::Square(WhistleRadius))
+		{
+			It->FreezeFor(this, 2.5f);
+		}
+	}
+	if (GS)
+	{
+		for (AFTOIncident* Incident : GS->GetIncidents())
+		{
+			if (Incident && Incident->GetState() == EFTOIncidentState::Unreported &&
+				FVector::DistSquared2D(Incident->GetActorLocation(), GetActorLocation()) < FMath::Square(WhistleRadius))
+			{
+				Incident->ReportByOfficer();
+			}
+		}
+	}
+}
 
 void AFTOCharacter::Tick(float DeltaSeconds)
 {

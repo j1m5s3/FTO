@@ -40,6 +40,7 @@ void UFTOInputConfig::Build()
 	Interact = MakeAction(TEXT("IA_Interact"), (int32)EInputActionValueType::Boolean);
 	Whistle  = MakeAction(TEXT("IA_Whistle"),  (int32)EInputActionValueType::Boolean);
 	Menu     = MakeAction(TEXT("IA_Menu"),     (int32)EInputActionValueType::Boolean);
+	Horn     = MakeAction(TEXT("IA_Horn"),     (int32)EInputActionValueType::Boolean);
 
 	// Movement
 	MapAxis2D(Move, EKeys::W, EKeys::S, EKeys::A, EKeys::D);
@@ -77,4 +78,7 @@ void UFTOInputConfig::Build()
 
 	DefaultContext->MapKey(Menu, EKeys::Escape);
 	DefaultContext->MapKey(Menu, EKeys::Gamepad_Special_Right);
+
+	DefaultContext->MapKey(Horn, EKeys::H);
+	DefaultContext->MapKey(Horn, EKeys::Gamepad_RightShoulder);
 }

@@ -10,6 +10,8 @@
 #include "Core/FTOCharacter.h"
 #include "Interaction/FTOInteractable.h"
 #include "Vehicles/FTOCruiser.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 
 namespace
 {
@@ -60,6 +62,8 @@ void AFTOHUD::DrawHUD()
 	}
 	LastChaos = GS->GetChaos();
 	ChaosPulse = FMath::Max(0.f, ChaosPulse - Delta * 2.f);
+
+	UpdateAudioCues(GS);
 
 	switch (GS->GetShiftPhase())
 	{
@@ -540,5 +544,83 @@ void AFTOHUD::DrawLobby(const AFTOGameState* GS)
 		DrawRect(Color, CX - 120.f * S, RowY + 4.f * S, 14.f * S, 14.f * S);
 		DrawText(PS ? PS->GetPlayerName() : FString(), FLinearColor::White, CX - 96.f * S, RowY, GEngine->GetMediumFont(), S);
 		RowY += 26.f * S;
+	}
+}
+
+void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
+{
+	const FFTOSoundSet& Sounds = AFTOGameState::Sounds();
+	auto Play = [this](USoundBase* Sound, float Volume)
+	{
+		if (Sound)
+		{
+			UGameplayStatics::PlaySound2D(this, Sound, Volume);
+		}
+	};
+
+	// Shift stingers.
+	const EFTOShiftPhase Phase = GS->GetShiftPhase();
+	if (bPhaseKnown && Phase != LastPhase)
+	{
+		switch (Phase)
+		{
+		case EFTOShiftPhase::Briefing: Play(Sounds.Bugle, 0.8f); break;
+		case EFTOShiftPhase::Survived: Play(Sounds.Fanfare, 0.8f); break;
+		case EFTOShiftPhase::Overrun:  Play(Sounds.Womp, 0.8f); break;
+		default: break;
+		}
+	}
+	LastPhase = Phase;
+	bPhaseKnown = true;
+
+	// Dispatch chatter for new calls; chimes and stings as incidents end.
+	const float Now = GetWorld()->GetRealTimeSeconds();
+	for (const AFTOIncident* Incident : GS->GetIncidents())
+	{
+		if (!Incident)
+		{
+			continue;
+		}
+		const EFTOIncidentState State = Incident->GetState();
+		const EFTOIncidentState* Previous = SeenIncidentStates.Find(Incident);
+		const bool bWasKnown = Previous && (*Previous == EFTOIncidentState::Reported || *Previous == EFTOIncidentState::Responding);
+		if (Incident->IsKnownToDispatch() && !bWasKnown && Now - LastRadioTime > 0.6f)
+		{
+			Play(Sounds.Radio, 0.55f);
+			LastRadioTime = Now;
+		}
+		if (Previous && *Previous != State)
+		{
+			if (State == EFTOIncidentState::Resolved)
+			{
+				Play(Sounds.Chime, 0.7f);
+			}
+			else if (State == EFTOIncidentState::Failed)
+			{
+				Play(Sounds.Fail, 0.6f);
+			}
+		}
+		SeenIncidentStates.Add(Incident, State);
+	}
+	for (auto It = SeenIncidentStates.CreateIterator(); It; ++It)
+	{
+		if (!It->Key.IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+
+	// Chaos alarm, re-armed once things calm down a bit.
+	if (Phase == EFTOShiftPhase::OnDuty)
+	{
+		if (bAlarmArmed && GS->GetChaos() >= 75.f)
+		{
+			Play(Sounds.Alarm, 0.7f);
+			bAlarmArmed = false;
+		}
+		else if (!bAlarmArmed && GS->GetChaos() < 65.f)
+		{
+			bAlarmArmed = true;
+		}
 	}
 }
