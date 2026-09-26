@@ -12,6 +12,9 @@
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Art/FTOArt.h"
+#include "Animation/FTOCharacterAnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 
 AFTOIncident::AFTOIncident()
 {
@@ -25,7 +28,6 @@ AFTOIncident::AFTOIncident()
 	RootComponent = Root;
 
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> ConeMesh(TEXT("/Engine/BasicShapes/Cone.Cone"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	BaseMaterial = BaseMat.Object;
 
@@ -38,12 +40,19 @@ AFTOIncident::AFTOIncident()
 	Beacon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Beacon->SetCastShadow(false);
 
-	Suspect = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Suspect"));
+	// The perp: striped jumper, mask, bag of loot. Shares the officer rig and clips.
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> SuspectAsset(TEXT("/Game/FTO/Characters/Civilians/SK_Suspect.SK_Suspect"));
+	Suspect = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Suspect"));
 	Suspect->SetupAttachment(Root);
-	Suspect->SetStaticMesh(SphereMesh.Object);
-	Suspect->SetRelativeLocation(FVector(0.f, 0.f, 60.f));
-	Suspect->SetRelativeScale3D(FVector(0.9f, 0.9f, 1.3f));
+	Suspect->SetRelativeRotation(FRotator(0.f, -90.f, 0.f)); // Blender models face +Y
 	Suspect->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Suspect->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	Suspect->SetAnimInstanceClass(UFTOCharacterAnimInstance::StaticClass());
+	Suspect->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+	if (SuspectAsset.Succeeded())
+	{
+		Suspect->SetSkeletalMeshAsset(SuspectAsset.Object);
+	}
 
 	Label = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Label"));
 	Label->SetupAttachment(Root);
@@ -124,13 +133,8 @@ void AFTOIncident::Tick(float DeltaSeconds)
 		ServerTick(DeltaSeconds);
 	}
 
-	// Cosmetic: spin the beacon, bob the suspect, keep the label facing the local camera.
-	const float Time = GetWorld()->GetTimeSeconds();
+	// Cosmetic: spin the beacon, keep the label facing the local camera.
 	Beacon->AddLocalRotation(FRotator(0.f, 90.f * DeltaSeconds, 0.f));
-	if (IsActive())
-	{
-		Suspect->SetRelativeLocation(FVector(0.f, 0.f, 60.f + FMath::Abs(FMath::Sin(Time * 6.f)) * 25.f));
-	}
 
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 	{
@@ -248,7 +252,7 @@ bool AFTOIncident::IsWitnessedByAnyOfficer() const
 		return false;
 	}
 
-	const FVector Target = Suspect->GetComponentLocation();
+	const FVector Target = Suspect->GetComponentLocation() + FVector(0.f, 0.f, 110.f);
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOWitness), false, this);
 
 	for (const APlayerState* PS : GS->PlayerArray)
@@ -297,8 +301,6 @@ void AFTOIncident::RefreshVisuals()
 	if (!BeaconMaterial)
 	{
 		BeaconMaterial = FTOArt::ApplyColor(Beacon, BaseMaterial, FLinearColor::White, 0.6f);
-		// Suspects wear stripy-convict orange until real models land.
-		FTOArt::ApplyColor(Suspect, BaseMaterial, FLinearColor(1.f, 0.35f, 0.05f));
 	}
 
 	FLinearColor Color = FTOCrime::TierColor(Info.Tier);
@@ -329,4 +331,19 @@ void AFTOIncident::RefreshVisuals()
 	}
 	Label->SetText(LabelText);
 	Label->SetTextRenderColor(Color.ToFColor(true));
+}
+
+EFTOAnimAction AFTOIncident::GetAnimAction() const
+{
+	switch (State)
+	{
+	case EFTOIncidentState::Unreported:
+	case EFTOIncidentState::Reported:
+		return EFTOAnimAction::Interact;	// up to no good
+	case EFTOIncidentState::Responding:
+	case EFTOIncidentState::Resolved:
+		return EFTOAnimAction::Cheer;		// hands up, it's a fair cop
+	default:
+		return EFTOAnimAction::None;
+	}
 }

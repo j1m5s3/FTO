@@ -3,11 +3,13 @@
 #include "CoreMinimal.h"
 #include "City/FTOPathMover.h"
 #include "Interaction/FTOInteractable.h"
+#include "Animation/FTOAnimatedActor.h"
 #include "FTOPedestrian.generated.h"
 
 class AFTOCityGenerator;
 class UCapsuleComponent;
-class UStaticMeshComponent;
+class USkeletalMeshComponent;
+class USkeletalMesh;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 
@@ -16,7 +18,7 @@ class UMaterialInterface;
  * sometimes they tip you off about trouble nobody has reported yet.
  */
 UCLASS()
-class FTO_API AFTOPedestrian : public AFTOPathMover, public IFTOInteractable
+class FTO_API AFTOPedestrian : public AFTOPathMover, public IFTOInteractable, public IFTOAnimatedActor
 {
 	GENERATED_BODY()
 
@@ -34,25 +36,35 @@ public:
 	virtual void Interact(AFTOCharacter* Officer) override;
 	virtual FVector GetInteractLocation() const override { return GetActorLocation(); }
 
+	// IFTOAnimatedActor
+	virtual EFTOAnimAction GetAnimAction() const override { return bChatting ? EFTOAnimAction::Interact : EFTOAnimAction::None; }
+	virtual float GetAnimSpeed() const override { return GetCurrentSpeed(); }
+
+	/** Capsule half-height; the path runs this far above the sidewalk. */
+	static constexpr float HalfHeight = 92.f;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void OnArrived() override;
-	virtual void TickCosmetics(float DeltaSeconds) override;
 
 	void WalkToNextCorner();
 
 	UFUNCTION() void OnRep_Look();
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCapsuleComponent> Capsule;
-	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Body;
-	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Head;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USkeletalMeshComponent> Body;
+
+	/** Civilian variants to pick from (Tools/Blender/build_civilians.py). */
+	UPROPERTY() TArray<TObjectPtr<USkeletalMesh>> Looks;
 
 	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> BodyMaterial;
-	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> HeadMaterial;
 
-	/** Packed look: colour + size, rolled on the server. */
+	/** Picks the variant and shirt colour; rolled on the server. */
 	UPROPERTY(ReplicatedUsing=OnRep_Look) int32 LookSeed = 0;
+
+	/** Stopped for a chat with an officer. */
+	UPROPERTY(Replicated) bool bChatting = false;
 
 	UPROPERTY(Transient) TObjectPtr<AFTOCityGenerator> City;
 

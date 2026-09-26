@@ -33,9 +33,9 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	bool bInAir = false;
 	EFTOAnimAction Action = EFTOAnimAction::None;
 
-	// Tuning
-	float WalkReferenceSpeed = 500.f;
-	float RunReferenceSpeed = 850.f;
+	// Ground speeds (cm/s) at which the walk and run clips' strides match 1:1 with no sliding.
+	float WalkReferenceSpeed = 200.f;
+	float RunReferenceSpeed = 475.f;
 
 private:
 	void Sample(UAnimSequence* Sequence, float Time, FPoseContext& Out) const;

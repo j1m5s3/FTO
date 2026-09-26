@@ -15,11 +15,16 @@ BASE_MATERIAL = "/Game/FTO/Materials/M_FTOBase"
 # Blender works in metres; Unreal in centimetres.
 METRES_TO_CM = 100.0
 
-# (source folder, skeletal mesh, animation clips, destination)
+OFFICER_SKELETON = "/Game/FTO/Characters/Officer/SK_Officer_Skeleton"
+
+# Everyone shares the officer's skeleton, so the officer's clips animate every character.
 CHARACTERS = [
-    ("Characters/Officer", "SK_Officer",
-     ["Idle", "Walk", "Run", "Jump", "Interact", "Cheer"],
-     "/Game/FTO/Characters/Officer"),
+    {"folder": "Characters/Officer", "meshes": ["SK_Officer"],
+     "clips": ["Idle", "Walk", "Run", "Jump", "Interact", "Cheer"],
+     "dest": "/Game/FTO/Characters/Officer"},
+    {"folder": "Characters/Civilians",
+     "meshes": [f"SK_Civilian_{i:02d}" for i in range(1, 9)] + ["SK_Suspect"],
+     "clips": [], "dest": "/Game/FTO/Characters/Civilians", "skeleton": OFFICER_SKELETON},
 ]
 
 eal = unreal.EditorAssetLibrary
@@ -56,8 +61,10 @@ def run_import(filename, destination, name, options):
     return paths
 
 
-def skeletal_options():
+def skeletal_options(skeleton=None):
     ui = unreal.FbxImportUI()
+    if skeleton:
+        ui.set_editor_property("skeleton", skeleton)
     ui.set_editor_property("automated_import_should_detect_type", False)
     ui.set_editor_property("import_mesh", True)
     ui.set_editor_property("import_as_skeletal", True)
@@ -104,21 +111,23 @@ def apply_base_material(mesh):
     eal.save_loaded_asset(mesh)
 
 
-def import_character(folder, mesh_name, clips, destination):
-    source = os.path.join(ART, folder)
+def import_mesh(source, mesh_name, destination, skeleton=None):
     remove_if_wrong_type(f"{destination}/{mesh_name}", "SkeletalMesh")
-    run_import(os.path.join(source, mesh_name + ".fbx"), destination, mesh_name, skeletal_options())
+    run_import(os.path.join(source, mesh_name + ".fbx"), destination, mesh_name, skeletal_options(skeleton))
 
     mesh = eal.load_asset(f"{destination}/{mesh_name}")
     if not mesh:
         unreal.log_error(f"FTO: missing {destination}/{mesh_name} after import")
-        return
+        return None
     apply_base_material(mesh)
-    skeleton = mesh.get_editor_property("skeleton")
 
     bounds = mesh.get_bounds()
-    unreal.log(f"FTO: {mesh_name} extent {bounds.box_extent} origin {bounds.origin} skeleton {skeleton.get_name()}")
+    skeleton_name = mesh.get_editor_property("skeleton").get_name()
+    unreal.log(f"FTO: {mesh_name} extent {bounds.box_extent} origin {bounds.origin} skeleton {skeleton_name}")
+    return mesh
 
+
+def import_clips(source, mesh_name, clips, destination, skeleton):
     for clip in clips:
         anim_name = f"A_{mesh_name[3:]}_{clip}"  # SK_Officer -> A_Officer_Walk
         remove_if_wrong_type(f"{destination}/{anim_name}", "AnimSequence")
@@ -129,6 +138,17 @@ def import_character(folder, mesh_name, clips, destination):
         else:
             unreal.log_error(f"FTO: animation {anim_name} missing after import")
 
+
+def import_group(group):
+    source = os.path.join(ART, group["folder"])
+    destination = group["dest"]
+    shared = eal.load_asset(group["skeleton"]) if group.get("skeleton") else None
+
+    for mesh_name in group["meshes"]:
+        mesh = import_mesh(source, mesh_name, destination, shared)
+        if mesh and group["clips"]:
+            import_clips(source, mesh_name, group["clips"], destination, mesh.get_editor_property("skeleton"))
+
     # Secondary assets (skeleton, physics asset) aren't saved by the import task itself.
     eal.save_directory(destination, only_if_is_dirty=False, recursive=True)
 
@@ -137,5 +157,5 @@ def import_character(folder, mesh_name, clips, destination):
         unreal.log(f"FTO: asset {path}")
 
 
-for args in CHARACTERS:
-    import_character(*args)
+for character_group in CHARACTERS:
+    import_group(character_group)

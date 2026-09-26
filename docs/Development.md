@@ -35,6 +35,8 @@ tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy a
   to `Art/Source/Characters/Officer` (plus an editable `Officer.blend`):
   `blender -b --factory-startup -P Tools/Blender/build_officer.py -- --out Art/Source/Characters/Officer --preview <dir>`
   (`--preview` renders turnaround and clip frames; `Tools/Blender/contact_sheet.py` tiles them into one image.)
+- `Tools/Blender/build_civilians.py` makes eight citizen variants and the striped-jumper suspect on the **same skeleton**,
+  so every character shares the officer's clips. Shirts are tinted per pedestrian at runtime.
 - **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (metres to centimetres, vertex colours,
   master material) and can be re-run after any Blender change:
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`

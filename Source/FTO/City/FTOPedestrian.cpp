@@ -5,8 +5,9 @@
 #include "Core/FTOPlayerController.h"
 #include "Crime/FTOIncident.h"
 #include "Components/CapsuleComponent.h"
-#include "Components/StaticMeshComponent.h"
-#include "Engine/StaticMesh.h"
+#include "Animation/FTOCharacterAnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
@@ -39,28 +40,31 @@ namespace
 AFTOPedestrian::AFTOPedestrian()
 {
 	Capsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Capsule"));
-	Capsule->InitCapsuleSize(35.f, 85.f);
+	Capsule->InitCapsuleSize(35.f, HalfHeight);
 	Capsule->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = Capsule;
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	BaseMaterial = BaseMat.Object;
 
-	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
-	Body->SetupAttachment(Capsule);
-	Body->SetStaticMesh(CylinderMesh.Object);
-	Body->SetRelativeLocation(FVector(0.f, 0.f, -20.f));
-	Body->SetRelativeScale3D(FVector(0.65f, 0.65f, 1.1f));
-	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	for (int32 Index = 1; Index <= 8; ++Index)
+	{
+		const FString Path = FString::Printf(TEXT("/Game/FTO/Characters/Civilians/SK_Civilian_%02d.SK_Civilian_%02d"), Index, Index);
+		ConstructorHelpers::FObjectFinder<USkeletalMesh> Look(*Path);
+		if (Look.Succeeded())
+		{
+			Looks.Add(Look.Object);
+		}
+	}
 
-	Head = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Head"));
-	Head->SetupAttachment(Capsule);
-	Head->SetStaticMesh(SphereMesh.Object);
-	Head->SetRelativeLocation(FVector(0.f, 0.f, 55.f));
-	Head->SetRelativeScale3D(FVector(0.6f));
-	Head->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// Blender models face +Y with their feet at the origin.
+	Body = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Body"));
+	Body->SetupAttachment(Capsule);
+	Body->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -HalfHeight), FRotator(0.f, -90.f, 0.f));
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Body->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	Body->SetAnimInstanceClass(UFTOCharacterAnimInstance::StaticClass());
+	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
 
 	TurnRate = 540.f;
 }
@@ -69,6 +73,7 @@ void AFTOPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFTOPedestrian, LookSeed);
+	DOREPLIFETIME(AFTOPedestrian, bChatting);
 }
 
 void AFTOPedestrian::BeginPlay()
@@ -79,19 +84,21 @@ void AFTOPedestrian::BeginPlay()
 
 void AFTOPedestrian::OnRep_Look()
 {
-	FRandomStream LookRng(LookSeed);
-	const FLinearColor Shirt = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 150, 230);
-	const FLinearColor Skin = FTOArt::SkinTone(LookRng.RandRange(0, 4));
-	if (!BodyMaterial)
+	if (Looks.Num() == 0)
 	{
-		BodyMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Shirt);
-		HeadMaterial = FTOArt::ApplyColor(Head, BaseMaterial, Skin);
+		return;
 	}
-	FTOArt::SetColor(BodyMaterial, Shirt);
-	FTOArt::SetColor(HeadMaterial, Skin);
-	const float Size = LookRng.FRandRange(0.85f, 1.15f);
-	Body->SetRelativeScale3D(FVector(0.65f * LookRng.FRandRange(0.85f, 1.3f), 0.65f, 1.1f) * Size);
-	Head->SetRelativeScale3D(FVector(0.6f * Size));
+
+	FRandomStream LookRng(LookSeed);
+	Body->SetSkeletalMeshAsset(Looks[LookRng.RandRange(0, Looks.Num() - 1)]);
+
+	// Every variant tints its shirt (vertex alpha 1) with a random cheerful colour.
+	const FLinearColor Shirt = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 170, 235);
+	BodyMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Shirt);
+	for (int32 Slot = 1; Slot < Body->GetNumMaterials(); ++Slot)
+	{
+		Body->SetMaterial(Slot, BodyMaterial);
+	}
 }
 
 void AFTOPedestrian::StartWandering(AFTOCityGenerator* InCity, int32 InBlockX, int32 InBlockY, int32 InCorner, int32 InSeed)
@@ -108,7 +115,7 @@ void AFTOPedestrian::StartWandering(AFTOCityGenerator* InCity, int32 InBlockX, i
 	Direction = Rng.FRand() < 0.5f ? 1 : -1;
 	WalkSpeed = Rng.FRandRange(110.f, 190.f);
 
-	const FVector Start = City->GetSidewalkCorner(BlockX, BlockY, Corner) + FVector(0.f, 0.f, 85.f);
+	const FVector Start = City->GetSidewalkCorner(BlockX, BlockY, Corner) + FVector(0.f, 0.f, HalfHeight);
 	Segment.From = Start;
 	Segment.To = Start;
 	SetActorLocation(Start);
@@ -117,6 +124,8 @@ void AFTOPedestrian::StartWandering(AFTOCityGenerator* InCity, int32 InBlockX, i
 
 void AFTOPedestrian::WalkToNextCorner()
 {
+	bChatting = false;
+
 	if (!City)
 	{
 		return;
@@ -143,13 +152,13 @@ void AFTOPedestrian::WalkToNextCorner()
 			BlockX = NewX;
 			BlockY = NewY;
 			Corner = bCrossX ? MirrorX[Corner] : MirrorY[Corner];
-			MoveTo(City->GetSidewalkCorner(BlockX, BlockY, Corner) + FVector(0.f, 0.f, 85.f), WalkSpeed * 1.3f);
+			MoveTo(City->GetSidewalkCorner(BlockX, BlockY, Corner) + FVector(0.f, 0.f, HalfHeight), WalkSpeed * 1.3f);
 			return;
 		}
 	}
 
 	Corner = (Corner + Direction + 4) % 4;
-	MoveTo(City->GetSidewalkCorner(BlockX, BlockY, Corner) + FVector(0.f, 0.f, 85.f), WalkSpeed);
+	MoveTo(City->GetSidewalkCorner(BlockX, BlockY, Corner) + FVector(0.f, 0.f, HalfHeight), WalkSpeed);
 }
 
 void AFTOPedestrian::OnArrived()
@@ -162,16 +171,6 @@ void AFTOPedestrian::OnArrived()
 		return;
 	}
 	WalkToNextCorner();
-}
-
-void AFTOPedestrian::TickCosmetics(float DeltaSeconds)
-{
-	if (GetCurrentSpeed() > 0.f)
-	{
-		const float T = GetWorld()->GetTimeSeconds() * 10.f + LookSeed;
-		Body->SetRelativeLocation(FVector(0.f, 0.f, -20.f + FMath::Abs(FMath::Sin(T)) * 8.f));
-		Body->SetRelativeRotation(FRotator(0.f, 0.f, FMath::Sin(T) * 5.f));
-	}
 }
 
 bool AFTOPedestrian::CanInteract(const AFTOCharacter* Officer) const
@@ -197,6 +196,7 @@ void AFTOPedestrian::Interact(AFTOCharacter* Officer)
 
 	// Stop and face the officer for a moment.
 	Hold();
+	bChatting = true;
 	SetActorRotation(FRotator(0.f, (Officer->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
 	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::WalkToNextCorner, 2.5f, false);
 

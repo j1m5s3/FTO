@@ -37,8 +37,27 @@ void AFTOAmbientPopulation::Populate(AFTOCityGenerator* InCity, int32 Seed)
 
 void AFTOAmbientPopulation::SpawnPedestrian()
 {
-	const int32 BX = Rng.RandRange(0, City->NumIntersectionsX() - 2);
-	const int32 BY = Rng.RandRange(0, City->NumIntersectionsY() - 2);
+	int32 BX = Rng.RandRange(0, City->NumIntersectionsX() - 2);
+	int32 BY = Rng.RandRange(0, City->NumIntersectionsY() - 2);
+
+	// Busy downtown, quieter suburbs.
+	if (Rng.FRand() < DowntownShare)
+	{
+		TArray<const FFTOCityBlock*> Downtown;
+		for (const FFTOCityBlock& Block : City->GetBlocks())
+		{
+			if (Block.District == EFTODistrict::Downtown)
+			{
+				Downtown.Add(&Block);
+			}
+		}
+		if (Downtown.Num() > 0)
+		{
+			const FFTOCityBlock* Pick = Downtown[Rng.RandRange(0, Downtown.Num() - 1)];
+			BX = Pick->X;
+			BY = Pick->Y;
+		}
+	}
 	const int32 Corner = Rng.RandRange(0, 3);
 
 	FActorSpawnParameters Params;
