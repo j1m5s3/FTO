@@ -67,12 +67,22 @@ Medium-scale procedural grid city (a few districts: downtown, residential, indus
 - Placeholder map: engine `Template_Default`; the city is generated at runtime.
 
 ## Roadmap
-1. Project scaffold + design doc
-2. Chaos meter + procedural crime director + incidents
-3. Procedural city generator
-4. HUD: chaos meter, dispatch board, incident markers
-5. Interactions: respond/resolve, witness, arrest
-6. NPC pedestrians and traffic
-7. Cruisers + traffic stops
-8. Lobby/session flow (host/join), end-of-shift scoring
-9. Art pass (Blender pipeline, CC0 packs), animations, audio
+Done:
+- Project scaffold, design doc, smoke-test harness
+- Chaos meter, procedural crime director (20 templates, modifiers, escalation chains)
+- Procedural toy-box city (downtown, suburbs, industrial edge, parks, precinct, bank)
+- HUD: chaos meter, dispatch board, markers, report card, driving and escort panels
+- Living city: animated citizens (tips, chats, whistle freezes) and traffic
+- Traffic stops, siren pull-overs, car chases that end BUSTED or escaped
+- Drivable cruisers (arcade handling, driver-authoritative netcode)
+- Arrests: cuff, escort or drive, book at the precinct
+- Lobby, host/join menu, new shift
+- In-house art: officer, citizens, suspect, vehicles (Blender scripts), master material
+- In-house audio: synthesised siren, whistle, radio, chimes, fanfare, sad trombone...
+
+Next ideas:
+- Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame
+- Day/night shifts and weather; night-time lights and headlights
+- Steam (or EOS) sessions for invite-based online play
+- Radio/voice chat, emotes, officer customisation
+- Hand-dressed landmark blocks mixed into the procedural city
