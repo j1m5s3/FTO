@@ -86,7 +86,10 @@ void AFTOSmokeTest::Shot(const TCHAR* Name)
 {
 	const FString Dir = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Screenshots"), TEXT("SmokeTest"));
 	IFileManager::Get().MakeDirectory(*Dir, true);
-	const FString Path = FPaths::Combine(Dir, FString(Name) + TEXT(".png"));
+	// -FTOSmokeTag=client keeps screenshots from several instances apart.
+	FString Tag;
+	FParse::Value(FCommandLine::Get(), TEXT("FTOSmokeTag="), Tag);
+	const FString Path = FPaths::Combine(Dir, (Tag.IsEmpty() ? FString() : Tag + TEXT("_")) + FString(Name) + TEXT(".png"));
 	FScreenshotRequest::RequestScreenshot(Path, true, false);
 	UE_LOG(LogFTO, Display, TEXT("SMOKE: screenshot %s"), *Path);
 }
