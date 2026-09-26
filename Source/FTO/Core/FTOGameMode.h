@@ -5,6 +5,7 @@
 #include "FTOGameMode.generated.h"
 
 class UFTOCrimeDirector;
+class AFTOCityGenerator;
 
 /**
  * Server-only rules for a shift at the precinct.
@@ -23,6 +24,7 @@ public:
 	virtual void StartPlay() override;
 	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
 	UFTOCrimeDirector* GetCrimeDirector() const { return CrimeDirector; }
 
@@ -38,6 +40,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")
 	TObjectPtr<UFTOCrimeDirector> CrimeDirector;
 
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="FTO")
+	TObjectPtr<AFTOCityGenerator> CityGenerator;
+
 	/** From the "?Seed=" URL option; 0 = random. */
-	int32 RequestedSeed = 0;
+	int32 ShiftSeed = 0;
+
+	int32 PickFreeBadge(const APlayerController* ForPlayer) const;
 };
