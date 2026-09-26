@@ -32,20 +32,20 @@ namespace
 	const FLinearColor Concrete(0.62f, 0.61f, 0.58f);
 	const FLinearColor Metal(0.3f, 0.32f, 0.35f);
 	const FLinearColor Leaves(0.25f, 0.55f, 0.2f);
-	const FLinearColor Paint(1.f, 1.f, 1.f, 0.f); // alpha 0: use the instance's own paint
+	const FLinearColor OwnPaint(1.f, 1.f, 1.f, 0.f); // alpha 0: use the instance's own paint
 
 	/** The outdoor city's breakables (glass is anything *_Glass; everything indoors stays put). */
 	const FBreakable Breakables[] =
 	{
-		{ TEXT("SM_Hydrant"),      EFTOBreakKind::Burst,    350.f,  2, 60.f,  Paint },
-		{ TEXT("SM_Bin"),          EFTOBreakKind::KnockOff, 300.f,  2, 20.f,  Paint },
-		{ TEXT("SM_NewsBox"),      EFTOBreakKind::KnockOff, 300.f,  2, 30.f,  Paint },
-		{ TEXT("SM_Mailbox"),      EFTOBreakKind::KnockOff, 350.f,  3, 40.f,  Paint },
+		{ TEXT("SM_Hydrant"),      EFTOBreakKind::Burst,    350.f,  2, 60.f,  OwnPaint },
+		{ TEXT("SM_Bin"),          EFTOBreakKind::KnockOff, 300.f,  2, 20.f,  OwnPaint },
+		{ TEXT("SM_NewsBox"),      EFTOBreakKind::KnockOff, 300.f,  2, 30.f,  OwnPaint },
+		{ TEXT("SM_Mailbox"),      EFTOBreakKind::KnockOff, 350.f,  3, 40.f,  OwnPaint },
 		{ TEXT("SM_HouseMailbox"), EFTOBreakKind::KnockOff, 300.f,  2, 10.f,  Wood },
 		{ TEXT("SM_ParkingMeter"), EFTOBreakKind::KnockOff, 300.f,  2, 25.f,  Metal },
 		{ TEXT("SM_Planter"),      EFTOBreakKind::Smash,    500.f,  6, 0.f,   Concrete },
 		{ TEXT("SM_StreetBench"),  EFTOBreakKind::Smash,    450.f,  6, 0.f,   Wood },
-		{ TEXT("SM_Fence"),        EFTOBreakKind::Smash,    350.f,  4, 0.f,   Paint },
+		{ TEXT("SM_Fence"),        EFTOBreakKind::Smash,    350.f,  4, 0.f,   OwnPaint },
 		{ TEXT("SM_Bush"),         EFTOBreakKind::Smash,    300.f,  0, 0.f,   Leaves },
 		{ TEXT("SM_BusStop"),      EFTOBreakKind::Smash,    800.f,  0, 0.f,   Metal },
 		{ TEXT("SM_LampPost"),     EFTOBreakKind::Topple,   900.f,  0, 150.f, Metal },
