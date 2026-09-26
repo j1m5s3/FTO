@@ -36,6 +36,7 @@ protected:
 	void DrawTeammateMarkers(const AFTOGameState* GS);
 	void DrawOnSceneProgress(const AFTOGameState* GS);
 	void DrawBriefing(const AFTOGameState* GS);
+	void DrawLobby(const AFTOGameState* GS);
 	void DrawShiftReport(const AFTOGameState* GS);
 	void DrawInteractPrompt();
 	void DrawCruiserPanel();

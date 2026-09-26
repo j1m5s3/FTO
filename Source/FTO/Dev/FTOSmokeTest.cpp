@@ -96,6 +96,35 @@ void AFTOSmokeTest::Tick(float DeltaSeconds)
 
 	++FramesSinceReady;
 
+	// Prologue: a shot of the menu before the tour proper.
+	if (MenuShotPhase < 3)
+	{
+		AFTOPlayerController* MenuPC = Cast<AFTOPlayerController>(GetWorld()->GetFirstPlayerController());
+		if (!MenuPC)
+		{
+			MenuShotPhase = 3;
+		}
+		else if (MenuShotPhase == 0)
+		{
+			MenuPC->SetMenuVisible(true);
+			MenuShotTime = Now + 0.8f;
+			MenuShotPhase = 1;
+		}
+		else if (MenuShotPhase == 1 && Now >= MenuShotTime && AreShadersReady())
+		{
+			Shot(TEXT("00_menu"));
+			MenuShotTime = Now + 0.3f;
+			MenuShotPhase = 2;
+		}
+		else if (MenuShotPhase == 2 && Now >= MenuShotTime)
+		{
+			MenuPC->SetMenuVisible(false);
+			NextStepTime = Now + 0.5f;
+			MenuShotPhase = 3;
+		}
+		return;
+	}
+
 	// One step per frame, and never while shaders are still compiling (the shot would be grey).
 	if (NextStep < int32(UE_ARRAY_COUNT(StepDelays)) && Now >= NextStepTime && AreShadersReady())
 	{

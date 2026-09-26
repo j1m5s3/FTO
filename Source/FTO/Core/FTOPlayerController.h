@@ -5,6 +5,7 @@
 #include "FTOPlayerController.generated.h"
 
 class UFTOInputConfig;
+class UFTOMenuWidget;
 
 UCLASS()
 class FTO_API AFTOPlayerController : public APlayerController
@@ -19,6 +20,28 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientToast(const FText& Message, FLinearColor Color);
 
+	// ---- Menu / session flow ----
+	void SetMenuVisible(bool bVisible);
+	void ToggleMenu();
+	bool IsMenuVisible() const;
+
+	/** Host only: begin the shift from the lobby. */
+	UFUNCTION(Server, Reliable)
+	void ServerStartShift();
+
+	/** Host only: reload with a fresh city and seed; everyone comes along. */
+	UFUNCTION(Server, Reliable)
+	void ServerNewShift();
+
+	/** Reopen this city as a listen server so friends can join. */
+	void HostOnline();
+
+	/** Travel to a host by IP (port 7777 if none given). */
+	void JoinGame(const FString& Address);
+
+	/** This machine's LAN address, for telling friends where to join. */
+	static FString GetLocalAddress();
+
 	/** Dev: jump into the nearest cruiser (also handy for testing clients driving). */
 	UFUNCTION(Exec) void FTODrive();
 
@@ -29,6 +52,12 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
+	/** Only the host (the listen server's own player, or solo) runs the shift. */
+	bool IsHostPlayer() const;
+
 	UPROPERTY(Transient)
 	TObjectPtr<UFTOInputConfig> InputConfig;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UFTOMenuWidget> Menu;
 };
