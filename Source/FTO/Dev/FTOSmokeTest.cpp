@@ -9,8 +9,13 @@
 #include "Core/FTOPlayerController.h"
 #include "Dev/FTOAnimDummy.h"
 #include "Physics/FTOKnockdownComponent.h"
+#include "Physics/FTOImpact.h"
+#include "Weapons/FTOArmoryRack.h"
+#include "Weapons/FTOBallistics.h"
 #include "Crime/FTOArrestee.h"
 #include "Crime/FTOCrimeDirector.h"
+#include "Crime/FTOIncident.h"
+#include "Crime/FTOPerp.h"
 #include "Vehicles/FTOCruiser.h"
 #include "Camera/CameraActor.h"
 #include "EngineUtils.h"
@@ -847,6 +852,144 @@ void AFTOSmokeTest::BuildSteps()
 			SetHUDVisible(true);
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});
+
+		// Guns: sign a shotgun out of the armory, then a hold-up in the street: the robber opens fire, the officer
+		// fires back, and the robber is subdued and cuffed. Then an officer is shot down and a partner helps them up.
+		AddStep(TEXT("armory"), 1.2f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			const AFTOCityGenerator* City = GetCity();
+			const FFTOBuilding* Precinct = City ? City->FindBuilding(EFTOBuildingType::Precinct) : nullptr;
+			if (!Cop || !Precinct || Precinct->ArmorySpots.Num() < 2)
+			{
+				return;
+			}
+			const FTransform& Rack = Precinct->ArmorySpots[1];
+			const FVector Fwd = Rack.GetRotation().GetForwardVector();
+			const FVector Right = Rack.GetRotation().GetRightVector();
+			Cop->TeleportTo(Rack.GetLocation() - Fwd * 60.f + FVector(0.f, 0.f, 100.f), Rack.Rotator());
+			for (TActorIterator<AFTOArmoryRack> It(GetWorld()); It; ++It)
+			{
+				if (It->GetWeapon() == EFTOWeapon::Shotgun)
+				{
+					It->Interact(Cop);
+				}
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: loadout after the armory: %s, %s, %s (in hand: %s)."), *FTOWeapons::DisplayName(Cop->GetWeaponInSlot(0)).ToString(),
+				*FTOWeapons::DisplayName(Cop->GetWeaponInSlot(1)).ToString(), *FTOWeapons::DisplayName(Cop->GetWeaponInSlot(2)).ToString(),
+				*FTOWeapons::DisplayName(Cop->GetDrawnWeapon()).ToString());
+			// Face the rack with the shotgun up, filmed from the side.
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetControlRotation(Rack.Rotator());
+			}
+			SetHUDVisible(false);
+			const FVector At = Cop->GetActorLocation();
+			ViewFrom(At - Right * 260.f + Fwd * 60.f + FVector(0.f, 0.f, 20.f), At + Fwd * 40.f + FVector(0.f, 0.f, 20.f));
+		});
+		AddShot(TEXT("17a_armory"), 0.3f, false);
+		AddStep(TEXT("hold-up"), 0.45f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOGameMode* GM = GetAuthGameMode();
+			AFTOCityGenerator* City = GetCity();
+			if (!Cop || !GM || !City)
+			{
+				return;
+			}
+			// Down the middle of a street, a robber twelve metres ahead facing the officer.
+			const FVector Start = City->GetIntersection(1, 1);
+			const FVector Along = (City->GetIntersection(2, 1) - Start).GetSafeNormal();
+			const FVector Officer = Start + Along * 900.f;
+			const FVector Robber = Start + Along * 2100.f;
+			Cop->TeleportTo(Officer + FVector(0.f, 0.f, 100.f), Along.Rotation());
+			GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("ArmedRobbery"), FTransform((-Along).Rotation(), Robber), INDEX_NONE, true);
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetViewTargetWithBlend(Cop, 0.f);
+				PC->SetControlRotation(((Robber + FVector(0.f, 0.f, 110.f)) - (Officer + FVector(0.f, 0.f, 160.f))).Rotation());
+			}
+			SetHUDVisible(true);
+			if (Cop->GetDrawnWeapon() == EFTOWeapon::None)
+			{
+				Cop->SelectSlot(1);
+			}
+		});
+		AddStep(TEXT("robber close-up"), 0.12f, [this]()
+		{
+			// The robber, pistol levelled, seen from the pavement (before the officer gets a shot off).
+			for (TActorIterator<AFTOPerp> It(GetWorld()); It; ++It)
+			{
+				if (It->GetIncident() && It->GetIncident()->GetInfo().TemplateId == TEXT("ArmedRobbery") && !It->GetIncident()->IsIndoors())
+				{
+					const FVector At = It->GetActorLocation();
+					ViewFrom(At + It->GetActorForwardVector() * 220.f + It->GetActorRightVector() * 260.f + FVector(0.f, 0.f, 40.f), At + FVector(0.f, 0.f, 20.f));
+					break;
+				}
+			}
+		});
+		AddShot(TEXT("17b_armed_robber"), 0.1f);
+		AddStep(TEXT("officer's view"), 0.1f, [this]()
+		{
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+		AddShot(TEXT("17b2_officer_aims"), 0.05f);
+		AddStep(TEXT("return fire"), 0.f, [this]()
+		{
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+			{
+				Cop->FirePressed();
+			}
+		});
+		AddShot(TEXT("17c_return_fire"), 2.8f);
+		AddStep(TEXT("fire result"), 0.f, [this]()
+		{
+			int32 Cuffed = 0;
+			for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+			{
+				Cuffed += It->GetCrime().ToString().Contains(TEXT("Robbery")) ? 1 : 0;
+			}
+			const AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: returned fire: %s; the officer is %s, with %d in the shotgun."), Cuffed > 0 ? TEXT("the robber went down and was cuffed") : TEXT("NO ARREST"),
+				Cop && Cop->IsDowned() ? TEXT("down") : TEXT("on their feet"), Cop ? Cop->GetClip(1) : -1);
+		});
+		AddShot(TEXT("17d_cuffed"), 0.3f);
+		AddStep(TEXT("officer down"), 1.5f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop)
+			{
+				return;
+			}
+			// A stray round from nowhere in particular, then a partner arrives to help.
+			FTOImpact::Shot(Cop, -Cop->GetActorForwardVector() * 30000.f, EFTOWeapon::Pistol, nullptr);
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			TestPassenger = GetWorld()->SpawnActor<AFTOCharacter>(AFTOCharacter::StaticClass(), Cop->GetActorLocation() + Cop->GetActorRightVector() * 200.f, Cop->GetActorRotation(), Params);
+			ViewFrom(Cop->GetActorLocation() + Cop->GetActorRightVector() * 500.f + FVector(0.f, 0.f, 250.f), Cop->GetActorLocation() - FVector(0.f, 0.f, 50.f));
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: officer shot: %s."), Cop->IsDowned() ? TEXT("down") : TEXT("STILL STANDING"));
+		});
+		AddShot(TEXT("17e_officer_down"), 0.2f);
+		AddStep(TEXT("help up"), 2.2f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (Cop && TestPassenger)
+			{
+				const bool bCould = Cop->CanInteract(TestPassenger);
+				Cop->Interact(TestPassenger);
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: partner %s: the officer is %s."), bCould ? TEXT("helped them up") : TEXT("COULDN'T HELP"), Cop->IsDowned() ? TEXT("STILL DOWN") : TEXT("back up"));
+			}
+		});
+		AddShot(TEXT("17f_helped_up"), 0.3f);
+		AddStep(TEXT("tidy up"), 0.3f, [this]()
+		{
+			if (TestPassenger)
+			{
+				TestPassenger->Destroy();
+				TestPassenger = nullptr;
+			}
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
 	}
 
 	// Two players (-FTOSmokeRideAlong): the host parks in a cruiser and waits; the client (whose tour
@@ -911,6 +1054,22 @@ void AFTOSmokeTest::BuildSteps()
 				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn())) { Me->LeaveVehicle(); }
 			});
 			AddShot(TEXT("11c_out"), 0.5f);
+			// A client draws the taser and fires down the street (predicted here, flown for real on the server).
+			AddStep(TEXT("client draws"), 0.6f, [this]()
+			{
+				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn())) { Me->SelectSlot(0); }
+			});
+			AddStep(TEXT("client fires"), 0.f, [this]()
+			{
+				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn()))
+				{
+					Me->FirePressed();
+					const UFTOBallistics* Ballistics = UFTOBallistics::Get(GetWorld());
+					UE_LOG(LogFTO, Display, TEXT("SMOKE: client fired the %s: %d rounds in flight, %d left."), *FTOWeapons::DisplayName(Me->GetDrawnWeapon()).ToString(),
+						Ballistics ? Ballistics->NumInFlight() : -1, Me->GetClip(0));
+				}
+			});
+			AddShot(TEXT("11d_client_fires"), 0.f);
 		}
 	}
 

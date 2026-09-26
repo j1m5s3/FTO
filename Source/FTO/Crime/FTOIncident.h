@@ -3,27 +3,28 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "Crime/FTOCrimeTypes.h"
-#include "Animation/FTOAnimatedActor.h"
 #include "FTOIncident.generated.h"
 
 class USceneComponent;
 class UStaticMeshComponent;
-class USkeletalMeshComponent;
 class UTextRenderComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class AController;
 class AFTOIncident;
 class AFTOCityGenerator;
+class AFTOPerp;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FFTOIncidentEvent, AFTOIncident*);
 
 /**
- * A live incident somewhere in the city.
- * Server-authoritative: the server ticks timers, counts officers on scene and
- * resolves/escalates. Clients only render the replicated state.
+ * A live incident somewhere in the city, with its perp (AFTOPerp) standing at the heart of it.
+ * Server-authoritative: the server ticks timers, counts officers on scene and resolves/escalates. Clients only
+ * render the replicated state. Officers handle it by being on scene long enough, or by putting the perp on the
+ * floor (subduing them), which handles it on the spot.
  */
 UCLASS()
-class FTO_API AFTOIncident : public AActor, public IFTOAnimatedActor
+class FTO_API AFTOIncident : public AActor
 {
 	GENERATED_BODY()
 
@@ -33,7 +34,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	/** Server: configure a freshly spawned incident. */
+	/** Server: configure a freshly spawned incident (and put its perp in place). */
 	void InitIncident(const FFTOIncidentInfo& InInfo, bool bWillBeReported, float InReportDelay);
 
 	UFUNCTION(BlueprintPure, Category="Incident") FFTOIncidentInfo GetInfo() const { return Info; }
@@ -60,8 +61,17 @@ public:
 	/** Server: an officer spotted or called this in personally (counts as caught in the act). */
 	void ReportByOfficer();
 
-	/** Server: make this a moving incident that rides along with Target (car chases). */
+	/** Server: make this a moving incident that rides along with Target (car chases; the perp's in the car). */
 	void FollowActor(AActor* Target);
+
+	/** Server: the perp's been put on the floor by ByPolice: handled, once they're cuffed a moment from now. */
+	void Subdue(AController* ByPolice);
+	bool IsSubdued() const { return bSubdued; }
+	/** Whoever subdued the perp, if anyone (server). */
+	AController* GetSubduedBy() const { return SubduedBy.Get(); }
+
+	/** Whoever's at the heart of it (null for car chases, the perp being in the car). */
+	AFTOPerp* GetPerp() const { return Perp; }
 
 	/** Server: this one's happening inside building Index (AFTOCityGenerator::GetBuildings). */
 	void SetBuilding(int32 Index);
@@ -74,12 +84,6 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Incident")
 	bool IsMobile() const { return bMobile; }
-
-	// IFTOAnimatedActor: the perp gets on with the crime (brawling, dancing, holding up the till with a
-	// finger gun), then puts their hands up when officers arrive.
-	virtual EFTOAnimAction GetAnimAction() const override;
-	virtual EFTOAimPose GetAimPose() const override;
-	virtual float GetAnimSpeed() const override { return 0.f; }
 
 	/** Current chaos per second this incident is pushing into the city (server). */
 	float GetChaosRate() const;
@@ -105,13 +109,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
 	float CleanupDelay = 4.f;
 
+	/** From being put on the floor to being cuffed (the incident's handled then). */
+	UPROPERTY(EditDefaultsOnly, Category="Incident")
+	float SubdueSeconds = 2.6f;
+
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	void ServerTick(float DeltaSeconds);
 	int32 CountOfficersOnScene() const;
 	bool IsWitnessedByAnyOfficer() const;
 	void SetState(EFTOIncidentState NewState);
+	void Resolve();
 
 	UFUNCTION() void OnRep_State();
 	UFUNCTION() void OnRep_Info();
@@ -120,8 +130,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USceneComponent> Root;
 	/** Placeholder "something is happening here" beacon. */
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Beacon;
-	/** Placeholder suspect. */
-	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USkeletalMeshComponent> Suspect;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Label;
 
 	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
@@ -137,14 +145,16 @@ protected:
 	/** Time without an officer on scene, drives escalation. */
 	UPROPERTY(Replicated) float NeglectTime = 0.f;
 	/** Riding along with a moving target; the suspect is inside it, not standing here. */
-	UPROPERTY(ReplicatedUsing=OnRep_Mobile) bool bMobile = false;
+	UPROPERTY(Replicated) bool bMobile = false;
 	/** The building it's in, if it's indoors (the beacon hangs under the ceiling). */
 	UPROPERTY(ReplicatedUsing=OnRep_Info) int32 BuildingIndex = INDEX_NONE;
-
-	UFUNCTION() void OnRep_Mobile();
+	UPROPERTY(Replicated) TObjectPtr<AFTOPerp> Perp;
+	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bSubdued = false;
 
 	// Server-only
 	mutable TWeakObjectPtr<AFTOCityGenerator> City;
+	TWeakObjectPtr<AController> SubduedBy;
+	FTimerHandle SubdueTimer;
 	bool bWillBeReported = false;
 	float ReportAt = 0.f;
 	float WitnessCheckAccumulator = 0.f;

@@ -43,6 +43,15 @@ void UFTOInputConfig::Build()
 	Horn     = MakeAction(TEXT("IA_Horn"),     (int32)EInputActionValueType::Boolean);
 	Camera   = MakeAction(TEXT("IA_Camera"),   (int32)EInputActionValueType::Boolean);
 	Tackle   = MakeAction(TEXT("IA_Tackle"),   (int32)EInputActionValueType::Boolean);
+	Draw     = MakeAction(TEXT("IA_Draw"),     (int32)EInputActionValueType::Boolean);
+	Fire     = MakeAction(TEXT("IA_Fire"),     (int32)EInputActionValueType::Boolean);
+	Reload   = MakeAction(TEXT("IA_Reload"),   (int32)EInputActionValueType::Boolean);
+	NextWeapon = MakeAction(TEXT("IA_NextWeapon"), (int32)EInputActionValueType::Boolean);
+	PrevWeapon = MakeAction(TEXT("IA_PrevWeapon"), (int32)EInputActionValueType::Boolean);
+	for (int32 Slot = 0; Slot < 3; ++Slot)
+	{
+		Slots.Add(MakeAction(*FString::Printf(TEXT("IA_Slot%d"), Slot + 1), (int32)EInputActionValueType::Boolean));
+	}
 
 	// Movement
 	MapAxis2D(Move, EKeys::W, EKeys::S, EKeys::A, EKeys::D);
@@ -89,4 +98,19 @@ void UFTOInputConfig::Build()
 
 	DefaultContext->MapKey(Tackle, EKeys::F);
 	DefaultContext->MapKey(Tackle, EKeys::Gamepad_FaceButton_Right);
+
+	// Weapons
+	DefaultContext->MapKey(Draw, EKeys::RightMouseButton);
+	DefaultContext->MapKey(Draw, EKeys::Gamepad_LeftTrigger);
+	DefaultContext->MapKey(Fire, EKeys::LeftMouseButton);
+	DefaultContext->MapKey(Fire, EKeys::Gamepad_RightTrigger);
+	DefaultContext->MapKey(Reload, EKeys::R);
+	DefaultContext->MapKey(Reload, EKeys::Gamepad_RightShoulder);
+	DefaultContext->MapKey(NextWeapon, EKeys::MouseScrollDown);
+	DefaultContext->MapKey(NextWeapon, EKeys::Gamepad_DPad_Right);
+	DefaultContext->MapKey(PrevWeapon, EKeys::MouseScrollUp);
+	DefaultContext->MapKey(PrevWeapon, EKeys::Gamepad_DPad_Left);
+	DefaultContext->MapKey(Slots[0], EKeys::One);
+	DefaultContext->MapKey(Slots[1], EKeys::Two);
+	DefaultContext->MapKey(Slots[2], EKeys::Three);
 }

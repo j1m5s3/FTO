@@ -18,6 +18,7 @@ namespace
 		FTemplateBuilder& Escalate(float After, FName To = NAME_None) { Tpl.TimeToEscalate = After; Tpl.EscalatesTo = To; return *this; }
 		FTemplateBuilder& Spawn(float Weight, float MinChaos = 0.f, bool bUnique = false) { Tpl.Weight = Weight; Tpl.MinChaos = MinChaos; Tpl.bUnique = bUnique; return *this; }
 		FTemplateBuilder& NoArrest() { Tpl.bArrest = false; return *this; }
+		FTemplateBuilder& Armed() { Tpl.bArmed = true; return *this; }
 	};
 
 	FTemplateBuilder Add(TArray<FFTOCrimeTemplate>& Out, FName Id, const TCHAR* Title, EFTOCrimeTier Tier)
@@ -100,7 +101,7 @@ void UFTOCrimeCatalog::PopulateDefaults()
 	// ---- Major: needs a team -----------------------------------------------------------
 	Add(Templates, "ArmedRobbery", TEXT("Armed Robbery"), E::Major)
 		.Flavor({ TEXT("Corner store held up with a suspiciously banana-shaped weapon."), TEXT("Robber demanded 'all the scratch cards'.") })
-		.Chaos(0.25f, 10.f, 8.f).Work(7.f, 2).Report(1.f, 1.f, 3.f).Escalate(60.f, "HostageSituation").Spawn(0.6f, 15.f);
+		.Chaos(0.25f, 10.f, 8.f).Work(7.f, 2).Report(1.f, 1.f, 3.f).Escalate(60.f, "HostageSituation").Spawn(0.6f, 15.f).Armed();
 
 	Add(Templates, "CarChase", TEXT("Car Chase"), E::Major)
 		.Flavor({ TEXT("Getaway vehicle is an ice cream truck. The music is still playing.") })
@@ -108,7 +109,7 @@ void UFTOCrimeCatalog::PopulateDefaults()
 
 	Add(Templates, "Standoff", TEXT("Barricaded Suspect"), E::Major)
 		.Flavor({ TEXT("Suspect has barricaded themselves inside a bouncy castle.") })
-		.Chaos(0.25f, 12.f, 10.f).Work(8.f, 3).Report(1.f, 0.f, 2.f).Escalate(60.f, "HostageSituation").Spawn(0.3f, 25.f);
+		.Chaos(0.25f, 12.f, 10.f).Work(8.f, 3).Report(1.f, 0.f, 2.f).Escalate(60.f, "HostageSituation").Spawn(0.3f, 25.f).Armed();
 
 	Add(Templates, "Riot", TEXT("Street Brawl"), E::Major)
 		.Flavor({ TEXT("Two rival barbershop quartets. Harmonies have turned violent.") })
@@ -121,11 +122,11 @@ void UFTOCrimeCatalog::PopulateDefaults()
 	// ---- Critical: whole-team set pieces -----------------------------------------------
 	Add(Templates, "BankHeist", TEXT("Bank Heist"), E::Critical)
 		.Flavor({ TEXT("Crew in matching clown masks. One is a real clown."), TEXT("Vault drill is plugged into the bank's own extension cord.") })
-		.Chaos(0.6f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(120.f).Spawn(0.25f, 40.f, true);
+		.Chaos(0.6f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(120.f).Spawn(0.25f, 40.f, true).Armed();
 
 	Add(Templates, "HostageSituation", TEXT("Hostage Situation"), E::Critical)
 		.Flavor({ TEXT("Hostage is a very calm goldfish. Demands include a bigger bowl.") })
-		.Chaos(0.6f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(120.f).Spawn(0.15f, 50.f, true);
+		.Chaos(0.6f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(120.f).Spawn(0.15f, 50.f, true).Armed();
 
 	Add(Templates, "TerrorPlot", TEXT("Evil Masterplan"), E::Critical)
 		.Flavor({ TEXT("A villain is threatening to release 10,000 bees at City Hall."), TEXT("Suspicious device ticking downtown. It might be a very loud clock.") })
@@ -166,6 +167,7 @@ FFTOIncidentInfo UFTOCrimeCatalog::RollIncident(const FFTOCrimeTemplate& Templat
 	Info.TimeToEscalate = Template.TimeToEscalate;
 	Info.EscalatesTo = Template.EscalatesTo;
 	Info.bArrest = Template.bArrest;
+	Info.bArmed = Template.bArmed;
 
 	FString Description = Template.Flavor.Num() > 0
 		? Template.Flavor[Rng.RandRange(0, Template.Flavor.Num() - 1)].ToString()
@@ -196,6 +198,7 @@ FFTOIncidentInfo UFTOCrimeCatalog::RollIncident(const FFTOCrimeTemplate& Templat
 				Info.ChaosRelief *= M.ChaosMultiplier;
 				Info.ResolveSeconds *= M.ResolveMultiplier;
 				Info.OfficersRequired = FMath::Clamp(Info.OfficersRequired + M.ExtraOfficers, 1, 4);
+				Info.bArmed |= M.Id == TEXT("Armed") && Info.bArrest;
 				break;
 			}
 		}

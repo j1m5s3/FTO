@@ -1,6 +1,7 @@
 #include "City/FTOCityGenerator.h"
 #include "City/FTOCityPalette.h"
 #include "Crime/FTOCrimeSpawnPoint.h"
+#include "Weapons/FTOArmoryRack.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -499,6 +500,22 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 		}
 	}
 	UE_LOG(LogFTO, Log, TEXT("City: %d indoor crime spots."), Indoor);
+
+	// The armory: one rack each of pistols, shotguns and rifles to sign out.
+	if (const FFTOBuilding* Precinct = FindBuilding(EFTOBuildingType::Precinct))
+	{
+		const EFTOWeapon Racks[] = { EFTOWeapon::Pistol, EFTOWeapon::Shotgun, EFTOWeapon::Rifle };
+		for (int32 i = 0; i < Precinct->ArmorySpots.Num() && i < int32(UE_ARRAY_COUNT(Racks)); ++i)
+		{
+			const FTransform& Spot = Precinct->ArmorySpots[i];
+			FActorSpawnParameters Params;
+			Params.Owner = this;
+			if (AFTOArmoryRack* Rack = World->SpawnActor<AFTOArmoryRack>(AFTOArmoryRack::StaticClass(), Spot.GetLocation() + FVector(0.f, 0.f, 100.f), Spot.Rotator(), Params))
+			{
+				Rack->SetWeapon(Racks[i]);
+			}
+		}
+	}
 
 	// Officers clock in at the precinct parking lot.
 	for (int32 i = 0; i < 4; ++i)

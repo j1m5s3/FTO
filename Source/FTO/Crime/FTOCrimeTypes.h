@@ -66,6 +66,8 @@ struct FTO_API FFTOCrimeTemplate
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bUnique = false;
 	/** A perp gets cuffed when this is handled (false for cats, lost tourists, tickets...). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bArrest = true;
+	/** The perp has a gun (hold-ups, stand-offs) and shoots at officers who come close. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bArmed = false;
 };
 
 /** Random twist layered onto a template to keep shifts fresh. */
@@ -105,6 +107,8 @@ struct FTO_API FFTOIncidentInfo
 	UPROPERTY(BlueprintReadOnly) float TimeToEscalate = 60.f;
 	UPROPERTY(BlueprintReadOnly) FName EscalatesTo;
 	UPROPERTY(BlueprintReadOnly) bool bArrest = true;
+	/** The perp has a gun (the template's, or the "Armed" twist). */
+	UPROPERTY(BlueprintReadOnly) bool bArmed = false;
 };
 
 namespace FTOCrime

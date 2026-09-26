@@ -27,9 +27,6 @@ KIT_SLOT_MATERIALS = {
     "glass": "/Game/FTO/Materials/M_FTOGlass",
     "glow": "/Game/FTO/Materials/MI_FTOGlow",
 }
-# Sockets the game looks up on vehicle meshes (Tools/Blender/build_vehicles.py).
-VEHICLE_SOCKETS = ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR", "Seat_Driver", "Seat_Passenger", "Seat_RearL",
-                   "Seat_RearR", "Cam_Driver", "Cam_Passenger", "Lightbar"]
 # Blender works in metres; Unreal in centimetres.
 METRES_TO_CM = 1.0  # FBX from Tools/Blender already carries centimetres
 
@@ -48,12 +45,19 @@ CHARACTERS = [
      "clips": [], "dest": "/Game/FTO/Characters/Civilians", "skeleton": OFFICER_SKELETON},
 ]
 
-# Static meshes (vehicles, props): folder, names, destination.
+# Static meshes (vehicles, weapons): folder, names, the sockets the game looks up on them, destination, and the
+# FTO_IMPORT key that picks the group alone.
 STATICS = [
-    {"folder": "Vehicles",
+    {"key": "vehicles", "folder": "Vehicles",
      "meshes": ["SM_Car_Sedan", "SM_Car_Hatchback", "SM_Car_Van", "SM_Car_Pickup", "SM_Car_Taxi",
                 "SM_Car_IceCream", "SM_Car_Cruiser", "SM_Wheel"],
+     "sockets": ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR", "Seat_Driver", "Seat_Passenger", "Seat_RearL",
+                 "Seat_RearR", "Cam_Driver", "Cam_Passenger", "Lightbar"],
      "dest": "/Game/FTO/Vehicles"},
+    {"key": "weapons", "folder": "Weapons",
+     "meshes": ["SM_Taser", "SM_Pistol", "SM_Shotgun", "SM_Rifle"],
+     "sockets": ["Muzzle"],
+     "dest": "/Game/FTO/Weapons"},
 ]
 
 eal = unreal.EditorAssetLibrary
@@ -170,22 +174,23 @@ def import_statics(group):
         eal.save_loaded_asset(mesh)
         bounds = mesh.get_bounds()
         sockets = []
-        for socket_name in VEHICLE_SOCKETS:
+        for socket_name in group["sockets"]:
+            # Anything attached here (wheels, people, cameras, muzzle flashes) must attach at 1:1 and square to
+            # the mesh. Sockets from FBX empties carry the axis conversion (a 90 degree roll), which lays seated
+            # people on their backs and points cameras at the sky.
             socket = mesh.find_socket(socket_name)
-            if socket:
-                # Anything attached here (wheels, people, cameras) must attach at 1:1 and square to
-                # the vehicle. Sockets from FBX empties carry the axis conversion (a 90 degree roll),
-                # which lays seated people on their backs and points cameras at the sky.
-                scale = socket.get_editor_property("relative_scale")
-                if abs(scale.x - 1.0) > 1e-3 or abs(scale.y - 1.0) > 1e-3 or abs(scale.z - 1.0) > 1e-3:
-                    unreal.log(f"FTO: {name}.{socket_name} scale {scale.x:.1f} reset to 1")
-                    socket.set_editor_property("relative_scale", unreal.Vector(1.0, 1.0, 1.0))
-                rot = socket.get_editor_property("relative_rotation")
-                if abs(rot.roll) > 1e-3 or abs(rot.pitch) > 1e-3 or abs(rot.yaw) > 1e-3:
-                    unreal.log(f"FTO: {name}.{socket_name} rotation ({rot.roll:.0f},{rot.pitch:.0f},{rot.yaw:.0f}) reset to 0")
-                    socket.set_editor_property("relative_rotation", unreal.Rotator(0.0, 0.0, 0.0))
-                loc = socket.get_editor_property("relative_location")
-                sockets.append(f"{socket_name}=({loc.x:.0f},{loc.y:.0f},{loc.z:.0f})")
+            if not socket:
+                continue
+            scale = socket.get_editor_property("relative_scale")
+            if abs(scale.x - 1.0) > 1e-3 or abs(scale.y - 1.0) > 1e-3 or abs(scale.z - 1.0) > 1e-3:
+                unreal.log(f"FTO: {name}.{socket_name} scale {scale.x:.1f} reset to 1")
+                socket.set_editor_property("relative_scale", unreal.Vector(1.0, 1.0, 1.0))
+            rot = socket.get_editor_property("relative_rotation")
+            if abs(rot.roll) > 1e-3 or abs(rot.pitch) > 1e-3 or abs(rot.yaw) > 1e-3:
+                unreal.log(f"FTO: {name}.{socket_name} rotation ({rot.roll:.0f},{rot.pitch:.0f},{rot.yaw:.0f}) reset to 0")
+                socket.set_editor_property("relative_rotation", unreal.Rotator(0.0, 0.0, 0.0))
+            loc = socket.get_editor_property("relative_location")
+            sockets.append(f"{socket_name}=({loc.x:.0f},{loc.y:.0f},{loc.z:.0f})")
         unreal.log(f"FTO: {name} extent {bounds.box_extent} slots {slots} sockets {sockets}")
         eal.save_loaded_asset(mesh)
     eal.save_directory(destination, only_if_is_dirty=False, recursive=True)
@@ -303,7 +308,7 @@ def ensure_physics_assets():
             unreal.log(f"FTO: {mesh_name} physics asset has {bodies} bodies")
 
 
-# FTO_IMPORT=characters|statics|kit limits the run (default: everything).
+# FTO_IMPORT=characters|statics|vehicles|weapons|kit limits the run (default: everything).
 ONLY = os.environ.get("FTO_IMPORT", "").lower()
 
 if ONLY in ("", "characters"):
@@ -311,8 +316,8 @@ if ONLY in ("", "characters"):
         import_group(character_group)
     ensure_physics_assets()
 
-if ONLY in ("", "statics"):
-    for static_group in STATICS:
+for static_group in STATICS:
+    if ONLY in ("", "statics", static_group["key"]):
         import_statics(static_group)
 
 if ONLY in ("", "kit"):

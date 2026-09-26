@@ -26,6 +26,9 @@ public:
 	/** Short-lived message stacked above the prompt area. */
 	void AddToast(const FText& Message, const FLinearColor& Color);
 
+	/** One of our rounds landed on someone (a bad hit: a citizen or a partner). */
+	void ShowHitMarker(bool bBadHit);
+
 	/** Max dispatch entries listed at once. */
 	UPROPERTY(EditDefaultsOnly, Category="HUD")
 	int32 MaxDispatchRows = 7;
@@ -43,6 +46,8 @@ protected:
 	void DrawInteractPrompt();
 	void DrawCruiserPanel();
 	void DrawEscortPanel();
+	/** Crosshair, hit marker, the three weapon slots and their ammo, and the "you're down" banner. */
+	void DrawWeaponPanel();
 
 	/** Local stingers: radio chatter, chimes, alarms, shift fanfares. */
 	void UpdateAudioCues(const AFTOGameState* GS);
@@ -69,6 +74,9 @@ protected:
 		float ExpireTime = 0.f;
 	};
 	TArray<FToast> Toasts;
+
+	float HitMarkerUntil = 0.f;
+	bool bHitMarkerBad = false;
 
 	// Audio cue bookkeeping
 	TMap<TWeakObjectPtr<const AFTOIncident>, EFTOIncidentState> SeenIncidentStates;

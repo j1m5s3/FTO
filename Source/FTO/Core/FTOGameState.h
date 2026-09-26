@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
+#include "Weapons/FTOWeapons.h"
 #include "FTOGameState.generated.h"
 
 class AFTOIncident;
@@ -40,6 +41,13 @@ struct FFTOSoundSet
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Click;
 	/** Cartoon thump-and-boing when somebody gets knocked flying. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Bonk;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> ShotPistol;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> ShotShotgun;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> ShotRifle;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Taser;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Reload;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Ricochet;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> DryFire;
 	/** Shared 3D falloff for sounds in the world. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundAttenuation> World;
 };
@@ -63,6 +71,13 @@ public:
 	/** Server: play a sound in the world for everyone. */
 	UFUNCTION(NetMulticast, Unreliable)
 	void MulticastPlaySound(USoundBase* Sound, FVector_NetQuantize Location, float Volume = 1.f);
+
+	/**
+	 * Server: someone fired. Every other machine flies its own copy of the rounds to draw them (the server's copy
+	 * decides the hits, and the shooter's own machine already drew theirs).
+	 */
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastShot(AActor* Shooter, EFTOWeapon Weapon, FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed, bool bAimed);
 
 	UPROPERTY(EditDefaultsOnly, Category="FTO|Audio")
 	FFTOSoundSet SoundSet;

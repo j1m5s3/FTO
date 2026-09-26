@@ -1,4 +1,5 @@
 #include "Crime/FTOIncident.h"
+#include "Crime/FTOPerp.h"
 #include "Core/FTOCharacter.h"
 #include "City/FTOCityGenerator.h"
 #include "EngineUtils.h"
@@ -10,14 +11,11 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
-#include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Art/FTOArt.h"
-#include "Animation/FTOCharacterAnimInstance.h"
-#include "Components/SkeletalMeshComponent.h"
-#include "Engine/SkeletalMesh.h"
 
 AFTOIncident::AFTOIncident()
 {
@@ -43,20 +41,6 @@ AFTOIncident::AFTOIncident()
 	Beacon->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Beacon->SetCastShadow(false);
 
-	// The perp: striped jumper, mask, bag of loot. Shares the officer rig and clips.
-	static ConstructorHelpers::FObjectFinder<USkeletalMesh> SuspectAsset(TEXT("/Game/FTO/Characters/Civilians/SK_Suspect.SK_Suspect"));
-	Suspect = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Suspect"));
-	Suspect->SetupAttachment(Root);
-	Suspect->SetRelativeRotation(FRotator(0.f, -90.f, 0.f)); // Blender models face +Y
-	Suspect->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Suspect->SetAnimationMode(EAnimationMode::AnimationBlueprint);
-	Suspect->SetAnimInstanceClass(UFTOCharacterAnimInstance::StaticClass());
-	Suspect->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
-	if (SuspectAsset.Succeeded())
-	{
-		Suspect->SetSkeletalMeshAsset(SuspectAsset.Object);
-	}
-
 	Label = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Label"));
 	Label->SetupAttachment(Root);
 	Label->SetRelativeLocation(FVector(0.f, 0.f, 620.f));
@@ -77,6 +61,8 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, NeglectTime);
 	DOREPLIFETIME(AFTOIncident, bMobile);
 	DOREPLIFETIME(AFTOIncident, BuildingIndex);
+	DOREPLIFETIME(AFTOIncident, Perp);
+	DOREPLIFETIME(AFTOIncident, bSubdued);
 }
 
 void AFTOIncident::SetBuilding(int32 Index)
@@ -92,6 +78,17 @@ void AFTOIncident::BeginPlay()
 	RefreshVisuals();
 }
 
+void AFTOIncident::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// The perp goes with the incident (once handled they've been swapped for a cuffed arrestee anyway).
+	if (HasAuthority() && IsValid(Perp))
+	{
+		Perp->Destroy();
+	}
+	GetWorldTimerManager().ClearTimer(SubdueTimer);
+	Super::EndPlay(EndPlayReason);
+}
+
 void AFTOIncident::InitIncident(const FFTOIncidentInfo& InInfo, bool bInWillBeReported, float InReportDelay)
 {
 	check(HasAuthority());
@@ -100,6 +97,17 @@ void AFTOIncident::InitIncident(const FFTOIncidentInfo& InInfo, bool bInWillBeRe
 	bWillBeReported = bInWillBeReported;
 	ReportAt = StartTime + InReportDelay;
 	State = EFTOIncidentState::Unreported;
+
+	// Whoever's at the heart of it stands right here, facing the way the incident faces: a crook for crimes, a
+	// citizen for calls (the cat's owner, the lost tourist).
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Perp = GetWorld()->SpawnActor<AFTOPerp>(AFTOPerp::StaticClass(), GetActorLocation() + FVector(0.f, 0.f, AFTOPedestrian::HalfHeight),
+		FRotator(0.f, GetActorRotation().Yaw, 0.f), Params);
+	if (Perp)
+	{
+		Perp->Setup(this, Info.bArrest, Info.bArmed, GetTypeHash(GetActorLocation()) + int32(StartTime * 100.f));
+	}
 	RefreshVisuals();
 }
 
@@ -118,7 +126,7 @@ float AFTOIncident::GetUrgency() const
 
 float AFTOIncident::GetChaosRate() const
 {
-	if (!IsActive())
+	if (!IsActive() || bSubdued)
 	{
 		return 0.f;
 	}
@@ -153,16 +161,48 @@ void AFTOIncident::FollowActor(AActor* Target)
 	{
 		return;
 	}
+	// The perp is in the car.
+	if (IsValid(Perp))
+	{
+		Perp->Destroy();
+		Perp = nullptr;
+	}
 	// Attachment only replicates for actors that replicate movement.
 	SetReplicateMovement(true);
 	AttachToActor(Target, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	bMobile = true;
-	OnRep_Mobile();
 }
 
-void AFTOIncident::OnRep_Mobile()
+void AFTOIncident::Subdue(AController* ByPolice)
 {
-	Suspect->SetVisibility(!bMobile);
+	check(HasAuthority());
+	if (!IsActive() || bSubdued)
+	{
+		return;
+	}
+	// Caught red-handed counts as witnessed (and as reported, if nobody had called it in yet).
+	bSubdued = true;
+	SubduedBy = ByPolice;
+	if (State == EFTOIncidentState::Unreported)
+	{
+		bWitnessed = true;
+		OnReported.Broadcast(this);
+	}
+	Progress = 1.f;
+	SetState(EFTOIncidentState::Responding);
+	GetWorldTimerManager().SetTimer(SubdueTimer, this, &AFTOIncident::Resolve, SubdueSeconds, false);
+}
+
+void AFTOIncident::Resolve()
+{
+	if (!IsActive())
+	{
+		return;
+	}
+	Progress = 1.f;
+	SetState(EFTOIncidentState::Resolved);
+	OnResolved.Broadcast(this);
+	SetLifeSpan(CleanupDelay);
 }
 
 void AFTOIncident::Tick(float DeltaSeconds)
@@ -189,7 +229,8 @@ void AFTOIncident::Tick(float DeltaSeconds)
 
 void AFTOIncident::ServerTick(float DeltaSeconds)
 {
-	if (!IsActive())
+	// Subdued: nothing to do but wait for the cuffs.
+	if (!IsActive() || bSubdued)
 	{
 		return;
 	}
@@ -241,9 +282,7 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 
 		if (Progress >= 1.f)
 		{
-			SetState(EFTOIncidentState::Resolved);
-			OnResolved.Broadcast(this);
-			SetLifeSpan(CleanupDelay);
+			Resolve();
 		}
 	}
 	else
@@ -318,7 +357,8 @@ bool AFTOIncident::IsWitnessedByAnyOfficer() const
 		return false;
 	}
 
-	const FVector Target = Suspect->GetComponentLocation() + FVector(0.f, 0.f, 110.f);
+	// Can any officer nearby see the perp's chest?
+	const FVector Target = IsValid(Perp) ? Perp->GetActorLocation() + FVector(0.f, 0.f, 20.f) : GetActorLocation() + FVector(0.f, 0.f, 110.f);
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOWitness), false, this);
 
 	for (const APlayerState* PS : GS->PlayerArray)
@@ -332,6 +372,7 @@ bool AFTOIncident::IsWitnessedByAnyOfficer() const
 		Params.ClearIgnoredSourceObjects();
 		Params.AddIgnoredActor(this);
 		Params.AddIgnoredActor(Pawn);
+		Params.AddIgnoredActor(Perp);
 
 		FHitResult Hit;
 		const FVector Eye = Pawn->GetPawnViewLocation();
@@ -370,7 +411,7 @@ void AFTOIncident::RefreshVisuals()
 	}
 
 	FLinearColor Color = FTOCrime::TierColor(Info.Tier);
-	if (State == EFTOIncidentState::Resolved)
+	if (State == EFTOIncidentState::Resolved || bSubdued)
 	{
 		Color = FLinearColor(0.1f, 1.f, 0.3f);
 	}
@@ -391,8 +432,6 @@ void AFTOIncident::RefreshVisuals()
 	Beacon->SetRelativeScale3D(IsIndoors() ? FVector(0.6f, 0.6f, 0.8f) : FVector(1.2f, 1.2f, 1.6f));
 	Label->SetRelativeLocation(FVector(0.f, 0.f, IsIndoors() ? 345.f : 620.f));
 	Label->SetWorldSize(IsIndoors() ? 34.f : 60.f);
-	// Handled perps are now a cuffed arrestee (or the incident is mobile and they're in the car).
-	Suspect->SetVisibility(!bMobile && !(State == EFTOIncidentState::Resolved && Info.bArrest));
 
 	FText LabelText = Info.Title;
 	switch (State)
@@ -400,64 +439,13 @@ void AFTOIncident::RefreshVisuals()
 	case EFTOIncidentState::Unreported: LabelText = INVTEXT("!"); break;
 	case EFTOIncidentState::Resolved:   LabelText = FText::Format(INVTEXT("{0}\nHANDLED"), Info.Title); break;
 	case EFTOIncidentState::Failed:     LabelText = FText::Format(INVTEXT("{0}\nWENT COLD"), Info.Title); break;
-	default: break;
+	default:
+		if (bSubdued)
+		{
+			LabelText = FText::Format(INVTEXT("{0}\nSUBDUED"), Info.Title);
+		}
+		break;
 	}
 	Label->SetText(LabelText);
 	Label->SetTextRenderColor(Color.ToFColor(true));
-}
-
-namespace
-{
-	/** Crimes where the perp waves a (finger) gun about. */
-	bool IsHoldUp(FName Crime)
-	{
-		return Crime == TEXT("ArmedRobbery") || Crime == TEXT("BankHeist") || Crime == TEXT("HostageSituation") || Crime == TEXT("Standoff");
-	}
-
-	/** What the perp is up to before the police arrive. */
-	EFTOAnimAction PerpAction(FName Crime)
-	{
-		if (Crime == TEXT("BarFight") || Crime == TEXT("Riot") || Crime == TEXT("Vandalism"))
-		{
-			return EFTOAnimAction::Punch;
-		}
-		if (Crime == TEXT("NoiseComplaint"))
-		{
-			return EFTOAnimAction::Dance;
-		}
-		if (Crime == TEXT("DomesticDispute"))
-		{
-			return EFTOAnimAction::Talk;
-		}
-		if (Crime == TEXT("Shoplifting") || Crime == TEXT("Burglary") || Crime == TEXT("TerrorPlot") || Crime == TEXT("StolenGoods"))
-		{
-			return EFTOAnimAction::Work; // rummaging, stuffing pockets, fiddling with a ticking thing
-		}
-		if (IsHoldUp(Crime))
-		{
-			return EFTOAnimAction::None; // the gun hand says it all
-		}
-		return EFTOAnimAction::Interact; // up to no good
-	}
-}
-
-EFTOAnimAction AFTOIncident::GetAnimAction() const
-{
-	switch (State)
-	{
-	case EFTOIncidentState::Unreported:
-	case EFTOIncidentState::Reported:
-		return PerpAction(Info.TemplateId);
-	case EFTOIncidentState::Responding:
-	case EFTOIncidentState::Resolved:
-		return EFTOAnimAction::HandsUp;		// it's a fair cop
-	default:
-		return EFTOAnimAction::None;
-	}
-}
-
-EFTOAimPose AFTOIncident::GetAimPose() const
-{
-	const bool bBeforeThePolice = State == EFTOIncidentState::Unreported || State == EFTOIncidentState::Reported;
-	return bBeforeThePolice && IsHoldUp(Info.TemplateId) ? EFTOAimPose::Pistol : EFTOAimPose::None;
 }

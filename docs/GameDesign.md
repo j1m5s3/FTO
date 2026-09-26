@@ -103,8 +103,14 @@ Done:
   report card), getaway cars plough through crowds, and officers have a flying tackle. Knocked-down characters ease
   out of the ragdoll into sitting up dazed with stars circling, then get back to their feet.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (destruction, armory and ballistics, arrests v2, radio, scoring, Steam
-invites).
+- Phase 2: the armory and real ballistics. Officers carry up to three guns (a taser to start; pistol, shotgun and
+  rifle signed out of the precinct armory racks) with magazines, spare ammo and reloads. Every round is a real
+  projectile with muzzle velocity, gravity and drag, flown on every machine: it drops over distance, punches through
+  shop glass, ricochets off shallow hits and knocks whoever it lands on into a ragdoll. Armed perps (hold-ups,
+  stand-offs, the heist) draw on officers who come close; floor one and the call is handled on the spot. Hitting a
+  citizen costs chaos, and an officer hit by gunfire stays down until a partner helps them up.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (arrests v2, destruction, radio, scoring, Steam invites).
 
 Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame

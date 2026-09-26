@@ -46,6 +46,12 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   suspicious character, taking a cruiser, or riding shotgun in one someone's already driving. F (B on a gamepad) is
   a flying tackle that bowls over whoever's in front (citizens cost a little chaos). Cuffed suspects follow in your
   footsteps: walk them into the precinct's holding cells to book them.
+- **Weapons** (on foot): every officer carries a taser; the precinct armory racks hand out a pistol, a shotgun and a
+  rifle (three slots; E at a rack takes one, swaps it for the one in hand when you're full, or restocks its ammo).
+  1, 2, 3 or the mouse wheel pick a weapon (the same number again puts it away), right mouse raises the last one
+  used (left trigger on a gamepad), left mouse fires (right trigger), R reloads (right bumper). A perp put on the
+  floor is subdued and cuffed on the spot; hitting a citizen costs chaos. Armed perps shoot back: an officer who's hit
+  goes down until a partner helps them up (E), or comes round after a while.
 - **Driving a cruiser**: W/S to drive and brake, A/D to steer, Space for the handbrake (drift). Q switches the lights
   and siren (offending cars ahead pull over), H honks. C (right stick click) swaps the chase camera for the view from
   the seat, and the mouse / right stick glances around (it eases back to the road). E gets out. Anyone you hit at
@@ -63,7 +69,8 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
 Along the way it books a suspect into the cells, looks inside every kind of building (with their people), stages a
 hold-up and a bar brawl, questions a crook, walks through front doors, checks that shop windows let sight through,
-drives into three citizens, and tackles one; the log (`SMOKE:` lines) reports each check.
+drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (who's
+subdued and cuffed), and has a downed officer helped up; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around and gets out.
 
@@ -82,6 +89,9 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
   root goes), `Cam_*` (seat-view camera) and the cruiser's `Lightbar`. Seats are sized from the officer's car-seat
   pose (`build_officer.car_legs`); `--preview <dir>` also renders roofless cutaways with posed occupants and the
   driver's-eye view to check the fit.
+- `Tools/Blender/build_weapons.py` builds the taser, pistol, shotgun and rifle into `Art/Source/Weapons`: barrel along
+  +X with the grip at the origin (the game puts the grip in the hand and turns the barrel along the aim) and a
+  `SOCKET_Muzzle` where rounds leave. `--preview <dir>` renders each one.
 - `Tools/Blender/build_kit.py` builds the city's building kit into `Art/Source/Kit`: wall panels on a 2 m grid (plain,
   window, door, shopfront, loading door; ground floor 4 m, upper floors 3.2 m), corners, parapets, cornices, awnings,
   shop signs, rooftop units, gable roofs, porches and fences, furniture for every interior (shop, diner, bar, office,
@@ -97,7 +107,7 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
   officers come near and empties them once they've gone.
 - **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (vertex colours, materials by slot name,
   sockets squared up to scale 1 and no rotation, Nanite for opaque kit pieces) and can be re-run after any Blender change:
-  (`FTO_IMPORT=characters`, `statics` or `kit` limits a run to one group)
+  (`FTO_IMPORT=characters`, `statics`, `vehicles`, `weapons` or `kit` limits a run to one group)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
 - **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
   radio squelch, chimes, alarm, fanfare, sad trombone, the knockdown bonk) into `Art/Source/Audio` and imports them
