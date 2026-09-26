@@ -31,6 +31,15 @@ Or right-click `FTO.uproject` → *Generate Visual Studio project files* and bui
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
 
 ## Art pipeline
+- **Characters**: `Tools/Blender/build_officer.py` models, rigs and animates the officer entirely from code and exports FBX
+  to `Art/Source/Characters/Officer` (plus an editable `Officer.blend`):
+  `blender -b --factory-startup -P Tools/Blender/build_officer.py -- --out Art/Source/Characters/Officer --preview <dir>`
+  (`--preview` renders turnaround and clip frames; `Tools/Blender/contact_sheet.py` tiles them into one image.)
+- **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (metres to centimetres, vertex colours,
+  master material) and can be re-run after any Blender change:
+  `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
+- **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
+  idle/walk/run by speed, with jump, interact (tickets, scenes) and cheer layered on top.
 - **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials/M_FTOBase` (vertex colour × `Color` tint, `Emissive`).
   Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
 - Everything uses that one material. Engine primitives have no vertex colour, so they just take `Color`.

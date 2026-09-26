@@ -193,6 +193,8 @@ void AFTOPedestrian::Interact(AFTOCharacter* Officer)
 		return;
 	}
 
+	Officer->PlayTimedAction(EFTOAnimAction::Interact, 1.5f);
+
 	// Stop and face the officer for a moment.
 	Hold();
 	SetActorRotation(FRotator(0.f, (Officer->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));

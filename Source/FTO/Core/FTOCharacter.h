@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
+#include "Animation/FTOAnimatedActor.h"
 #include "FTOCharacter.generated.h"
 
 class USpringArmComponent;
@@ -12,11 +13,12 @@ class UMaterialInterface;
 struct FInputActionValue;
 
 /**
- * A player officer. Until real art lands the officer is a chunky "bean cop"
- * built from engine primitives, tinted with the player's badge colour.
+ * A player officer: the in-house Blender-built cop (Tools/Blender/build_officer.py) with its
+ * uniform tinted in the player's badge colour. Falls back to a "bean cop" made of engine
+ * primitives if the art hasn't been imported.
  */
 UCLASS()
-class FTO_API AFTOCharacter : public ACharacter
+class FTO_API AFTOCharacter : public ACharacter, public IFTOAnimatedActor
 {
 	GENERATED_BODY()
 
@@ -29,6 +31,14 @@ public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual void Tick(float DeltaSeconds) override;
+
+	/** Server: play a full-body action for a while (ticket writing, chatting). */
+	void PlayTimedAction(EFTOAnimAction Action, float Duration);
+
+	// IFTOAnimatedActor
+	virtual EFTOAnimAction GetAnimAction() const override;
+	virtual bool IsAnimAirborne() const override;
+	virtual float GetAnimSpeed() const override;
 
 	/** The interactable the local officer would use if they pressed Interact now. */
 	AActor* GetFocusedInteractable() const { return FocusedInteractable.Get(); }
@@ -69,6 +79,17 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> UniformMaterial;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> HeadMaterial;
+
+	/** Short replicated full-body action (e.g. writing a ticket) everyone should see. */
+	UPROPERTY(Replicated)
+	EFTOAnimAction TimedAction = EFTOAnimAction::None;
+
+	/** Server world time the timed action ends. */
+	UPROPERTY(Replicated)
+	float TimedActionEnd = 0.f;
 
 	UPROPERTY(ReplicatedUsing=OnRep_Sprinting)
 	bool bSprinting = false;

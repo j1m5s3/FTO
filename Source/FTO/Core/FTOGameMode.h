@@ -36,6 +36,7 @@ public:
 	UFUNCTION(Exec) void FTOSpawnCrime(FName TemplateId);
 	UFUNCTION(Exec) void FTOAddChaos(float Amount);
 	UFUNCTION(Exec) void FTOSkipBriefing();
+	UFUNCTION(Exec) void FTOEndShift(bool bSurvived = true);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")
