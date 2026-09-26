@@ -7,6 +7,7 @@
 #include "Core/FTOPlayerState.h"
 #include "Crime/FTOCrimeDirector.h"
 #include "UI/FTOHUD.h"
+#include "Vehicles/FTOCruiser.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
@@ -59,6 +60,23 @@ void AFTOGameMode::StartPlay()
 		if (AFTOAmbientPopulation* Population = GetWorld()->SpawnActor<AFTOAmbientPopulation>(AFTOAmbientPopulation::StaticClass(), FTransform::Identity))
 		{
 			Population->Populate(CityGenerator, ShiftSeed);
+		}
+	}
+
+	// A cruiser per badge colour, parked in the precinct lot.
+	if (CityGenerator)
+	{
+		const TArray<FTransform> Spots = CityGenerator->GetPrecinctParkingSpots();
+		for (int32 i = 0; i < Spots.Num() && i < MaxOfficers; ++i)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+			FTransform Spawn = Spots[i];
+			Spawn.AddToTranslation(FVector(0.f, 0.f, AFTOCruiser::RideHeight));
+			if (AFTOCruiser* Cruiser = GetWorld()->SpawnActor<AFTOCruiser>(AFTOCruiser::StaticClass(), Spawn, Params))
+			{
+				Cruiser->SetStripeColor(AFTOPlayerState::ColorForBadge(i));
+			}
 		}
 	}
 

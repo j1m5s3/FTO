@@ -1,6 +1,9 @@
 #include "Dev/FTOSmokeTest.h"
 #include "City/FTOCityGenerator.h"
 #include "City/FTOTrafficCar.h"
+#include "Core/FTOCharacter.h"
+#include "Core/FTOPlayerController.h"
+#include "Vehicles/FTOCruiser.h"
 #include "Core/FTOGameMode.h"
 #include "Core/FTOGameState.h"
 #include "Crime/FTOCrimeDirector.h"
@@ -22,7 +25,7 @@
 namespace
 {
 	// Seconds to wait after each step before running the next one.
-	const float StepDelays[] = { 1.f, 1.5f, 0.5f, 0.8f, 0.5f, 0.5f, 4.f, 1.f, 3.f, 1.f, 3.f, 1.f, 3.f, 2.f, 1.5f, 1.f, 2.f, 1.f, 0.05f, 1.f, 0.f };
+	const float StepDelays[] = { 1.f, 1.5f, 0.5f, 0.8f, 0.5f, 0.5f, 4.f, 1.f, 3.f, 1.f, 3.f, 1.f, 3.f, 2.f, 1.5f, 1.f, 2.f, 1.f, 0.05f, 1.f, 2.5f, 1.5f, 1.2f, 1.f, 0.f };
 }
 
 AFTOSmokeTest::AFTOSmokeTest()
@@ -317,9 +320,71 @@ void AFTOSmokeTest::RunStep(int32 Step)
 		break;
 
 	case 20:
-		if (PC && Officer)
+		// Hop in the nearest cruiser and floor it with the lights on (server/standalone only).
+		if (PC && PC->GetHUD())
 		{
-			PC->SetViewTargetWithBlend(Officer, 0.f);
+			PC->GetHUD()->bShowHUD = true;
+		}
+		if (GM && Officer)
+		{
+			if (AFTOGameState* GS = World->GetGameState<AFTOGameState>())
+			{
+				GS->SetShiftPhase(EFTOShiftPhase::OnDuty);
+			}
+			AFTOCruiser* Nearest = nullptr;
+			for (TActorIterator<AFTOCruiser> It(World); It; ++It)
+			{
+				if (!Nearest || FVector::DistSquared(It->GetActorLocation(), Officer->GetActorLocation()) < FVector::DistSquared(Nearest->GetActorLocation(), Officer->GetActorLocation()))
+				{
+					Nearest = *It;
+				}
+			}
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(Officer); Nearest && Cop)
+			{
+				Nearest->Interact(Cop);
+				Nearest->SetSiren(true);
+				Nearest->SetAutopilot(true, 1.f, 0.35f);
+				TestCruiser = Nearest;
+			}
+		}
+		else if (!GM && PC)
+		{
+			// Client: ask the server for a car; we'll drive it ourselves next step.
+			if (AFTOPlayerController* FTOPC = Cast<AFTOPlayerController>(PC))
+			{
+				FTOPC->ServerEnterNearestCruiser();
+			}
+		}
+		break;
+
+	case 21:
+		if (!GM && PC)
+		{
+			if (AFTOCruiser* Mine = Cast<AFTOCruiser>(PC->GetPawn()))
+			{
+				Mine->SetAutopilot(true, 1.f, 0.2f);
+				TestCruiser = Mine;
+			}
+		}
+		Shot(TEXT("09_driving"));
+		break;
+
+	case 22:
+		if (TestCruiser)
+		{
+			TestCruiser->SetAutopilot(false);
+			TestCruiser->RequestExit();
+		}
+		break;
+
+	case 23:
+		Shot(TEXT("10_got_out"));
+		break;
+
+	case 24:
+		if (PC && PC->GetPawn())
+		{
+			PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
 		}
 		UE_LOG(LogFTO, Display, TEXT("SMOKE: tour complete. Average %.1f fps over %.1f s."),
 			FramesSinceReady / FMath::Max(0.01f, GetWorld()->GetRealTimeSeconds() - ReadyTime), GetWorld()->GetRealTimeSeconds() - ReadyTime);

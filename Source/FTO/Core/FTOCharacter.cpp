@@ -98,6 +98,7 @@ void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(AFTOCharacter, bSprinting, COND_SkipOwner);
 	DOREPLIFETIME(AFTOCharacter, TimedAction);
+	DOREPLIFETIME(AFTOCharacter, CurrentVehicle);
 	DOREPLIFETIME(AFTOCharacter, TimedActionEnd);
 }
 
@@ -342,7 +343,7 @@ EFTOAnimAction AFTOCharacter::GetAnimAction() const
 		for (const AFTOIncident* Incident : GS->GetIncidents())
 		{
 			if (Incident && Incident->IsActive() &&
-				FVector::DistSquared2D(Incident->GetActorLocation(), GetActorLocation()) <= FMath::Square(Incident->SceneRadius))
+				FVector::DistSquared2D(Incident->GetActorLocation(), GetActorLocation()) <= FMath::Square(Incident->GetSceneRadius()))
 			{
 				return EFTOAnimAction::Interact;
 			}
@@ -359,4 +360,43 @@ bool AFTOCharacter::IsAnimAirborne() const
 float AFTOCharacter::GetAnimSpeed() const
 {
 	return GetVelocity().Size2D();
+}
+
+void AFTOCharacter::EnterVehicle(AActor* Vehicle)
+{
+	check(HasAuthority());
+	CurrentVehicle = Vehicle;
+	ApplyVehicleState();
+}
+
+void AFTOCharacter::ExitVehicle(const FVector& Location, float Yaw)
+{
+	check(HasAuthority());
+	CurrentVehicle = nullptr;
+	ApplyVehicleState();
+	TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
+}
+
+void AFTOCharacter::OnRep_CurrentVehicle()
+{
+	ApplyVehicleState();
+}
+
+void AFTOCharacter::ApplyVehicleState()
+{
+	const bool bInVehicle = CurrentVehicle != nullptr;
+	SetActorHiddenInGame(bInVehicle);
+	SetActorEnableCollision(!bInVehicle);
+
+	if (bInVehicle)
+	{
+		// Ride along so anything tracking the officer (markers, scenes) follows the car.
+		GetCharacterMovement()->DisableMovement();
+		AttachToActor(CurrentVehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	}
+	else
+	{
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	}
 }
