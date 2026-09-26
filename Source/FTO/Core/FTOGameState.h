@@ -48,6 +48,10 @@ struct FFTOSoundSet
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Reload;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Ricochet;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> DryFire;
+	/** Handcuffs ratcheting shut. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Cuffs;
+	/** A suspect fighting back: a flurry of cartoon thumps. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Scuffle;
 	/** Shared 3D falloff for sounds in the world. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundAttenuation> World;
 };

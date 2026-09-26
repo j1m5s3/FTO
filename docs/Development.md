@@ -46,11 +46,17 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   suspicious character, taking a cruiser, or riding shotgun in one someone's already driving. F (B on a gamepad) is
   a flying tackle that bowls over whoever's in front (citizens cost a little chaos). Cuffed suspects follow in your
   footsteps: walk them into the precinct's holding cells to book them.
+- **Arrests**: E on a suspect arrests them. One who's given up (talked down by standing at the scene, run to ground,
+  or put on the floor) kneels and you step in behind them to cuff them. One who hasn't may come quietly, or fight
+  back (mash E to wrestle them down before the meter drains; partners can pile in with E; lose and you're shoved
+  over) or bolt on foot (sprint after them and tackle with F, or run them over; the whistle stops them for a moment).
+  A suspect left kneeling with nobody about, or who outruns everyone, gets away. Car chases end with the driver
+  climbing out and kneeling beside their car.
 - **Weapons** (on foot): every officer carries a taser; the precinct armory racks hand out a pistol, a shotgun and a
   rifle (three slots; E at a rack takes one, swaps it for the one in hand when you're full, or restocks its ammo).
   1, 2, 3 or the mouse wheel pick a weapon (the same number again puts it away), right mouse raises the last one
   used (left trigger on a gamepad), left mouse fires (right trigger), R reloads (right bumper). A perp put on the
-  floor is subdued and cuffed on the spot; hitting a citizen costs chaos. Armed perps shoot back: an officer who's hit
+  floor is subdued (cuff them with E); hitting a citizen costs chaos. Armed perps shoot back: an officer who's hit
   goes down until a partner helps them up (E), or comes round after a while.
 - **Driving a cruiser**: W/S to drive and brake, A/D to steer, Space for the handbrake (drift). Q switches the lights
   and siren (offending cars ahead pull over), H honks. C (right stick click) swaps the chase camera for the view from
@@ -69,16 +75,20 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
 Along the way it books a suspect into the cells, looks inside every kind of building (with their people), stages a
 hold-up and a bar brawl, questions a crook, walks through front doors, checks that shop windows let sight through,
-drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (who's
-subdued and cuffed), and has a downed officer helped up; the log (`SMOKE:` lines) reports each check.
+drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (then
+cuffs them where they fell), has a downed officer helped up, and makes the arrests that don't go quietly: a brawler
+wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who gives up beside their
+car; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
-(or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around and gets out.
+(or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, gets out
+and arrests a shoplifter the host puts beside them.
 
 ## Art pipeline
 - **Characters**: `Tools/Blender/build_officer.py` models, rigs and animates the officer entirely from code and exports FBX
   to `Art/Source/Characters/Officer` (plus an editable `Officer.blend`):
   `blender -b --factory-startup -P Tools/Blender/build_officer.py -- --out Art/Source/Characters/Officer --preview <dir>`
-  (`--preview` renders turnaround and clip frames; `Tools/Blender/contact_sheet.py` tiles them into one image.)
+  (`--preview` renders turnaround and clip frames; `Tools/Blender/contact_sheet.py` tiles them into one image.
+  `--clips HandsBehind,Cuffing` re-exports just those clips, e.g. after adding or tweaking one.)
 - `Tools/Blender/build_civilians.py` makes eight citizen variants and the striped-jumper suspect on the **same skeleton**,
   so every character shares the officer's clips. Shirts are tinted per pedestrian at runtime.
 - `Tools/Blender/build_vehicles.py` builds the cars (sedan, hatchback, van, pickup, taxi, ice cream truck, cruiser) and
@@ -107,14 +117,17 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
   officers come near and empties them once they've gone.
 - **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (vertex colours, materials by slot name,
   sockets squared up to scale 1 and no rotation, Nanite for opaque kit pieces) and can be re-run after any Blender change:
-  (`FTO_IMPORT=characters`, `statics`, `vehicles`, `weapons` or `kit` limits a run to one group)
+  (`FTO_IMPORT=characters`, `statics`, `vehicles`, `weapons` or `kit` limits a run to one group, and
+  `FTO_IMPORT=clips FTO_CLIPS=HandsBehind` imports just the named animation clips)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
 - **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
-  radio squelch, chimes, alarm, fanfare, sad trombone, the knockdown bonk) into `Art/Source/Audio` and imports them
-  to `/Game/FTO/Audio` (`FTO_SOUNDS=SW_Bonk` rebuilds just the ones named).
+  radio squelch, chimes, alarm, fanfare, sad trombone, the knockdown bonk, gunshots, handcuffs, a scuffle) into
+  `Art/Source/Audio` and imports them to `/Game/FTO/Audio` (`FTO_SOUNDS=SW_Bonk` rebuilds just the ones named).
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
-  idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) and upper-body aiming
-  layered on top. Actors animating several people (a car's driver and passengers) pick each one's action per mesh.
+  idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) crossfading straight
+  into one another, and an upper-body layer on top (aiming, or hands cuffed behind the back). Actors animating several
+  people (a car's driver and passengers) pick each one's action per mesh. Two-person moves (cuffing, a struggle) lock
+  the officer onto a spot beside the suspect (`AFTOCharacter::BeginSyncedAction`) so the two clips line up.
 - **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials`: `M_FTOBase` (vertex colour ×
   `Color` tint, glowing in its own colour by `Emissive`), `M_FTOGlass` (tinted see-through glass), `MI_FTOGlow`
   (the base material, glowing), `MI_FTOCity` (tinted per instance from custom data, for the instanced city) and

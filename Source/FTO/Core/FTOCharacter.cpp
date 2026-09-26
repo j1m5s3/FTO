@@ -24,9 +24,11 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "Animation/FTOCharacterAnimInstance.h"
+#include "AnimationRuntime.h"
 #include "Art/FTOArt.h"
 #include "Core/FTOGameState.h"
 #include "Crime/FTOIncident.h"
+#include "Crime/FTOPerp.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Vehicles/FTOCruiser.h"
@@ -132,6 +134,7 @@ void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOCharacter, DrawnSlot);
 	DOREPLIFETIME(AFTOCharacter, ReloadEnd);
 	DOREPLIFETIME(AFTOCharacter, bDowned);
+	DOREPLIFETIME(AFTOCharacter, SyncedAction);
 }
 
 void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -226,9 +229,9 @@ void AFTOCharacter::RefreshOfficerColor()
 void AFTOCharacter::Move(const FInputActionValue& Value)
 {
 	const FVector2D Axis = Value.Get<FVector2D>();
-	if (!Controller || (Knockdown && Knockdown->IsDazed()))
+	if (!Controller || (Knockdown && Knockdown->IsDazed()) || IsInSyncedAction())
 	{
-		return; // seeing stars: sit tight a moment
+		return; // seeing stars, or busy cuffing someone: sit tight a moment
 	}
 
 	const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
@@ -408,7 +411,8 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (IsLocallyControlled() && !CurrentVehicle)
+	// (Mid-arrest, E is spoken for: no prompts for anything else.)
+	if (IsLocallyControlled() && !CurrentVehicle && !IsInSyncedAction())
 	{
 		FocusAccumulator += DeltaSeconds;
 		if (FocusAccumulator >= 0.1f)
@@ -438,6 +442,7 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 		bTrackVehicleYaw = false;
 	}
 
+	TickSyncedAction();
 	UpdateWeaponMesh();
 	if (IsLocallyControlled())
 	{
@@ -532,6 +537,15 @@ void AFTOCharacter::InteractPressed()
 		ServerLeaveVehicle();
 		return;
 	}
+	if (IsInSyncedAction())
+	{
+		// Wrestling a suspect: every press is a heave (cuffing just takes a moment).
+		if (SyncedAction.Action == EFTOAnimAction::Struggle)
+		{
+			ServerMash();
+		}
+		return;
+	}
 	UpdateFocus();
 	if (AActor* Target = FocusedInteractable.Get())
 	{
@@ -571,6 +585,10 @@ EFTOAnimAction AFTOCharacter::GetAnimAction() const
 	if (Knockdown && Knockdown->IsDazed())
 	{
 		return EFTOAnimAction::Dazed;
+	}
+	if (IsInSyncedAction())
+	{
+		return SyncedAction.Action;
 	}
 
 	const UWorld* World = GetWorld();
@@ -750,9 +768,11 @@ void AFTOCharacter::HandleKnockedDown()
 	GetCharacterMovement()->DisableMovement();
 	if (HasAuthority())
 	{
-		// Down, the weapon goes away (and stays away until they draw it again).
+		// Down, the weapon goes away (and stays away until they draw it again), and whatever move they were in
+		// the middle of is off.
 		DrawnSlot = INDEX_NONE;
 		OnRep_Loadout();
+		EndSyncedAction();
 	}
 }
 
@@ -873,19 +893,22 @@ void AFTOCharacter::UpdateWeaponMesh()
 		FTOWeapons::HoldInHand(WeaponMesh, GetMesh(), GetAimRotation());
 		return;
 	}
-	const FTransform Body = GetActorTransform();
-	if (FTOWeapons::Spec(Shown).bLongGun)
+	// Slung across the back (muzzle up over the right shoulder) or holstered on the right hip (muzzle down): placed
+	// for someone standing tall, then carried by the spine or the pelvis so it stays put when they crouch, kneel or
+	// wrestle.
+	const bool bLongGun = FTOWeapons::Spec(Shown).bLongGun;
+	const FName Bone = bLongGun ? FName(TEXT("spine")) : FName(TEXT("pelvis"));
+	const FTransform Stowed = bLongGun ? FTransform(FRotator(62.f, 180.f, 0.f), FVector(-28.f, -12.f, -20.f)) : FTransform(FRotator(-90.f, 0.f, 0.f), FVector(2.f, 34.f, -22.f));
+	const USkeletalMeshComponent* Body = GetMesh();
+	const USkeletalMesh* Asset = Body->GetSkeletalMeshAsset();
+	const int32 BoneIndex = Asset ? Asset->GetRefSkeleton().FindBoneIndex(Bone) : INDEX_NONE;
+	if (BoneIndex == INDEX_NONE)
 	{
-		// Slung across the back, muzzle up over the right shoulder.
-		WeaponMesh->SetWorldLocationAndRotation(Body.TransformPosition(FVector(-28.f, -12.f, -20.f)),
-			Body.TransformRotation(FRotator(62.f, 180.f, 0.f).Quaternion()));
+		WeaponMesh->SetWorldTransform(Stowed * GetActorTransform());
+		return;
 	}
-	else
-	{
-		// Holstered on the right hip, muzzle down.
-		WeaponMesh->SetWorldLocationAndRotation(Body.TransformPosition(FVector(2.f, 34.f, -22.f)),
-			Body.TransformRotation(FRotator(-90.f, 0.f, 0.f).Quaternion()));
-	}
+	const FTransform BoneStanding = FAnimationRuntime::GetComponentSpaceTransformRefPose(Asset->GetRefSkeleton(), BoneIndex) * Body->GetRelativeTransform();
+	WeaponMesh->SetWorldTransform(Stowed.GetRelativeTransform(BoneStanding) * Body->GetSocketTransform(Bone));
 }
 
 void AFTOCharacter::UpdateAimCamera(float DeltaSeconds)
@@ -921,7 +944,7 @@ FVector AFTOCharacter::GetCrosshairTarget() const
 
 void AFTOCharacter::SelectSlot(int32 Slot)
 {
-	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()))
+	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction())
 	{
 		return;
 	}
@@ -945,7 +968,7 @@ void AFTOCharacter::SelectSlot(int32 Slot)
 void AFTOCharacter::ServerSelectSlot_Implementation(int32 Slot)
 {
 	const int32 Asked = Slot;
-	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()) || (Slot != INDEX_NONE && GetWeaponInSlot(Slot) == EFTOWeapon::None))
+	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction() || (Slot != INDEX_NONE && GetWeaponInSlot(Slot) == EFTOWeapon::None))
 	{
 		Slot = INDEX_NONE;
 	}
@@ -1013,7 +1036,7 @@ void AFTOCharacter::CycleWeapon(int32 Step)
 
 void AFTOCharacter::FirePressed()
 {
-	if (CurrentVehicle || (Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed())))
+	if (!IsReadyForAction())
 	{
 		return;
 	}
@@ -1057,7 +1080,7 @@ void AFTOCharacter::FirePressed()
 void AFTOCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed)
 {
 	const EFTOWeapon Weapon = GetDrawnWeapon();
-	if (Weapon == EFTOWeapon::None || CurrentVehicle || GetClip(DrawnSlot) <= 0 || IsReloading() || (Knockdown && Knockdown->IsDown()))
+	if (Weapon == EFTOWeapon::None || CurrentVehicle || GetClip(DrawnSlot) <= 0 || IsReloading() || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction())
 	{
 		return;
 	}
@@ -1181,4 +1204,101 @@ void AFTOCharacter::Interact(AFTOCharacter* Officer)
 FVector AFTOCharacter::GetInteractLocation() const
 {
 	return Knockdown ? Knockdown->GetBodyLocation() : GetActorLocation();
+}
+
+// ------------------------------------------------------------------------------------------
+// Two-person moves
+// ------------------------------------------------------------------------------------------
+
+bool AFTOCharacter::IsReadyForAction() const
+{
+	return !CurrentVehicle && !IsInSyncedAction() && !(Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed()));
+}
+
+void AFTOCharacter::BeginSyncedAction(EFTOAnimAction Action, const FVector& Feet, float Yaw, AActor* Partner)
+{
+	check(HasAuthority());
+	// Hands free: the weapon goes away (and a reload with it).
+	if (DrawnSlot != INDEX_NONE)
+	{
+		DrawnSlot = INDEX_NONE;
+		ReloadEnd = 0.f;
+		GetWorldTimerManager().ClearTimer(ReloadTimer);
+		OnRep_Loadout();
+	}
+	SyncedAction.Action = Action;
+	SyncedAction.Location = Feet + FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+	SyncedAction.Yaw = Yaw;
+	SyncedAction.Partner = Partner;
+	ForceNetUpdate();
+	ApplySyncedAction();
+}
+
+void AFTOCharacter::EndSyncedAction()
+{
+	check(HasAuthority());
+	if (IsInSyncedAction())
+	{
+		SyncedAction = FFTOSyncedAction();
+		ForceNetUpdate();
+		ApplySyncedAction();
+	}
+}
+
+void AFTOCharacter::OnRep_SyncedAction()
+{
+	ApplySyncedAction();
+}
+
+void AFTOCharacter::ApplySyncedAction()
+{
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	if (IsInSyncedAction())
+	{
+		// Rooted to the spot (on the server and the officer's own machine alike, so nothing gets corrected), easing
+		// onto it from wherever we are (a new move starts a new ease, from here).
+		MoveComp->StopMovementImmediately();
+		MoveComp->DisableMovement();
+		SyncFrom = GetActorLocation();
+		SyncFromRotation = GetActorQuat();
+		SyncStartTime = GetWorld()->GetTimeSeconds();
+		bInSyncedAction = true;
+	}
+	else if (bInSyncedAction)
+	{
+		bInSyncedAction = false;
+		SyncStartTime = -1.f;
+		if (!CurrentVehicle && !(Knockdown && Knockdown->IsDown()))
+		{
+			MoveComp->SetMovementMode(MOVE_Walking);
+		}
+	}
+}
+
+void AFTOCharacter::TickSyncedAction()
+{
+	if (!bInSyncedAction || SyncStartTime < 0.f || !(HasAuthority() || IsLocallyControlled()))
+	{
+		return;
+	}
+	const float Alpha = FMath::Clamp((GetWorld()->GetTimeSeconds() - SyncStartTime) / SyncEaseSeconds, 0.f, 1.f);
+	const float Smooth = Alpha * Alpha * (3.f - 2.f * Alpha);
+	const FQuat Facing = FRotator(0.f, SyncedAction.Yaw, 0.f).Quaternion();
+	SetActorLocationAndRotation(FMath::Lerp(SyncFrom, FVector(SyncedAction.Location), Smooth), FQuat::Slerp(SyncFromRotation, Facing, Smooth),
+		false, nullptr, ETeleportType::TeleportPhysics);
+	if (Alpha >= 1.f)
+	{
+		SyncStartTime = -1.f;
+	}
+}
+
+void AFTOCharacter::ServerMash_Implementation()
+{
+	if (SyncedAction.Action == EFTOAnimAction::Struggle)
+	{
+		if (AFTOPerp* Perp = Cast<AFTOPerp>(SyncedAction.Partner))
+		{
+			Perp->Mash(this);
+		}
+	}
 }

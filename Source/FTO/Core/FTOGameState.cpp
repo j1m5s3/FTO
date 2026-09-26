@@ -35,6 +35,8 @@ AFTOGameState::AFTOGameState()
 	SoundSet.Reload = Load(TEXT("SW_Reload"));
 	SoundSet.Ricochet = Load(TEXT("SW_Ricochet"));
 	SoundSet.DryFire = Load(TEXT("SW_DryFire"));
+	SoundSet.Cuffs = Load(TEXT("SW_Cuffs"));
+	SoundSet.Scuffle = Load(TEXT("SW_Scuffle"));
 
 	static ConstructorHelpers::FObjectFinder<USoundAttenuation> WorldAttenuation(TEXT("/Game/FTO/Audio/SA_FTOWorld.SA_FTOWorld"));
 	SoundSet.World = WorldAttenuation.Object;

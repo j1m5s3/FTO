@@ -270,6 +270,7 @@ void AFTOGameMode::FTOAnimGallery()
 	}
 	Entries.Add({ EFTOAnimAction::None, EFTOAimPose::Pistol });
 	Entries.Add({ EFTOAnimAction::None, EFTOAimPose::Rifle });
+	Entries.Add({ EFTOAnimAction::None, EFTOAimPose::Cuffed });
 
 	const FVector Fwd = Center->GetActorForwardVector();
 	const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);

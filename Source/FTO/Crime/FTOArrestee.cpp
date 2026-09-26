@@ -94,13 +94,35 @@ void AFTOArrestee::Init(AFTOCharacter* Officer, float InBookingRelief, const FTe
 	}
 }
 
+void AFTOArrestee::BeginPlay()
+{
+	Super::BeginPlay();
+	// We take over from the perp mid-pose: kneeling, freshly cuffed (then up and off with the officer).
+	if (UFTOCharacterAnimInstance* Anim = Cast<UFTOCharacterAnimInstance>(Body->GetAnimInstance()))
+	{
+		Anim->SnapToAction(EFTOAnimAction::Cuffed);
+	}
+}
+
+bool AFTOArrestee::IsGettingUp() const
+{
+	return GetGameTimeSinceCreation() < GetUpSeconds;
+}
+
 EFTOAnimAction AFTOArrestee::GetAnimAction() const
 {
 	if (State == EFTOArresteeState::InCruiser || bJailed)
 	{
 		return EFTOAnimAction::SitCuffed;
 	}
-	return AnimSpeed < 20.f ? EFTOAnimAction::HandsUp : EFTOAnimAction::None;
+	return IsGettingUp() ? EFTOAnimAction::Cuffed : EFTOAnimAction::None;
+}
+
+EFTOAimPose AFTOArrestee::GetAimPose() const
+{
+	// On our feet, wrists cuffed behind the back (the sitting poses have their own).
+	const bool bOnFoot = State == EFTOArresteeState::Escorted || (State == EFTOArresteeState::Booked && !bJailed);
+	return bOnFoot && !IsGettingUp() ? EFTOAimPose::Cuffed : EFTOAimPose::None;
 }
 
 void AFTOArrestee::Tick(float DeltaSeconds)
@@ -138,7 +160,7 @@ FVector AFTOArrestee::FootstepOf(const AActor* Officer) const
 
 void AFTOArrestee::ServerTick(float DeltaSeconds)
 {
-	if (State == EFTOArresteeState::Escaped)
+	if (State == EFTOArresteeState::Escaped || IsGettingUp())
 	{
 		return;
 	}

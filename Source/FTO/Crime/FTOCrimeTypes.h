@@ -109,6 +109,8 @@ struct FTO_API FFTOIncidentInfo
 	UPROPERTY(BlueprintReadOnly) bool bArrest = true;
 	/** The perp has a gun (the template's, or the "Armed" twist). */
 	UPROPERTY(BlueprintReadOnly) bool bArmed = false;
+	/** The twist rolled onto it, if any (a FFTOCrimeModifier Id: "Drunk" suspects wrestle, "Fleeing" ones run). */
+	UPROPERTY(BlueprintReadOnly) FName Twist;
 };
 
 namespace FTOCrime
