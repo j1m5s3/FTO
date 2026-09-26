@@ -4,9 +4,12 @@
 #include "GameFramework/GameModeBase.h"
 #include "FTOGameMode.generated.h"
 
+class UFTOCrimeDirector;
+
 /**
  * Server-only rules for a shift at the precinct.
- * Caps the session at four officers and wires up the default FTO classes.
+ * Caps the session at four officers, wires up the default FTO classes,
+ * and owns the crime director that runs the shift.
  */
 UCLASS()
 class FTO_API AFTOGameMode : public AGameModeBase
@@ -16,10 +19,25 @@ class FTO_API AFTOGameMode : public AGameModeBase
 public:
 	AFTOGameMode();
 
+	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
+	virtual void StartPlay() override;
 	virtual void PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 	virtual void PostLogin(APlayerController* NewPlayer) override;
+
+	UFTOCrimeDirector* GetCrimeDirector() const { return CrimeDirector; }
 
 	/** Hard cap on officers in one precinct. */
 	UPROPERTY(EditDefaultsOnly, Category="FTO")
 	int32 MaxOfficers = 4;
+
+	// ---- Debug console commands (host only) ----
+	UFUNCTION(Exec) void FTOSpawnCrime(FName TemplateId);
+	UFUNCTION(Exec) void FTOAddChaos(float Amount);
+
+protected:
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")
+	TObjectPtr<UFTOCrimeDirector> CrimeDirector;
+
+	/** From the "?Seed=" URL option; 0 = random. */
+	int32 RequestedSeed = 0;
 };
