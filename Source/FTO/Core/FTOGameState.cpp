@@ -37,6 +37,11 @@ AFTOGameState::AFTOGameState()
 	SoundSet.DryFire = Load(TEXT("SW_DryFire"));
 	SoundSet.Cuffs = Load(TEXT("SW_Cuffs"));
 	SoundSet.Scuffle = Load(TEXT("SW_Scuffle"));
+	SoundSet.Glass = Load(TEXT("SW_Glass"));
+	SoundSet.Crash = Load(TEXT("SW_Crash"));
+	SoundSet.Clang = Load(TEXT("SW_Clang"));
+	SoundSet.GushLoop = Load(TEXT("SW_GushLoop"));
+	SoundSet.FireLoop = Load(TEXT("SW_FireLoop"));
 
 	static ConstructorHelpers::FObjectFinder<USoundAttenuation> WorldAttenuation(TEXT("/Game/FTO/Audio/SA_FTOWorld.SA_FTOWorld"));
 	SoundSet.World = WorldAttenuation.Object;
@@ -78,6 +83,8 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, TrafficStops);
 	DOREPLIFETIME(AFTOGameState, SuspectsBooked);
 	DOREPLIFETIME(AFTOGameState, CiviliansBowledOver);
+	DOREPLIFETIME(AFTOGameState, PropertyBroken);
+	DOREPLIFETIME(AFTOGameState, CarsWrecked);
 	DOREPLIFETIME(AFTOGameState, PeakChaos);
 	DOREPLIFETIME(AFTOGameState, ShiftSeed);
 }

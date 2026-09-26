@@ -16,9 +16,12 @@ Material slots: "Body" (vertex colours; vertex alpha 1 marks paint the game tint
   Lightbar                           cruiser: centre of the light bar (the game lays glowing lenses on it)
 
 --preview also renders a roofless cutaway with posed occupants and the driver's-eye view, to check the fit.
+--dented also exports each body's beaten-up variant (<name>_Dented.fbx); --dented_only exports just those.
+--only SM_Car_Sedan,SM_Car_Taxi limits a run to the named meshes.
 """
 import math
 import os
+import random
 import sys
 
 import bpy
@@ -596,6 +599,58 @@ def police_inside(s, cut):
     return p, {}
 
 
+def dent(mesh_obj, seed):
+    """
+    The same car after a hard day: nose and tail crumpled in, a couple of knocks along the doors, and a roof that's
+    been sat on. Vertices only move (nothing is added or removed), so the material slots and the sockets (seats,
+    wheels, cameras) still fit: the game swaps this in when a car's badly damaged.
+    """
+    rng = random.Random(seed)
+    # Flat panels are single faces with nothing in the middle to push: split every face in four first (plain
+    # subdivision, so nothing gets rounded off; colours and slots carry over).
+    dicing = mesh_obj.modifiers.new("Dicing", 'SUBSURF')
+    dicing.subdivision_type = 'SIMPLE'
+    dicing.levels = 1
+    dicing.render_levels = 1
+    bpy.context.view_layer.objects.active = mesh_obj
+    bpy.ops.object.modifier_apply(modifier=dicing.name)
+    verts = mesh_obj.data.vertices
+    xs = [v.co.x for v in verts]
+    x0, x1 = min(xs), max(xs)
+    hw = max(abs(v.co.y) for v in verts)
+    top = max(v.co.z for v in verts)
+    length = x1 - x0
+    zone = length * 0.18
+    u = fb.UNIT
+    knocks = [(rng.uniform(x0 + length * 0.25, x1 - length * 0.25), rng.choice((-1.0, 1.0)), rng.uniform(0.6, 1.0),
+               rng.uniform(0.45, 0.8) * u) for _ in range(3)]
+    for v in verts:
+        x, y, z = v.co
+        # Crumple zones: the last stretch at each end folds in, unevenly across the width, and buckles down a touch.
+        front = max(0.0, (x - (x1 - zone)) / zone)
+        rear = max(0.0, ((x0 + zone) - x) / zone)
+        ripple = 0.6 + 0.4 * (0.5 + 0.5 * math.sin(y * 0.09 + z * 0.05))
+        x -= front ** 1.5 * 0.28 * u * ripple
+        x += rear ** 1.5 * 0.20 * u * ripple
+        if z > 0.4 * u:
+            z -= (front + rear) ** 2 * 0.05 * u
+        # The bonnet buckles up into a tent, cartoon style.
+        hood = max(0.0, (x - (x1 - zone * 2.2)) / (zone * 2.2))
+        if z > 0.6 * u and hood > 0.0:
+            z += 0.13 * u * math.sin(math.pi * min(1.0, hood * 1.4)) * max(0.0, 1.0 - (y / hw) ** 2)
+        # Knocks along the doors.
+        for kx, side, depth, kz in knocks:
+            if y * side > hw - 0.25 * u:
+                d = math.hypot((x - kx) / (0.45 * u), (z - kz) / (0.30 * u))
+                if d < 1.0:
+                    y -= side * depth * 0.14 * u * (1.0 - d * d)
+        # Somebody sat on the roof.
+        if z > top - 0.12 * u:
+            z -= 0.035 * u * max(0.0, 1.0 - (y / hw) ** 2)
+        v.co = (x, y, z)
+    mesh_obj.data.update()
+
+
 def wheel(cut=False):
     """One wheel centred on its axle, axle along Y (the car's side axis)."""
     parts = [
@@ -690,10 +745,19 @@ def main():
             counts[poly.material_index] = counts.get(poly.material_index, 0) + 1
         print(f"FTO: {name} {len(mesh_obj.data.polygons)} faces, per slot {dict(sorted(counts.items()))}")
         objects = add_sockets(mesh_obj, sockets)
-        if not args.get("preview_only"):
+        if not args.get("preview_only") and not args.get("dented_only"):
             export_static(os.path.join(out_dir, f"{name}.fbx"), objects)
-        if preview_dir and name != "SM_Wheel":
+        if preview_dir and name != "SM_Wheel" and not args.get("dented_only"):
             preview(name, build, sockets, preview_dir)
+        # The beaten-up variant (same sockets and slots).
+        if name != "SM_Wheel" and (args.get("dented") or args.get("dented_only")):
+            dent(mesh_obj, sum(ord(ch) for ch in name))
+            if not args.get("preview_only"):
+                export_static(os.path.join(out_dir, f"{name}_Dented.fbx"), objects)
+            if preview_dir:
+                cam = fb.setup_preview((520, 360))
+                fb.render_view(os.path.join(preview_dir, f"{name}_Dented.png"), cam, (7, -7, 4.8), (0, 0, 1.3), 7.6)
+                fb.render_view(os.path.join(preview_dir, f"{name}_Dented_nose.png"), cam, (6.5, -3.0, 2.0), (1.4, 0, 0.7), 3.4)
 
 
 main()

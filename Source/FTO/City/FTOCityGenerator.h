@@ -84,6 +84,14 @@ public:
 	/** The precinct's holding cells: where cuffed suspects are walked to be booked. */
 	FVector GetHoldingCellsLocation() const;
 
+	/** Built on this machine yet (clients build once the seed arrives)? */
+	bool IsGeometryBuilt() const { return bGeometryBuilt; }
+	/**
+	 * One of the city's instanced components by name (a kit piece's mesh name, "_In" for rooms). Every machine builds
+	 * the city identically, so a name and an instance index mean the same thing everywhere.
+	 */
+	UInstancedStaticMeshComponent* FindInstanced(FName Name) const;
+
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksY = 8;
@@ -204,6 +212,9 @@ protected:
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> CubeMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> CylinderMesh;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> SphereMesh;
+
+	/** The instanced components by name (FindInstanced). */
+	UPROPERTY(Transient) TMap<FName, TObjectPtr<UInstancedStaticMeshComponent>> Instanced;
 
 	TMap<UStaticMesh*, FBatch> ExteriorBatches;
 	TMap<UStaticMesh*, FBatch> InteriorBatches;

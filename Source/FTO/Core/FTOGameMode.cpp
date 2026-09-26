@@ -9,6 +9,7 @@
 #include "Crime/FTOCrimeDirector.h"
 #include "UI/FTOHUD.h"
 #include "Vehicles/FTOCruiser.h"
+#include "Physics/FTODestruction.h"
 #include "Physics/FTOKnockdownComponent.h"
 #include "Dev/FTOAnimDummy.h"
 #include "EngineUtils.h"
@@ -74,6 +75,8 @@ void AFTOGameMode::StartPlay()
 		{
 			Interiors->Init(CityGenerator, ShiftSeed);
 		}
+		// Keeps track of what gets broken (windows, street furniture), for everyone.
+		GetWorld()->SpawnActor<AFTODestruction>(AFTODestruction::StaticClass(), FTransform::Identity);
 	}
 
 	// A cruiser per badge colour, parked in the precinct lot.

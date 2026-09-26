@@ -14,6 +14,7 @@ class USkeletalMeshComponent;
 class UStaticMeshComponent;
 class UStaticMesh;
 class UTextRenderComponent;
+class UFTOVehicleDamage;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 
@@ -25,7 +26,8 @@ enum class EFTOCarState : uint8
 	Stopped,	// waiting for the officer to write the ticket
 	WritingTicket,
 	Fleeing,
-	Busted		// caught at the end of a chase
+	Busted,		// caught at the end of a chase
+	Wrecked		// written off (smoking, burning), waiting to be towed
 };
 
 UENUM(BlueprintType)
@@ -110,6 +112,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Body;
 	/** Body styles to pick from; index 4 is the taxi, 5 the ice cream truck. */
 	UPROPERTY() TArray<TObjectPtr<UStaticMesh>> BodyStyles;
+	/** The same, beaten up (build_vehicles.py --dented), for badly damaged cars. */
+	UPROPERTY() TArray<TObjectPtr<UStaticMesh>> DentedStyles;
+	/** Knocks from cruisers and gunfire: dents, smoke, fire, a write-off. */
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UFTOVehicleDamage> Damage;
+	/** Server: written off. A getaway's over (the driver climbs out); anyone else sits tight until the tow truck. */
+	void HandleWrecked();
 	UPROPERTY(VisibleAnywhere, Category="Components") TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Indicator;
 	/** Driver, front passenger and the two back seats (hidden when empty). */

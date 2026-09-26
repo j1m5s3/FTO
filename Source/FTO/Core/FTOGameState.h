@@ -52,6 +52,12 @@ struct FFTOSoundSet
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Cuffs;
 	/** A suspect fighting back: a flurry of cartoon thumps. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Scuffle;
+	/** Things breaking: a window, a car crash, street furniture knocked flying; a burst hydrant and a burning car (loops). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Glass;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Crash;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Clang;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> GushLoop;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> FireLoop;
 	/** Shared 3D falloff for sounds in the world. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundAttenuation> World;
 };
@@ -118,6 +124,9 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 SuspectsBooked = 0;
 	/** Citizens the police bowled over (cruisers, tackles). */
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 CiviliansBowledOver = 0;
+	/** Things the police broke (windows, street furniture), and citizens' cars they wrote off. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 PropertyBroken = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 CarsWrecked = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") float PeakChaos = 0.f;
 
 	/** Seed for this shift's procedural generation (city layout + crimes). */

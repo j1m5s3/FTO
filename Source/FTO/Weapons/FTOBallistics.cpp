@@ -7,8 +7,12 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "Physics/FTODebris.h"
+#include "Physics/FTODestruction.h"
 #include "Physics/FTOImpact.h"
 #include "Physics/FTOKnockdownComponent.h"
+#include "Physics/FTOVehicleDamage.h"
+#include "GameFramework/Pawn.h"
 #include "Sound/SoundBase.h"
 
 namespace
@@ -31,6 +35,13 @@ namespace
 		const UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Component);
 		return Mesh && Mesh->GetStaticMesh() && Mesh->GetStaticMesh()->GetName().EndsWith(TEXT("_Glass"));
 	}
+}
+
+AController* UFTOBallistics::InstigatorOf(const FRound& Round)
+{
+	// Officers' rounds count against the police; a perp's stray shots are the perp's.
+	const APawn* Shooter = Cast<APawn>(Round.Shooter.Get());
+	return Shooter ? Shooter->GetController() : nullptr;
 }
 
 UFTOBallistics* UFTOBallistics::Get(const UWorld* World)
@@ -126,7 +137,14 @@ bool UFTOBallistics::Advance(FRound& Round, float Dt)
 		}
 		if (IsGlass(Hit.GetComponent()))
 		{
-			// Straight through the pane, a little slower and wobblier.
+			// Straight through the pane, a little slower and wobblier (and the server's round shatters it).
+			if (Round.bAuthoritative)
+			{
+				if (AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld()))
+				{
+					Wreckage->RoundHit(Hit.GetComponent(), Hit.Item, Hit.ImpactPoint, Round.Velocity, Round.Weapon, InstigatorOf(Round));
+				}
+			}
 			Round.Velocity *= 0.8f;
 			Params.AddIgnoredComponent(Hit.GetComponent());
 			if (Round.bShow)
@@ -168,6 +186,27 @@ bool UFTOBallistics::Land(FRound& Round, const FHitResult& Hit)
 	if (Part && Part->IsSimulatingPhysics())
 	{
 		Part->AddImpulse(Along * Spec.Push * 0.5f, Hit.BoneName, true);
+	}
+
+	// Cars take the damage and the city's breakables give way (the server's round decides both); whatever it is
+	// keeps a pock mark (a car carries its holes with it).
+	if (Round.bAuthoritative)
+	{
+		if (UFTOVehicleDamage* Car = Victim ? Victim->FindComponentByClass<UFTOVehicleDamage>() : nullptr)
+		{
+			Car->ApplyDamage(Spec.CarDamage, Hit.ImpactPoint, InstigatorOf(Round));
+		}
+		else if (AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld()))
+		{
+			Wreckage->RoundHit(Part, Hit.Item, Hit.ImpactPoint, Round.Velocity, Round.Weapon, InstigatorOf(Round));
+		}
+	}
+	if (Round.bShow && !Spec.bStun)
+	{
+		if (UFTODebris* Debris = UFTODebris::Get(GetWorld()))
+		{
+			Debris->BulletHole(Hit.ImpactPoint, Hit.ImpactNormal, Part);
+		}
 	}
 
 	// Walls and cars: met at a shallow angle a round glances off (once), otherwise it stops dead.

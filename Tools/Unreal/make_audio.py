@@ -299,6 +299,46 @@ def scuffle():
     return normalize(concat(*parts[:8], gain(grunt, 0.6), *parts[8:]), 0.6)
 
 
+def glass():
+    # A window going: a bright crack, then a cascade of tinkling shards.
+    crack = envelope(lowpass(noise(0.06), 9000), 0.0005, 0.03, decay=0.02)
+    shards = [crack]
+    for _ in range(18):
+        f = rng.uniform(2500.0, 6500.0)
+        tink = envelope(tone(lambda t, f=f: f, 0.08, tri), 0.001, 0.05, decay=0.02)
+        shards.append(concat(silence(rng.uniform(0.02, 0.55)), gain(tink, rng.uniform(0.25, 0.7))))
+    return normalize(mix(*shards), 0.6)
+
+
+def crash():
+    # Cars meeting things: a heavy crunch with a metal scrape on the end.
+    thud = envelope(mix(tone(lambda t: 60.0 * (1.0 - 0.5 * t), 0.35, tri), gain(lowpass(noise(0.35), 400), 1.2)), 0.001, 0.1, decay=0.08)
+    scrape = envelope(lowpass(mix(noise(0.5), gain(tone(lambda t: 900.0 + 300.0 * math.sin(TAU * 23.0 * t), 0.5, saw), 0.3)), 3000), 0.01, 0.2, decay=0.15)
+    return normalize(mix(thud, gain(concat(silence(0.03), scrape), 0.6)), 0.7)
+
+
+def clang():
+    # Street furniture knocked flying: a hollow metal clang.
+    partials = [gain(envelope(tone(lambda t, f=f: f, 0.6), 0.001, 0.2, decay=0.18 / (i + 1)), 1.0 / (i + 1))
+                for i, f in enumerate((310.0, 820.0, 1450.0, 2330.0))]
+    knock = gain(envelope(noise(0.03), 0.0005, 0.02, decay=0.008), 0.5)
+    return normalize(mix(*partials, knock), 0.6)
+
+
+def gush_loop():
+    # A burst hydrant: rushing, burbling water. Loops (2 s of noise, burble at 7 Hz = whole cycles).
+    water = mix(lowpass(noise(2.0), 2500), gain(lowpass(noise(2.0), 600), 0.8))
+    burble = [x * (0.8 + 0.2 * math.sin(TAU * 7.0 * i / RATE)) for i, x in enumerate(water)]
+    return normalize(burble, 0.45)
+
+
+def fire_loop():
+    # A car on fire: a low roar with crackles. Loops.
+    roar = lowpass(noise(2.0), 350)
+    crackle = lowpass([x if rng.random() < 0.004 else 0.0 for x in noise(2.0)], 5000)
+    return normalize(mix(roar, gain(crackle, 3.0)), 0.5)
+
+
 SOUNDS = {
     "SW_SirenLoop": (siren_loop, True),
     "SW_Whistle": (whistle, False),
@@ -322,6 +362,11 @@ SOUNDS = {
     "SW_DryFire": (dry_fire, False),
     "SW_Cuffs": (cuffs, False),
     "SW_Scuffle": (scuffle, False),
+    "SW_Glass": (glass, False),
+    "SW_Crash": (crash, False),
+    "SW_Clang": (clang, False),
+    "SW_GushLoop": (gush_loop, True),
+    "SW_FireLoop": (fire_loop, True),
 }
 
 

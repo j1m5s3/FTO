@@ -118,7 +118,16 @@ Done:
   suspects (shot, tased, tackled or run over) kneel for the cuffs; car chases end with the driver climbing out and
   giving up beside the car. A suspect who outruns everyone, or is left kneeling alone, gets away.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (destruction, radio, scoring, Steam invites).
+- Phase 2: destruction. Shop windows shatter into showers of glass, every round leaves a pock mark (cars carry
+  theirs around), and street furniture gives way: bins, news boxes, mailboxes and parking meters go flying, benches,
+  planters, fences and bus stops smash to chunks, hydrants burst into fountains, and lamp posts, traffic lights and
+  trees topple when a cruiser hits them fast enough. Cars take knocks from crashes and gunfire: panels fly off, the
+  body crumples (a beaten-up model of every car), smoke pours from the bonnet, then it catches fire and scorches, and
+  finally it's a write-off (a wrecked getaway car ends the chase; the motor pool fetches wrecked cruisers). The debris
+  is Chaos physics, made on each machine; what's broken is decided by the server and the same for everyone. The
+  police breaking things costs chaos and goes on the report card.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (radio, scoring, Steam invites).
 
 Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame

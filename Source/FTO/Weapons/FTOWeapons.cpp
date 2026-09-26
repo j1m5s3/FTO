@@ -22,21 +22,21 @@ namespace
 			S.Name = TEXT("Pistol"); S.Mesh = TEXT("SM_Pistol"); S.Pose = EFTOAimPose::Pistol;
 			S.MuzzleVelocity = 36000.f; S.Drag = 1.2e-5f; S.Spread = 0.6f; S.HipSpread = 4.f;
 			S.Magazine = 12; S.SpareMagazines = 3; S.Interval = 0.22f; S.ReloadSeconds = 1.2f;
-			S.Range = 12000.f; S.KnockSeconds = 6.f; S.Push = 500.f;
+			S.Range = 12000.f; S.KnockSeconds = 6.f; S.Push = 500.f; S.CarDamage = 4.f;
 			break;
 		case EFTOWeapon::Shotgun:
 			// Buckshot: eight pellets at ~400 m/s that shed speed fast.
 			S.Name = TEXT("Shotgun"); S.Mesh = TEXT("SM_Shotgun"); S.Pose = EFTOAimPose::Rifle; S.bLongGun = true;
 			S.MuzzleVelocity = 40000.f; S.Drag = 4e-5f; S.Pellets = 8; S.Spread = 3.f; S.HipSpread = 5.f;
 			S.Magazine = 6; S.SpareMagazines = 3; S.Interval = 0.8f; S.ReloadSeconds = 2.f;
-			S.Range = 5000.f; S.KnockSeconds = 7.f; S.Push = 900.f;
+			S.Range = 5000.f; S.KnockSeconds = 7.f; S.Push = 900.f; S.CarDamage = 2.5f;
 			break;
 		case EFTOWeapon::Rifle:
 			// 5.56: ~940 m/s and flat.
 			S.Name = TEXT("Rifle"); S.Mesh = TEXT("SM_Rifle"); S.Pose = EFTOAimPose::Rifle; S.bLongGun = true;
 			S.MuzzleVelocity = 94000.f; S.Drag = 3e-6f; S.Spread = 0.25f; S.HipSpread = 5.f;
 			S.Magazine = 20; S.SpareMagazines = 3; S.Interval = 0.14f; S.ReloadSeconds = 1.6f;
-			S.Range = 30000.f; S.KnockSeconds = 8.f; S.Push = 700.f;
+			S.Range = 30000.f; S.KnockSeconds = 8.f; S.Push = 700.f; S.CarDamage = 7.f;
 			break;
 		default:
 			break;

@@ -6,6 +6,7 @@
 #include "FTOBallistics.generated.h"
 
 class UMaterialInterface;
+class AController;
 class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class UStaticMeshComponent;
@@ -61,6 +62,8 @@ private:
 	bool Advance(FRound& Round, float Dt);
 	/** It met something solid: knock them down, glance off, or stop. False if it stops. */
 	bool Land(FRound& Round, const FHitResult& Hit);
+	/** Whoever's to blame for what the round breaks (an officer's controller; nobody for a perp's). */
+	static AController* InstigatorOf(const FRound& Round);
 
 	// ---- Looks: pooled glowing streaks, puffs and a muzzle flash, owned by one transient actor ----
 	AActor* GetFXHost();

@@ -15,6 +15,7 @@ class UStaticMesh;
 class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UFTOVehicleDamage;
 struct FInputActionValue;
 
 /** What everyone else sees of a cruiser. */
@@ -94,12 +95,20 @@ public:
 		SteerInput = Steer;
 	}
 
+	UFTOVehicleDamage* GetDamage() const { return Damage; }
+
 	/** Dev/testing: stop dead on the spot (for photos). */
 	void StopDead()
 	{
 		ForwardSpeed = LateralSpeed = 0.f;
 		ThrottleInput = SteerInput = 0.f;
 	}
+
+	/** Crashes below this speed (cm/s, into whatever it hit) just bump; above, the car takes damage by the speed. */
+	UPROPERTY(EditDefaultsOnly, Category="Damage") float CrashSpeed = 450.f;
+	UPROPERTY(EditDefaultsOnly, Category="Damage") float CrashDamagePerSpeed = 0.035f;
+	/** Seconds a written-off cruiser sits empty before the motor pool fetches it back to the lot. */
+	UPROPERTY(EditDefaultsOnly, Category="Damage") float MotorPoolSeconds = 20.f;
 
 	// ---- Handling (cm, seconds, degrees) ----
 	UPROPERTY(EditDefaultsOnly, Category="Handling") float MaxSpeed = 2600.f;
@@ -153,6 +162,27 @@ protected:
 	/** People we've just hit, passed through until then (they're busy flying). */
 	TArray<TPair<TWeakObjectPtr<AActor>, float>> BowledOver;
 
+	/**
+	 * Whoever simulates the car: it's hit a piece of the city (Hit). Going fast enough to break it, it's knocked
+	 * flying (the driver's machine tucks it away at once, the server breaks it for everyone) and the car ploughs on,
+	 * a little slower; returns false otherwise.
+	 */
+	bool BreakThrough(const FHitResult& Hit, FVector& Velocity);
+	UFUNCTION(Server, Reliable)
+	void ServerBreakThrough(FName Component, int32 Instance, FVector_NetQuantize Hit, FVector_NetQuantize10 Push);
+	/** Whoever simulates the car: it's run into something solid at Into cm/s. The car (and a car it hit) takes the knock. */
+	void Crash(const FHitResult& Hit, float Into);
+	UFUNCTION(Server, Reliable)
+	void ServerCrash(AActor* Other, float Into, FVector_NetQuantize At);
+	/** Things we've just broken through, passed through until then (they're being tucked away). */
+	TArray<TPair<TWeakObjectPtr<UPrimitiveComponent>, float>> BrokenThrough;
+	float NextCrashTime = 0.f;
+
+	/** Server: a written-off cruiser left empty goes back to the lot, repaired. */
+	void TickMotorPool(float DeltaSeconds);
+	FTransform HomeTransform;
+	float AbandonedFor = 0.f;
+
 	UFUNCTION(Server, Reliable)
 	void ServerExit();
 
@@ -186,6 +216,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCameraComponent> InteriorCamera;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> EngineAudio;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SirenAudio;
+	/** Dents, smoke, fire, write-offs (the beaten-up body from build_vehicles.py --dented). */
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UFTOVehicleDamage> Damage;
+	UPROPERTY() TObjectPtr<UStaticMesh> DentedMesh;
 
 	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> PaintMaterial;

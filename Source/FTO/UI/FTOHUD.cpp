@@ -600,7 +600,7 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 	};
 	const int32 Pick = FMath::Abs(GS->ShiftSeed) % 3;
 
-	DrawPanel(CX - 460.f * S, CY - 30.f * S, 920.f * S, 440.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
+	DrawPanel(CX - 460.f * S, CY - 30.f * S, 920.f * S, 480.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
 	DrawCenteredText(bSurvived ? TEXT("SHIFT SURVIVED!") : TEXT("THE CITY FELL INTO CHAOS"), CX, CY - 20.f * S,
 		bSurvived ? FLinearColor(0.3f, 1.f, 0.4f) : FLinearColor(1.f, 0.25f, 0.25f), GEngine->GetLargeFont(), S * 1.6f);
 	DrawCenteredText(FString::Printf(TEXT("\"%s\""), bSurvived ? WinHeadlines[Pick] : LoseHeadlines[Pick]), CX, CY + 40.f * S,
@@ -614,6 +614,7 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 		FString::Printf(TEXT("Suspects booked:       %d"), GS->SuspectsBooked),
 		FString::Printf(TEXT("Went cold / escalated: %d"), GS->IncidentsFailed),
 		FString::Printf(TEXT("Citizens bowled over:  %d"), GS->CiviliansBowledOver),
+		FString::Printf(TEXT("Property damage:       %d things, %d cars"), GS->PropertyBroken, GS->CarsWrecked),
 		FString::Printf(TEXT("Peak chaos:            %d%%"), FMath::RoundToInt(GS->PeakChaos)),
 	};
 	float Y = CY + 100.f * S;
