@@ -1,6 +1,10 @@
 #include "Vehicles/FTOCruiser.h"
+#include "Physics/FTODestruction.h"
 #include "Physics/FTOImpact.h"
 #include "Physics/FTOKnockdownComponent.h"
+#include "Physics/FTOVehicleDamage.h"
+#include "City/FTOCityGenerator.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Art/FTOArt.h"
 #include "City/FTOTrafficCar.h"
 #include "Core/FTOCharacter.h"
@@ -44,6 +48,8 @@ AFTOCruiser::AFTOCruiser()
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CruiserMesh(TEXT("/Game/FTO/Vehicles/SM_Car_Cruiser.SM_Car_Cruiser"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CruiserDented(TEXT("/Game/FTO/Vehicles/SM_Car_Cruiser_Dented.SM_Car_Cruiser_Dented"));
+	DentedMesh = CruiserDented.Object;
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> WheelMesh(TEXT("/Game/FTO/Vehicles/SM_Wheel.SM_Wheel"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	BaseMaterial = BaseMat.Object;
@@ -108,6 +114,9 @@ AFTOCruiser::AFTOCruiser()
 	SirenAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("SirenAudio"));
 	SirenAudio->SetupAttachment(Collision);
 	SirenAudio->bAutoActivate = false;
+
+	Damage = CreateDefaultSubobject<UFTOVehicleDamage>(TEXT("Damage"));
+	Damage->bCitizensCar = false;
 }
 
 void AFTOCruiser::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -137,10 +146,13 @@ void AFTOCruiser::BeginPlay()
 	RedMaterial = FTOArt::ApplyColor(LightRed, BaseMaterial, FLinearColor(1.f, 0.05f, 0.05f));
 	BlueMaterial = FTOArt::ApplyColor(LightBlue, BaseMaterial, FLinearColor(0.1f, 0.25f, 1.f));
 
+	Damage->SetBody(Body, DentedMesh);
+
 	if (HasAuthority())
 	{
 		NetState.Location = GetActorLocation();
 		NetState.Yaw = GetActorRotation().Yaw;
+		HomeTransform = GetActorTransform();
 	}
 }
 
@@ -479,6 +491,17 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 			BowledOver.RemoveAtSwap(i);
 		}
 	}
+	for (int32 i = BrokenThrough.Num() - 1; i >= 0; --i)
+	{
+		if (Now >= BrokenThrough[i].Value || !BrokenThrough[i].Key.IsValid())
+		{
+			if (UPrimitiveComponent* Thing = BrokenThrough[i].Key.Get())
+			{
+				Collision->IgnoreComponentWhenMoving(Thing, false);
+			}
+			BrokenThrough.RemoveAtSwap(i);
+		}
+	}
 
 	if (IsSimulatingLocally())
 	{
@@ -512,6 +535,7 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 
 	if (HasAuthority())
 	{
+		TickMotorPool(DeltaSeconds);
 		SirenScanAccumulator += DeltaSeconds;
 		if (bSiren && SirenScanAccumulator >= 0.25f)
 		{
@@ -554,7 +578,9 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 	float Forward = FVector::DotProduct(Velocity, Fwd);
 	float Lateral = FVector::DotProduct(Velocity, Right);
 
-	const float Throttle = (Driver || bAutopilot) ? ThrottleInput : 0.f;
+	// A write-off goes nowhere (it just rolls to a stop).
+	const bool bWrecked = Damage && Damage->IsWrecked();
+	const float Throttle = (Driver || bAutopilot) && !bWrecked ? ThrottleInput : 0.f;
 	const float TopSpeed = MaxSpeed * (bSiren ? 1.15f : 1.f); // "code 3"
 	if (Throttle > 0.f)
 	{
@@ -578,7 +604,7 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 	Lateral *= FMath::Exp(-(bHandbrake ? HandbrakeGrip : Grip) * Dt);
 
 	// Steering needs rolling speed, softens at top speed, and flips in reverse.
-	const float Steer = (Driver || bAutopilot) ? SteerInput : 0.f;
+	const float Steer = (Driver || bAutopilot) && !bWrecked ? SteerInput : 0.f;
 	const float RollAlpha = FMath::Clamp(FMath::Abs(Forward) / 450.f, 0.f, 1.f);
 	const float HighSpeedDamp = 1.f - 0.45f * FMath::Clamp(FMath::Abs(Forward) / MaxSpeed, 0.f, 1.f);
 	float YawRate = Steer * MaxYawRate * RollAlpha * HighSpeedDamp * FMath::Sign(Forward);
@@ -599,10 +625,20 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 		Velocity *= 0.85f;
 		AddActorWorldOffset(Velocity * Dt * (1.f - Hit.Time), true, &Hit);
 	}
+	if (Hit.bBlockingHit && BreakThrough(Hit, Velocity))
+	{
+		// Through the bin, the hydrant, the lamp post...
+		AddActorWorldOffset(Velocity * Dt * (1.f - Hit.Time), true, &Hit);
+	}
 	if (Hit.bBlockingHit)
 	{
-		// Bounce off walls and other cars, losing most of the speed.
+		// Bounce off walls and other cars, losing most of the speed (and taking a knock if it was a hard one).
 		const FVector Normal = Hit.ImpactNormal.GetSafeNormal2D();
+		const float Into = -FVector::DotProduct(Velocity, Normal);
+		if (Into > CrashSpeed)
+		{
+			Crash(Hit, Into);
+		}
 		Velocity = (Velocity - 1.4f * FVector::DotProduct(Velocity, Normal) * Normal) * 0.5f;
 	}
 	SetActorRotation(NewRotation);
@@ -646,6 +682,112 @@ void AFTOCruiser::ServerBowlOver_Implementation(AActor* Victim, FVector_NetQuant
 	if (Victim && FVector::DistSquared(Victim->GetActorLocation(), GetActorLocation()) < FMath::Square(900.f))
 	{
 		FTOImpact::RunOver(Victim, GetActorLocation(), FVector(Velocity).GetClampedToMaxSize(MaxSpeed * 1.2f), GetController());
+	}
+}
+
+bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
+{
+	UPrimitiveComponent* Thing = Hit.GetComponent();
+	const EFTOBreakKind Kind = AFTODestruction::KindOf(Thing);
+	AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+	if (!Wreckage || Kind == EFTOBreakKind::None || Kind == EFTOBreakKind::Shatter || Hit.Item == INDEX_NONE ||
+		Velocity.Size2D() < AFTODestruction::BreakSpeed(Thing))
+	{
+		return false;
+	}
+	const FVector Push = Velocity * 0.9f;
+	if (HasAuthority())
+	{
+		Wreckage->Break(Thing, Hit.Item, Hit.ImpactPoint, Push, GetController());
+	}
+	else
+	{
+		// Out of our way now; the server breaks it for everyone a moment later.
+		Wreckage->BreakLocally(Thing, Hit.Item, Hit.ImpactPoint, Push);
+		ServerBreakThrough(Thing->GetFName(), Hit.Item, Hit.ImpactPoint, Push);
+	}
+	// It's being tucked away: don't catch on it again meanwhile.
+	Collision->IgnoreComponentWhenMoving(Thing, true);
+	BrokenThrough.Emplace(Thing, GetWorld()->GetTimeSeconds() + 0.15f);
+	Velocity *= Kind == EFTOBreakKind::Topple ? 0.6f : 0.85f;
+	return true;
+}
+
+void AFTOCruiser::ServerBreakThrough_Implementation(FName Component, int32 Instance, FVector_NetQuantize Hit, FVector_NetQuantize10 Push)
+{
+	// The driver's machine saw it; make sure it's plausible (right by the car) first.
+	AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+	AFTOCityGenerator* City = nullptr;
+	for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
+	{
+		City = *It;
+		break;
+	}
+	UInstancedStaticMeshComponent* Thing = City ? City->FindInstanced(Component) : nullptr;
+	if (Wreckage && Thing && FVector::DistSquared(FVector(Hit), GetActorLocation()) < FMath::Square(900.f))
+	{
+		Wreckage->Break(Thing, Instance, Hit, FVector(Push).GetClampedToMaxSize(MaxSpeed * 1.2f), GetController());
+	}
+}
+
+void AFTOCruiser::Crash(const FHitResult& Hit, float Into)
+{
+	// One knock per bump (grinding along a wall doesn't keep crunching).
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextCrashTime)
+	{
+		return;
+	}
+	NextCrashTime = Now + 0.4f;
+	if (HasAuthority())
+	{
+		ServerCrash_Implementation(Hit.GetActor(), Into, Hit.ImpactPoint);
+	}
+	else
+	{
+		ServerCrash(Hit.GetActor(), Into, Hit.ImpactPoint);
+	}
+}
+
+void AFTOCruiser::ServerCrash_Implementation(AActor* Other, float Into, FVector_NetQuantize At)
+{
+	// (The driver's machine measured it: keep it within what a cruiser can manage, and by the car.)
+	Into = FMath::Min(Into, MaxSpeed * 1.2f);
+	const float Knock = FMath::Min(80.f, 5.f + (Into - CrashSpeed) * CrashDamagePerSpeed);
+	if (Into <= CrashSpeed || FVector::DistSquared(FVector(At), GetActorLocation()) > FMath::Square(900.f))
+	{
+		return;
+	}
+	UE_LOG(LogFTO, Log, TEXT("%s crashed into %s at %.0f km/h (%.0f damage)."), *GetName(), *GetNameSafe(Other), Into * 0.036f, Knock);
+	Damage->ApplyDamage(Knock, At, GetController());
+	// Whatever we ran into takes the same (another car; walls don't mind).
+	if (UFTOVehicleDamage* Theirs = Other && Other != this ? Other->FindComponentByClass<UFTOVehicleDamage>() : nullptr)
+	{
+		Theirs->ApplyDamage(Knock, At, GetController());
+	}
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Crash, At, FMath::Clamp(Knock / 40.f, 0.4f, 1.f));
+	}
+}
+
+void AFTOCruiser::TickMotorPool(float DeltaSeconds)
+{
+	// A write-off nobody's sat in for a while is towed back to the precinct lot and comes back good as new.
+	if (!Damage || !Damage->IsWrecked() || Driver || Passenger)
+	{
+		AbandonedFor = 0.f;
+		return;
+	}
+	AbandonedFor += DeltaSeconds;
+	if (AbandonedFor >= MotorPoolSeconds)
+	{
+		AbandonedFor = 0.f;
+		StopDead();
+		SetActorTransform(HomeTransform, false, nullptr, ETeleportType::TeleportPhysics);
+		NetState.Location = GetActorLocation();
+		NetState.Yaw = GetActorRotation().Yaw;
+		Damage->Repair();
 	}
 }
 

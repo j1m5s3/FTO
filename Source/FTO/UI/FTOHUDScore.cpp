@@ -246,8 +246,8 @@ void AFTOHUD::DrawScoreboard(const AFTOGameState* GS)
 	}
 
 	// Along the bottom: how the city fared.
-	const FString Footer = FString::Printf(TEXT("Handled %d  |  Caught in the act %d  |  Traffic stops %d  |  Booked %d  |  Went cold %d  |  Citizens bowled over %d  |  Peak chaos %d%%"),
-		GS->IncidentsResolved, GS->IncidentsWitnessed, GS->TrafficStops, GS->SuspectsBooked, GS->IncidentsFailed, GS->CiviliansBowledOver, FMath::RoundToInt(GS->PeakChaos));
+	const FString Footer = FString::Printf(TEXT("Handled %d  |  Caught in the act %d  |  Traffic stops %d  |  Booked %d  |  Went cold %d  |  Citizens bowled over %d  |  Property broken %d, cars %d  |  Peak chaos %d%%"),
+		GS->IncidentsResolved, GS->IncidentsWitnessed, GS->TrafficStops, GS->SuspectsBooked, GS->IncidentsFailed, GS->CiviliansBowledOver, GS->PropertyBroken, GS->CarsWrecked, FMath::RoundToInt(GS->PeakChaos));
 	DrawCenteredText(Footer, CX, Top + H - 32.f * S, FLinearColor(0.75f, 0.75f, 0.75f), Small, S * 1.1f);
 }
 

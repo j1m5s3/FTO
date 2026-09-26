@@ -141,7 +141,16 @@ Done:
   overtime (chaos and all), or clock off to the scoreboard. Most votes win; the host breaks ties and speaks for anyone
   who stays quiet.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (destruction, Steam invites),
+- Phase 2: destruction. Shop windows shatter into showers of glass, every round leaves a pock mark (cars carry
+  theirs around), and street furniture gives way: bins, news boxes, mailboxes and parking meters go flying, benches,
+  planters, fences and bus stops smash to chunks, hydrants burst into fountains, and lamp posts, traffic lights and
+  trees topple when a cruiser hits them fast enough. Cars take knocks from crashes and gunfire: panels fly off, the
+  body crumples (a beaten-up model of every car), smoke pours from the bonnet, then it catches fire and scorches, and
+  finally it's a write-off (a wrecked getaway car ends the chase; the motor pool fetches wrecked cruisers). The debris
+  is Chaos physics, made on each machine; what's broken is decided by the server and the same for everyone. The
+  police breaking things costs chaos and goes on the report card.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (Steam invites),
 tracked in [TODO](TODO.md).
 
 Later ideas:

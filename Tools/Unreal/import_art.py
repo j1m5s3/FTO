@@ -50,7 +50,10 @@ CHARACTERS = [
 STATICS = [
     {"key": "vehicles", "folder": "Vehicles",
      "meshes": ["SM_Car_Sedan", "SM_Car_Hatchback", "SM_Car_Van", "SM_Car_Pickup", "SM_Car_Taxi",
-                "SM_Car_IceCream", "SM_Car_Cruiser", "SM_Wheel"],
+                "SM_Car_IceCream", "SM_Car_Cruiser", "SM_Wheel",
+                # Beaten-up variants (build_vehicles.py --dented), swapped in when a car's badly damaged.
+                "SM_Car_Sedan_Dented", "SM_Car_Hatchback_Dented", "SM_Car_Van_Dented", "SM_Car_Pickup_Dented",
+                "SM_Car_Taxi_Dented", "SM_Car_IceCream_Dented", "SM_Car_Cruiser_Dented"],
      "sockets": ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR", "Seat_Driver", "Seat_Passenger", "Seat_RearL",
                  "Seat_RearR", "Cam_Driver", "Cam_Passenger", "Lightbar"],
      "dest": "/Game/FTO/Vehicles"},
@@ -157,6 +160,8 @@ def import_statics(group):
     destination = group["dest"]
     base = eal.load_asset(BASE_MATERIAL)
     for name in group["meshes"]:
+        if MESHES and name not in MESHES:
+            continue
         # Start fresh: a reimport keeps the old material slots, which then pile up in front of the new ones.
         if eal.does_asset_exist(f"{destination}/{name}"):
             eal.delete_asset(f"{destination}/{name}")
@@ -193,7 +198,8 @@ def import_statics(group):
             sockets.append(f"{socket_name}=({loc.x:.0f},{loc.y:.0f},{loc.z:.0f})")
         unreal.log(f"FTO: {name} extent {bounds.box_extent} slots {slots} sockets {sockets}")
         eal.save_loaded_asset(mesh)
-    eal.save_directory(destination, only_if_is_dirty=False, recursive=True)
+    # (Just the new ones when importing a few by name, so the rest aren't re-saved for nothing.)
+    eal.save_directory(destination, only_if_is_dirty=bool(MESHES), recursive=True)
 
 
 def import_kit():
@@ -323,8 +329,9 @@ def import_named_clips(names):
 
 
 # FTO_IMPORT=characters|statics|vehicles|weapons|kit limits the run (default: everything); FTO_IMPORT=clips with
-# FTO_CLIPS=A,B imports only those animation clips.
+# FTO_CLIPS=A,B imports only those animation clips, and FTO_MESHES=A,B only those static meshes (vehicles, weapons).
 ONLY = os.environ.get("FTO_IMPORT", "").lower()
+MESHES = set(filter(None, os.environ.get("FTO_MESHES", "").split(",")))
 
 if ONLY == "clips":
     import_named_clips(set(filter(None, os.environ.get("FTO_CLIPS", "").split(","))))

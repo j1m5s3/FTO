@@ -14,7 +14,12 @@
 #include "Scoring/FTOScoring.h"
 #include "Sound/SoundEffectSource.h"
 #include "Physics/FTOKnockdownComponent.h"
+#include "Physics/FTODebris.h"
+#include "Physics/FTODestruction.h"
 #include "Physics/FTOImpact.h"
+#include "Physics/FTOVehicleDamage.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Weapons/FTOArmoryRack.h"
 #include "Weapons/FTOBallistics.h"
 #include "Crime/FTOArrestee.h"
@@ -144,6 +149,49 @@ AFTOPerp* AFTOSmokeTest::StagePerp(FName Crime, float Ahead)
 	const FVector Feet = Cop->GetActorLocation() - FVector(0.f, 0.f, 96.f) + Fwd * Ahead;
 	const AFTOIncident* Incident = GM->GetCrimeDirector()->SpawnIncidentAt(Crime, FTransform((-Fwd).Rotation(), Feet), INDEX_NONE, true);
 	return Incident ? Incident->GetPerp() : nullptr;
+}
+
+void AFTOSmokeTest::AimAt(const FVector& Target)
+{
+	APlayerController* PC = GetPC();
+	if (PC && PC->PlayerCameraManager)
+	{
+		PC->SetControlRotation((Target - PC->PlayerCameraManager->GetCameraLocation()).Rotation());
+	}
+}
+
+float AFTOSmokeTest::GroundZ(const FVector& At) const
+{
+	FHitResult Ground;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeGround), false);
+	if (const APawn* Me = GetPawn())
+	{
+		Params.AddIgnoredActor(Me);
+	}
+	return GetWorld()->LineTraceSingleByObjectType(Ground, At + FVector(0.f, 0.f, 400.f), At - FVector(0.f, 0.f, 600.f), FCollisionObjectQueryParams(ECC_WorldStatic), Params)
+		? Ground.ImpactPoint.Z : At.Z;
+}
+
+bool AFTOSmokeTest::FindCityInstance(const TCHAR* Mesh, const FVector& Near, UInstancedStaticMeshComponent*& OutISM, int32& OutIndex, FTransform& OutTransform) const
+{
+	const AFTOCityGenerator* City = GetCity();
+	OutISM = City ? City->FindInstanced(Mesh) : nullptr;
+	OutIndex = INDEX_NONE;
+	float Best = TNumericLimits<float>::Max();
+	for (int32 i = 0; OutISM && i < OutISM->GetInstanceCount(); ++i)
+	{
+		FTransform Instance;
+		OutISM->GetInstanceTransform(i, Instance, true);
+		const float DistSq = FVector::DistSquared(Instance.GetLocation(), Near);
+		// (Broken ones are tucked away far below the street.)
+		if (Instance.GetLocation().Z > -10000.f && DistSq < Best)
+		{
+			Best = DistSq;
+			OutIndex = i;
+			OutTransform = Instance;
+		}
+	}
+	return OutIndex != INDEX_NONE;
 }
 
 AFTOPerp* AFTOSmokeTest::FindNearestPerp(FName Crime) const
@@ -1047,14 +1095,9 @@ void AFTOSmokeTest::BuildSteps()
 		// officer's eyes, which would leave the crosshair a shoulder's width off to the side.
 		auto AimAtRobber = [this]()
 		{
-			APlayerController* PC = GetPC();
-			if (!PC || !PC->PlayerCameraManager)
-			{
-				return;
-			}
 			if (const AFTOPerp* Robber = FindNearestPerp(TEXT("ArmedRobbery")))
 			{
-				PC->SetControlRotation((Robber->GetActorLocation() + FVector(0.f, 0.f, 25.f) - PC->PlayerCameraManager->GetCameraLocation()).Rotation());
+				AimAt(Robber->GetActorLocation() + FVector(0.f, 0.f, 25.f));
 			}
 		};
 		AddStep(TEXT("officer's view"), 0.1f, [this]()
@@ -1427,6 +1470,357 @@ void AFTOSmokeTest::BuildSteps()
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: push-to-talk: %s, then %s."), bWasOn ? TEXT("on air") : TEXT("NOT ON AIR"), PS->IsOnRadio() ? TEXT("STILL ON AIR") : TEXT("off"));
 			}
 		});
+		// Destruction: a shop window and a hydrant shot out, a lamp post knocked flat by a cruiser, the cruiser crashed
+		// into a wall until it's a burning wreck, and a citizen's car written off.
+		AddStep(TEXT("window: take aim"), 0.5f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			const AFTOCityGenerator* City = GetCity();
+			if (!Cop || !City)
+			{
+				return;
+			}
+			if (AFTOGameMode* GM = GetAuthGameMode())
+			{
+				GM->FTOAddChaos(-100.f);
+			}
+			// The suspects trailing after the officer have been taken off to the cells (they'd crowd every shot).
+			for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+			{
+				It->Destroy();
+			}
+			// The shop front nearest the officer: its window, from out on the pavement.
+			const FFTOBuilding* Shop = nullptr;
+			for (const FFTOBuilding& Building : City->GetBuildings())
+			{
+				if (Building.Type == EFTOBuildingType::Shop && (!Shop ||
+					FVector::DistSquared(Building.DoorOutside, Cop->GetActorLocation()) < FVector::DistSquared(Shop->DoorOutside, Cop->GetActorLocation())))
+				{
+					Shop = &Building;
+				}
+			}
+			UInstancedStaticMeshComponent* Glass = nullptr;
+			FTransform Pane;
+			if (!Shop || !FindCityInstance(TEXT("SM_Wall_G_Shop_Glass"), Shop->DoorOutside, Glass, TestInstance, Pane))
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: window: NO SHOP WINDOW."));
+				return;
+			}
+			TestISM = Glass;
+			TestAway = (Shop->DoorOutside - Shop->Room.GetLocation()).GetSafeNormal2D();
+			TestTarget = Pane.TransformPosition(Glass->GetStaticMesh()->GetBoundingBox().GetCenter());
+			const FVector Stand = TestTarget + TestAway * 450.f;
+			Cop->TeleportTo(FVector(Stand.X, Stand.Y, GroundZ(Stand) + 98.f), (-TestAway).Rotation());
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(Cop, 0.f); }
+			if (Cop->GetDrawnWeapon() != EFTOWeapon::Shotgun)
+			{
+				Cop->SelectSlot(1);
+			}
+		});
+		// (Aimed through the camera once it's caught up with the officer, and fired a moment later.)
+		AddStep(TEXT("window: aim"), 0.12f, [this]() { AimAt(TestTarget); });
+		AddStep(TEXT("window: aim again"), 0.12f, [this]() { AimAt(TestTarget); }); // (the camera swings with the aim: settle it)
+		AddStep(TEXT("window: fire"), 0.08f, [this]()
+		{
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+			{
+				AimAt(TestTarget);
+				const APlayerController* PC = GetPC();
+				FHitResult Sight;
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeSight), false, Cop);
+				const FVector Eye = PC && PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+				if (PC && PC->PlayerCameraManager)
+				{
+					GetWorld()->LineTraceSingleByChannel(Sight, Eye, Eye + PC->PlayerCameraManager->GetCameraRotation().Vector() * 3000.f, ECC_FTOProjectile, Params);
+				}
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: firing with the %s (%d in it)%s%s, crosshair on %s (%s, %.0f cm from the pane)."), *FTOWeapons::DisplayName(Cop->GetDrawnWeapon()).ToString(),
+					Cop->GetClip(Cop->GetDrawnSlot()), Cop->IsReadyForAction() ? TEXT("") : TEXT(", NOT READY"), Cop->IsReloading() ? TEXT(", RELOADING") : TEXT(""),
+					*GetNameSafe(Sight.GetComponent()), *GetNameSafe(Sight.GetActor()), Sight.bBlockingHit ? FVector::Dist(Sight.ImpactPoint, TestTarget) : -1.f);
+				Cop->FirePressed();
+				const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+				ViewFrom(TestTarget + TestAway * 330.f + Across * 330.f + FVector(0.f, 0.f, 40.f), TestTarget - FVector(0.f, 0.f, 40.f));
+			}
+		});
+		AddShot(TEXT("19a_window"), 1.2f);
+		AddStep(TEXT("window result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const UFTODebris* Debris = UFTODebris::Get(GetWorld());
+			const bool bBroken = Wreckage && TestISM.IsValid() && Wreckage->IsBroken(TestISM->GetFName(), TestInstance);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: shot a shop window: %s (%d bits flying, %d bullet holes)."), bBroken ? TEXT("shattered") : TEXT("STILL THERE"),
+				Debris ? Debris->NumPieces() : -1, Debris ? Debris->NumHoles() : -1);
+		});
+
+		AddStep(TEXT("hydrant: take aim"), 0.45f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			UInstancedStaticMeshComponent* Hydrants = nullptr;
+			FTransform Hydrant;
+			if (!Cop || !FindCityInstance(TEXT("SM_Hydrant"), Cop->GetActorLocation(), Hydrants, TestInstance, Hydrant))
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: hydrant: NONE FOUND."));
+				return;
+			}
+			TestISM = Hydrants;
+			TestTarget = Hydrant.GetLocation() + FVector(0.f, 0.f, 40.f);
+			// A clear shot at it from a few metres along the pavement (or across it).
+			FVector Stand = Hydrant.GetLocation() + FVector(550.f, 0.f, 0.f);
+			for (const FVector& Dir : { FVector(1.f, 0.f, 0.f), FVector(-1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), FVector(0.f, -1.f, 0.f) })
+			{
+				const FVector Spot = Hydrant.GetLocation() + Dir * 550.f;
+				const FVector Eye(Spot.X, Spot.Y, GroundZ(Spot) + 150.f);
+				FHitResult Block;
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeClearShot), false, Cop);
+				if (!GetWorld()->LineTraceSingleByChannel(Block, Eye, TestTarget, ECC_FTOProjectile, Params) || Block.GetComponent() == Hydrants)
+				{
+					Stand = Spot;
+					TestAway = Dir;
+					break;
+				}
+			}
+			Cop->TeleportTo(FVector(Stand.X, Stand.Y, GroundZ(Stand) + 98.f), (TestTarget - Stand).GetSafeNormal2D().Rotation());
+			// Back behind the officer (the crosshair is wherever their own camera looks).
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetViewTargetWithBlend(Cop, 0.f);
+				PC->SetControlRotation((TestTarget - Stand).Rotation());
+			}
+		});
+		AddStep(TEXT("hydrant: aim"), 0.12f, [this]() { AimAt(TestTarget); });
+		AddStep(TEXT("hydrant: aim again"), 0.12f, [this]() { AimAt(TestTarget); });
+		AddStep(TEXT("hydrant: fire"), 0.1f, [this]()
+		{
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+			{
+				AimAt(TestTarget);
+				const UFTODebris* Debris = UFTODebris::Get(GetWorld());
+				const APlayerController* PC = GetPC();
+				FHitResult Sight;
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeSight), false, Cop);
+				const FVector Eye = PC && PC->PlayerCameraManager ? PC->PlayerCameraManager->GetCameraLocation() : FVector::ZeroVector;
+				const bool bSees = PC && PC->PlayerCameraManager && GetWorld()->LineTraceSingleByChannel(Sight, Eye, Eye + PC->PlayerCameraManager->GetCameraRotation().Vector() * 3000.f,
+					ECC_FTOProjectile, Params) && Sight.GetComponent() == TestISM.Get();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: firing at the hydrant (%.0f m) with the %s (%d in it), crosshair %s; %d holes before."),
+					FVector::Dist(Cop->GetActorLocation(), TestTarget) / 100.f, *FTOWeapons::DisplayName(Cop->GetDrawnWeapon()).ToString(), Cop->GetClip(Cop->GetDrawnSlot()),
+					bSees ? TEXT("on it") : *FString::Printf(TEXT("on %s"), *GetNameSafe(Sight.GetComponent())), Debris ? Debris->NumHoles() : -1);
+				Cop->FirePressed();
+			}
+		});
+		AddStep(TEXT("hydrant: film"), 0.9f, [this]()
+		{
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+			ViewFrom(TestTarget + TestAway * 250.f + Across * 420.f + FVector(0.f, 0.f, 120.f), TestTarget + FVector(0.f, 0.f, 60.f));
+		});
+		AddShot(TEXT("19b_hydrant"), 0.2f);
+		AddStep(TEXT("hydrant result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const UFTODebris* Debris = UFTODebris::Get(GetWorld());
+			const bool bBroken = Wreckage && TestISM.IsValid() && Wreckage->IsBroken(TestISM->GetFName(), TestInstance);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: shot a hydrant: %s, %d fountain(s) going."), bBroken ? TEXT("knocked off") : TEXT("STILL STANDING"), Debris ? Debris->NumFountains() : -1);
+		});
+
+		AddStep(TEXT("lamp post"), 0.f, [this]()
+		{
+			const APawn* Cop = GetPawn();
+			UInstancedStaticMeshComponent* Posts = nullptr;
+			FTransform Post;
+			if (!Cop || !TestCruiser || !FindCityInstance(TEXT("SM_LampPost"), Cop->GetActorLocation(), Posts, TestInstance, Post))
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: lamp post: NO CAR OR POST."));
+				return;
+			}
+			TestISM = Posts;
+			TestTarget = Post.GetLocation();
+			// A run-up with nothing in the way but the post.
+			TestCruiser->SetAutopilot(false);
+			TestCruiser->StopDead();
+			FVector Start = TestTarget + FVector(1100.f, 0.f, 0.f);
+			for (const FVector& Dir : { FVector(1.f, 0.f, 0.f), FVector(-1.f, 0.f, 0.f), FVector(0.f, 1.f, 0.f), FVector(0.f, -1.f, 0.f) })
+			{
+				const FVector Spot = TestTarget + Dir * 1100.f;
+				const float Z = GroundZ(Spot) + AFTOCruiser::RideHeight;
+				FHitResult First;
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeRunUp), false, TestCruiser);
+				const FVector From(Spot.X, Spot.Y, Z);
+				const FVector To(TestTarget.X, TestTarget.Y, Z);
+				if (GetWorld()->SweepSingleByChannel(First, From, To, (-Dir).ToOrientationQuat(), ECC_Pawn, FCollisionShape::MakeBox(FVector(240.f, 108.f, 72.f)), Params) &&
+					First.GetComponent() == Posts)
+				{
+					Start = From;
+					TestAway = Dir;
+					break;
+				}
+			}
+			TestCruiser->SetActorLocationAndRotation(Start, (-TestAway).Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
+			TestCruiser->SetAutopilot(true, 1.f, 0.f);
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+			ViewFrom(TestTarget + TestAway * 200.f + Across * 900.f + FVector(0.f, 0.f, 250.f), TestTarget + FVector(0.f, 0.f, 150.f));
+		});
+		// Off the gas once it's through (so it doesn't carry on into the building behind), and a moment to see it fall.
+		AddWait(TEXT("post goes"), 3.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			return Wreckage && TestISM.IsValid() && Wreckage->IsBroken(TestISM->GetFName(), TestInstance);
+		});
+		AddStep(TEXT("brake"), 0.35f, [this]()
+		{
+			if (TestCruiser)
+			{
+				TestCruiser->SetAutopilot(false);
+				TestCruiser->StopDead();
+			}
+		});
+		AddShot(TEXT("19c_lamp_post"), 0.4f);
+		AddStep(TEXT("lamp post result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const bool bDown = Wreckage && TestISM.IsValid() && Wreckage->IsBroken(TestISM->GetFName(), TestInstance);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: drove into a lamp post: %s."), bDown ? TEXT("knocked flat") : TEXT("STILL STANDING"));
+		});
+
+		// Into the wall beside a front door, harder each time.
+		for (const float RunUp : { 380.f, 750.f, 1150.f })
+		{
+			AddStep(TEXT("crash"), 0.f, [this, RunUp]()
+			{
+				const AFTOCityGenerator* City = GetCity();
+				if (!TestCruiser || !City)
+				{
+					return;
+				}
+				if (RunUp < 400.f)
+				{
+					// A stretch of front wall near the car (beside a door) with a clear run at it, the car's box swept
+					// all the way in: the first thing it meets must be the wall itself.
+					TArray<const FFTOBuilding*> Nearby;
+					for (const FFTOBuilding& Building : City->GetBuildings())
+					{
+						Nearby.Add(&Building);
+					}
+					const FVector Car = TestCruiser->GetActorLocation();
+					Nearby.Sort([&Car](const FFTOBuilding& A, const FFTOBuilding& B) { return FVector::DistSquared(A.DoorOutside, Car) < FVector::DistSquared(B.DoorOutside, Car); });
+					bool bFound = false;
+					for (int32 i = 0; i < FMath::Min(8, Nearby.Num()) && !bFound; ++i)
+					{
+						const FVector Out = (Nearby[i]->DoorOutside - Nearby[i]->Room.GetLocation()).GetSafeNormal2D();
+						const FVector Along = FVector::CrossProduct(FVector::UpVector, Out);
+						for (const float Offset : { 320.f, -320.f, 600.f, -600.f })
+						{
+							const FVector Wall = Nearby[i]->DoorOutside - Out * 160.f + Along * Offset;
+							const FVector Far = Wall + Out * 1400.f;
+							const float Z = GroundZ(Far) + AFTOCruiser::RideHeight;
+							FHitResult First;
+							FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeRunUp), false, TestCruiser);
+							if (GetPawn())
+							{
+								Params.AddIgnoredActor(GetPawn());
+							}
+							if (GetWorld()->SweepSingleByChannel(First, FVector(Far.X, Far.Y, Z), FVector(Wall.X, Wall.Y, Z), (-Out).ToOrientationQuat(), ECC_Pawn,
+								FCollisionShape::MakeBox(FVector(240.f, 108.f, 72.f)), Params) && First.GetComponent() && !First.GetComponent()->IsA<USkeletalMeshComponent>() &&
+								AFTODestruction::KindOf(First.GetComponent()) == EFTOBreakKind::None && !First.GetActor()->IsA<APawn>() &&
+								FVector::Dist2D(First.ImpactPoint, Wall) < 250.f)
+							{
+								TestAway = Out;
+								TestTarget = Wall;
+								bFound = true;
+								break;
+							}
+						}
+					}
+					if (!bFound)
+					{
+						UE_LOG(LogFTO, Display, TEXT("SMOKE: crash: NO CLEAR WALL."));
+						return;
+					}
+					// Fresh from the motor pool, so each knock shows.
+					if (TestCruiser->GetDamage())
+					{
+						TestCruiser->GetDamage()->Repair();
+					}
+					// The officer stands well clear.
+					if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+					{
+						const FVector Clear = TestTarget + TestAway * 1600.f + FVector::CrossProduct(FVector::UpVector, TestAway) * 900.f;
+						Cop->TeleportTo(FVector(Clear.X, Clear.Y, GroundZ(Clear) + 98.f), (-TestAway).Rotation());
+					}
+				}
+				TestCruiser->SetAutopilot(false);
+				TestCruiser->StopDead();
+				const FVector Start = TestTarget + TestAway * (250.f + RunUp);
+				TestCruiser->SetActorLocationAndRotation(FVector(Start.X, Start.Y, GroundZ(Start) + AFTOCruiser::RideHeight), (-TestAway).Rotation(), false, nullptr,
+					ETeleportType::TeleportPhysics);
+				CrashHealthBefore = TestCruiser->GetDamage() ? TestCruiser->GetDamage()->GetHealth() : 0.f;
+				TestCruiser->SetAutopilot(true, 1.f, 0.f);
+				const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+				ViewFrom(Start + Across * 800.f - TestAway * RunUp * 0.5f + FVector(0.f, 0.f, 260.f), TestTarget + TestAway * 300.f);
+			});
+			// One clean hit: off the gas the moment it lands (the autopilot would keep bumping it into the wall).
+			AddWait(TEXT("crash lands"), 3.f, [this]()
+			{
+				return TestCruiser && TestCruiser->GetDamage() && TestCruiser->GetDamage()->GetHealth() < CrashHealthBefore;
+			});
+			AddStep(TEXT("crash result"), 0.4f, [this]()
+			{
+				if (!TestCruiser)
+				{
+					return;
+				}
+				TestCruiser->SetAutopilot(false);
+				TestCruiser->StopDead();
+				const UFTOVehicleDamage* Damage = TestCruiser->GetDamage();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: cruiser crashed: health %.0f, %s."), Damage ? Damage->GetHealth() : -1.f,
+					Damage ? *StaticEnum<EFTOCarDamage>()->GetNameStringByValue(int64(Damage->GetStage())) : TEXT("NO DAMAGE"));
+			});
+			if (RunUp > 700.f)
+			{
+				AddStep(TEXT("look at the cruiser"), 1.5f, [this]()
+				{
+					if (TestCruiser)
+					{
+						const FVector Car = TestCruiser->GetActorLocation();
+						const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+						ViewFrom(Car + TestAway * 350.f + Across * 520.f + FVector(0.f, 0.f, 240.f), Car + FVector(0.f, 0.f, 40.f));
+					}
+				});
+				AddShot(RunUp > 1000.f ? TEXT("19e_wrecked") : TEXT("19d_smoking"), 0.3f);
+			}
+		}
+
+		AddStep(TEXT("write off a citizen's car"), 1.4f, [this]()
+		{
+			const APawn* Cop = GetPawn();
+			AFTOTrafficCar* Car = nullptr;
+			for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It && Cop; ++It)
+			{
+				if (It->GetCarState() == EFTOCarState::Driving &&
+					(!Car || FVector::DistSquared(It->GetActorLocation(), Cop->GetActorLocation()) < FVector::DistSquared(Car->GetActorLocation(), Cop->GetActorLocation())))
+				{
+					Car = *It;
+				}
+			}
+			if (UFTOVehicleDamage* Damage = Car ? Car->FindComponentByClass<UFTOVehicleDamage>() : nullptr)
+			{
+				Damage->ApplyDamage(60.f, Car->GetActorLocation() + Car->GetActorForwardVector() * 200.f, GetPC());
+				Damage->ApplyDamage(60.f, Car->GetActorLocation() - Car->GetActorForwardVector() * 200.f, GetPC());
+				TestCar = Car;
+				ViewFrom(Car->GetActorLocation() + Car->GetActorRightVector() * 600.f + Car->GetActorForwardVector() * 300.f + FVector(0.f, 0.f, 250.f), Car->GetActorLocation());
+			}
+		});
+		AddShot(TEXT("19f_wrecked_car"), 0.3f);
+		AddStep(TEXT("wreck result"), 0.f, [this]()
+		{
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: citizen's car written off: %s (report card: %d things broken, %d cars)."),
+				TestCar.IsValid() && TestCar->GetCarState() == EFTOCarState::Wrecked ? TEXT("wrecked, stopped") : TEXT("NOT WRECKED"),
+				GS ? GS->PropertyBroken : -1, GS ? GS->CarsWrecked : -1);
+			// Good as new for whoever needs a cruiser next.
+			if (TestCruiser && TestCruiser->GetDamage())
+			{
+				TestCruiser->GetDamage()->Repair();
+			}
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
 	}
 
 	// Two players (-FTOSmokeRideAlong): the host parks in a cruiser and waits; the client (whose tour
@@ -1658,6 +2052,12 @@ void AFTOSmokeTest::BuildSteps()
 			AddStep(TEXT("client off the radio"), 5.f, [this]()
 			{
 				if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->RadioReleased(); }
+			});
+			// Whatever the host broke (windows, a hydrant, a lamp post) is broken here too.
+			AddStep(TEXT("client sees the damage"), 0.f, [this]()
+			{
+				const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: client sees %d broken things in the city."), Wreckage ? Wreckage->NumApplied() : -1);
 			});
 		}
 	}
