@@ -74,6 +74,11 @@ public:
 
 	/** Local: the shift's over: watch the squad line up outside the precinct (and stand still for the photo). */
 	void ShowDebrief();
+	/** Server -> this player: the line-up's ready, watch it (see ShowDebrief). */
+	UFUNCTION(Client, Reliable)
+	void ClientShowDebrief();
+	/** Local: back on duty (a debug restart): the camera and controls come back. */
+	void EndDebrief();
 
 	/** Make a callout by name: Backup, Fleeing, OfficerDown or Copy. */
 	UFUNCTION(Exec) void FTOCallout(const FString& Name);
@@ -98,6 +103,8 @@ protected:
 
 	bool bTransmitting = false;
 	bool bWheelOpen = false;
+	/** Looking at the end-of-shift line-up. */
+	UPROPERTY(Transient) TObjectPtr<AActor> DebriefCamera;
 	FVector2D WheelAim = FVector2D::ZeroVector;
 
 	virtual void BeginPlay() override;

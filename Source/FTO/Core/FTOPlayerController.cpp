@@ -431,18 +431,42 @@ void AFTOPlayerController::ShowDebrief()
 		WheelAim = FVector2D::ZeroVector;
 		WheelClosed();
 	}
-	TArray<FTransform> Spots;
-	FTransform Eye;
-	if (!FTOScoring::DebriefSpots(GetWorld(), 4, Spots, Eye))
+	// Once (the HUD and the server both ask; the server's reliable call can also arrive after a restart that took the
+	// camera back to the pawn, so the view is always re-applied).
+	if (!DebriefCamera)
+	{
+		TArray<FTransform> Spots;
+		FTransform Eye;
+		if (!FTOScoring::DebriefSpots(GetWorld(), 4, Spots, Eye))
+		{
+			return;
+		}
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		DebriefCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Eye, Params);
+	}
+	if (DebriefCamera && GetViewTarget() != DebriefCamera)
+	{
+		SetViewTargetWithBlend(DebriefCamera, 1.2f, VTBlend_EaseInOut, 2.f);
+	}
+	ResetIgnoreInputFlags();
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+}
+
+void AFTOPlayerController::ClientShowDebrief_Implementation()
+{
+	ShowDebrief();
+}
+
+void AFTOPlayerController::EndDebrief()
+{
+	if (!DebriefCamera)
 	{
 		return;
 	}
-	FActorSpawnParameters Params;
-	Params.ObjectFlags |= RF_Transient;
-	if (ACameraActor* Camera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Eye, Params))
-	{
-		SetViewTargetWithBlend(Camera, 1.2f, VTBlend_EaseInOut, 2.f);
-	}
-	SetIgnoreMoveInput(true);
-	SetIgnoreLookInput(true);
+	DebriefCamera->Destroy();
+	DebriefCamera = nullptr;
+	ResetIgnoreInputFlags();
+	SetViewTargetWithBlend(GetPawn(), 0.5f);
 }

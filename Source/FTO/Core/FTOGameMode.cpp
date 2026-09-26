@@ -340,6 +340,8 @@ void AFTOGameMode::GatherForDebrief()
 		{
 			Cruiser->LetOut(Officer);
 		}
+		// Whatever arrest they were in the middle of is off (the suspect goes back to kneeling or runs for it).
+		Officer->EndSyncedAction();
 		if (UFTOKnockdownComponent* Knockdown = Officer->GetKnockdown(); Knockdown && Knockdown->IsDown())
 		{
 			Knockdown->Recover();
@@ -349,6 +351,19 @@ void AFTOGameMode::GatherForDebrief()
 		if (AController* Controller = Officer->GetController())
 		{
 			Controller->SetControlRotation(Spots[i].Rotator());
+		}
+	}
+	// Then point everyone at the line-up: facing on their own machine (control rotation doesn't replicate) and the
+	// debrief camera (reliable, after any "out of the car" restart, so that can't snap the camera back to the pawn).
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(It->Get()))
+		{
+			if (const APawn* Pawn = PC->GetPawn())
+			{
+				PC->ClientSetRotation(Pawn->GetActorRotation());
+			}
+			PC->ClientShowDebrief();
 		}
 	}
 }

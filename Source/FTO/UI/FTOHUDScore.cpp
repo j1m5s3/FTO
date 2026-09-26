@@ -89,6 +89,10 @@ void AFTOHUD::DrawScorePopups()
 void AFTOHUD::DrawScoreTicker()
 {
 	ScoreboardShownTime = -1.f; // on duty (again): the next scoreboard counts up from scratch
+	if (AFTOPlayerController* FTOPC = Cast<AFTOPlayerController>(GetOwningPlayerController()))
+	{
+		FTOPC->EndDebrief();
+	}
 	const APlayerController* PC = GetOwningPlayerController();
 	const AFTOPlayerState* Me = PC ? PC->GetPlayerState<AFTOPlayerState>() : nullptr;
 	if (!Me)

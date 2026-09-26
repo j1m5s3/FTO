@@ -582,19 +582,10 @@ EFTOAnimAction AFTOCharacter::GetAnimAction() const
 	{
 		return FTOSeats::RidingPose(CurrentSeat);
 	}
-	if (Knockdown && Knockdown->IsDazed())
-	{
-		return EFTOAnimAction::Dazed;
-	}
-	if (IsInSyncedAction())
-	{
-		return SyncedAction.Action;
-	}
-
 	const UWorld* World = GetWorld();
 	const AFTOGameState* GS = World ? World->GetGameState<AFTOGameState>() : nullptr;
 
-	// Lined up for the scoreboard: the squad dances if the city made it, and slumps if it didn't.
+	// Lined up for the scoreboard (stars or no stars): the squad dances if the city made it, and slumps if it didn't.
 	if (GS && GS->GetShiftPhase() == EFTOShiftPhase::Survived)
 	{
 		return EFTOAnimAction::Dance;
@@ -602,6 +593,15 @@ EFTOAnimAction AFTOCharacter::GetAnimAction() const
 	if (GS && GS->GetShiftPhase() == EFTOShiftPhase::Overrun)
 	{
 		return EFTOAnimAction::Slump;
+	}
+
+	if (Knockdown && Knockdown->IsDazed())
+	{
+		return EFTOAnimAction::Dazed;
+	}
+	if (IsInSyncedAction())
+	{
+		return SyncedAction.Action;
 	}
 
 	const float Now = GS ? GS->GetServerWorldTimeSeconds() : (World ? World->GetTimeSeconds() : 0.f);

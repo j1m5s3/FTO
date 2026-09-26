@@ -61,8 +61,8 @@ public:
 	/** Server time the combo last grew (it lapses FTOScoring::ComboWindow later). */
 	float GetComboTime() const { return ComboTime; }
 
-	/** Every machine: the "+250 ARREST! x2" popup. */
-	UFUNCTION(NetMulticast, Unreliable)
+	/** Every machine: the "+250 ARREST! x2" popup (reliable: an arrest and its bonuses land in the same frame). */
+	UFUNCTION(NetMulticast, Reliable)
 	void MulticastScorePopup(int32 Points, EFTOScore Event, FVector_NetQuantize Where, uint8 InCombo);
 
 protected:
