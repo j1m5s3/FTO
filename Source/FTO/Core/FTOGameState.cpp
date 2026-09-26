@@ -25,6 +25,7 @@ AFTOGameState::AFTOGameState()
 	SoundSet.Bugle = Load(TEXT("SW_Bugle"));
 	SoundSet.Fail = Load(TEXT("SW_Fail"));
 	SoundSet.Click = Load(TEXT("SW_Click"));
+	SoundSet.Bonk = Load(TEXT("SW_Bonk"));
 
 	static ConstructorHelpers::FObjectFinder<USoundAttenuation> WorldAttenuation(TEXT("/Game/FTO/Audio/SA_FTOWorld.SA_FTOWorld"));
 	SoundSet.World = WorldAttenuation.Object;
@@ -51,6 +52,7 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, IncidentsWitnessed);
 	DOREPLIFETIME(AFTOGameState, TrafficStops);
 	DOREPLIFETIME(AFTOGameState, SuspectsBooked);
+	DOREPLIFETIME(AFTOGameState, CiviliansBowledOver);
 	DOREPLIFETIME(AFTOGameState, PeakChaos);
 	DOREPLIFETIME(AFTOGameState, ShiftSeed);
 }

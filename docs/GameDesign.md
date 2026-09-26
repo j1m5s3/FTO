@@ -99,8 +99,12 @@ Done:
   bar brawls, domestic rows, burglaries, the heist in the vault) with everyone reacting, officers can witness them
   through shop windows, and suspects are walked into the holding cells to be booked.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (ragdolls in the world, destruction, armory and ballistics, arrests v2,
-radio, scoring, Steam invites).
+- Phase 2: ragdolls in the world. Cruisers send anyone they hit at speed flying (citizens cost chaos and go on the
+  report card), getaway cars plough through crowds, and officers have a flying tackle. Knocked-down characters ease
+  out of the ragdoll into sitting up dazed with stars circling, then get back to their feet.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (destruction, armory and ballistics, arrests v2, radio, scoring, Steam
+invites).
 
 Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame

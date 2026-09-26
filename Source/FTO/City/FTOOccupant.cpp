@@ -166,6 +166,10 @@ EFTOAnimAction AFTOOccupant::GetAnimAction() const
 	{
 		return EFTOAnimAction::None;
 	}
+	if (Knockdown && Knockdown->IsDazed())
+	{
+		return EFTOAnimAction::Dazed;
+	}
 	if (bHandsUp)
 	{
 		return bSeated ? EFTOAnimAction::SitHandsUp : EFTOAnimAction::HandsUp;

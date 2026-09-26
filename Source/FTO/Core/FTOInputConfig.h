@@ -33,6 +33,8 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> Horn;
 	/** In a vehicle: swap between the chase camera and the view from the seat. */
 	UPROPERTY() TObjectPtr<UInputAction> Camera;
+	/** On foot: flying tackle. */
+	UPROPERTY() TObjectPtr<UInputAction> Tackle;
 
 private:
 	UInputAction* MakeAction(FName Name, int32 ValueType);

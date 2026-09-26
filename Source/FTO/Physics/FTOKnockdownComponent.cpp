@@ -1,4 +1,7 @@
 #include "Physics/FTOKnockdownComponent.h"
+#include "Animation/FTOCharacterAnimInstance.h"
+#include "Core/FTOGameState.h"
+#include "Engine/SkeletalMesh.h"
 #include "Art/FTOArt.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -14,6 +17,8 @@ namespace
 	constexpr int32 NumStars = 3;
 	const FName PelvisBone(TEXT("pelvis"));
 	const FName HeadBone(TEXT("head"));
+	const FName FootLBone(TEXT("foot_l"));
+	const FName FootRBone(TEXT("foot_r"));
 }
 
 UFTOKnockdownComponent::UFTOKnockdownComponent()
@@ -81,6 +86,11 @@ void UFTOKnockdownComponent::Knockdown(const FVector& LaunchVelocity, float Dura
 	RecoverAt = Duration > 0.f ? GetWorld()->GetTimeSeconds() + Duration : 0.f;
 	GetOwner()->ForceNetUpdate();
 	OnRep_State();
+
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Bonk, GetOwner()->GetActorLocation(), 0.9f);
+	}
 }
 
 void UFTOKnockdownComponent::Recover()
@@ -162,12 +172,21 @@ void UFTOKnockdownComponent::StopRagdoll()
 
 	AActor* Owner = GetOwner();
 	const FVector Pelvis = Mesh->GetSocketLocation(PelvisBone);
+	const FVector Feet = (Mesh->GetSocketLocation(FootLBone) + Mesh->GetSocketLocation(FootRBone)) * 0.5f;
+
+	// Where every bone came to rest, so the animation can pick up from there instead of snapping upright.
+	TArray<FTransform> RestingPose;
+	RestingPose.SetNum(Mesh->GetNumBones());
+	for (int32 Bone = 0; Bone < RestingPose.Num(); ++Bone)
+	{
+		RestingPose[Bone] = Mesh->GetBoneTransform(Bone);
+	}
 
 	Mesh->SetSimulatePhysics(false);
 	Mesh->SetAllBodiesSimulatePhysics(false);
 	Mesh->SetCollisionProfileName(SavedProfile);
 
-	// Stand back up where the body came to rest.
+	// Sit up where the body came to rest, facing the way the legs lie.
 	const float StandHeight = -SavedRelative.GetLocation().Z;
 	FVector StandAt(Pelvis.X, Pelvis.Y, Pelvis.Z + StandHeight * 0.5f);
 	FHitResult Ground;
@@ -176,7 +195,9 @@ void UFTOKnockdownComponent::StopRagdoll()
 	{
 		StandAt.Z = Ground.ImpactPoint.Z + StandHeight + 2.f;
 	}
-	Owner->SetActorLocation(StandAt, false, nullptr, ETeleportType::TeleportPhysics);
+	const FVector Legs = (Feet - Pelvis).GetSafeNormal2D();
+	const FRotator Facing = Legs.IsNearlyZero() ? FRotator(0.f, Owner->GetActorRotation().Yaw, 0.f) : FRotator(0.f, Legs.Rotation().Yaw, 0.f);
+	Owner->SetActorLocationAndRotation(StandAt, Facing, false, nullptr, ETeleportType::TeleportPhysics);
 
 	if (UPrimitiveComponent* Root = Cast<UPrimitiveComponent>(Owner->GetRootComponent()); Root && Root != Mesh)
 	{
@@ -185,7 +206,34 @@ void UFTOKnockdownComponent::StopRagdoll()
 		Root->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	}
 
+	// The resting pose in the mesh's new frame, bone by bone relative to its parent (the unskinned root stays
+	// put, so the whole body eases from lying to sitting rather than sliding across), handed to the animation.
+	if (UFTOCharacterAnimInstance* Anim = Cast<UFTOCharacterAnimInstance>(Mesh->GetAnimInstance()); Anim && Mesh->GetSkeletalMeshAsset())
+	{
+		const FTransform Component = Mesh->GetComponentTransform();
+		TArray<FTransform> ComponentSpace;
+		ComponentSpace.SetNum(RestingPose.Num());
+		for (int32 Bone = 0; Bone < RestingPose.Num(); ++Bone)
+		{
+			ComponentSpace[Bone] = Bone == 0 ? FTransform::Identity : RestingPose[Bone].GetRelativeTransform(Component);
+		}
+		const FReferenceSkeleton& Skeleton = Mesh->GetSkeletalMeshAsset()->GetRefSkeleton();
+		TArray<FTransform> Local;
+		Local.SetNum(RestingPose.Num());
+		for (int32 Bone = 0; Bone < RestingPose.Num(); ++Bone)
+		{
+			const int32 Parent = Skeleton.GetParentIndex(Bone);
+			Local[Bone] = Parent == INDEX_NONE ? ComponentSpace[Bone] : ComponentSpace[Bone].GetRelativeTransform(ComponentSpace[Parent]);
+		}
+		Anim->BlendFromPose(Local, 0.6f);
+	}
+
 	StarsUntil = GetWorld()->GetTimeSeconds() + DazedSeconds;
+}
+
+bool UFTOKnockdownComponent::IsDazed() const
+{
+	return !State.bDown && !bRagdolling && GetWorld() && GetWorld()->GetTimeSeconds() < StarsUntil;
 }
 
 void UFTOKnockdownComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)

@@ -427,6 +427,7 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 		FString::Printf(TEXT("Traffic stops:         %d"), GS->TrafficStops),
 		FString::Printf(TEXT("Suspects booked:       %d"), GS->SuspectsBooked),
 		FString::Printf(TEXT("Went cold / escalated: %d"), GS->IncidentsFailed),
+		FString::Printf(TEXT("Citizens bowled over:  %d"), GS->CiviliansBowledOver),
 		FString::Printf(TEXT("Peak chaos:            %d%%"), FMath::RoundToInt(GS->PeakChaos)),
 	};
 	float Y = CY + 100.f * S;

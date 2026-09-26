@@ -16,6 +16,7 @@
 #include "Interaction/FTOInteractable.h"
 #include "Engine/OverlapResult.h"
 #include "Physics/FTOKnockdownComponent.h"
+#include "Physics/FTOImpact.h"
 #include "City/FTOPedestrian.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
@@ -132,6 +133,7 @@ void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	EIC->BindAction(Input->Interact, ETriggerEvent::Completed, this, &AFTOCharacter::InteractReleased);
 	EIC->BindAction(Input->Whistle, ETriggerEvent::Started, this, &AFTOCharacter::WhistlePressed);
 	EIC->BindAction(Input->Camera, ETriggerEvent::Started, this, &AFTOCharacter::ToggleCamera);
+	EIC->BindAction(Input->Tackle, ETriggerEvent::Started, this, &AFTOCharacter::TacklePressed);
 }
 
 void AFTOCharacter::BeginPlay()
@@ -191,9 +193,9 @@ void AFTOCharacter::RefreshOfficerColor()
 void AFTOCharacter::Move(const FInputActionValue& Value)
 {
 	const FVector2D Axis = Value.Get<FVector2D>();
-	if (!Controller)
+	if (!Controller || (Knockdown && Knockdown->IsDazed()))
 	{
-		return;
+		return; // seeing stars: sit tight a moment
 	}
 
 	const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
@@ -262,6 +264,72 @@ void AFTOCharacter::ServerLeaveVehicle_Implementation()
 	if (AFTOCruiser* Cruiser = Cast<AFTOCruiser>(CurrentVehicle))
 	{
 		Cruiser->LetOut(this);
+	}
+}
+
+bool AFTOCharacter::CanTackle() const
+{
+	const UCharacterMovementComponent* Movement = GetCharacterMovement();
+	return !CurrentVehicle && GetWorld()->GetTimeSeconds() >= NextTackleTime && Movement && Movement->IsMovingOnGround() &&
+		!(Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed()));
+}
+
+void AFTOCharacter::TacklePressed()
+{
+	if (!CanTackle())
+	{
+		return;
+	}
+	if (!HasAuthority())
+	{
+		// Predict the dive here so it's instant; the server does it for real and decides who gets flattened.
+		NextTackleTime = GetWorld()->GetTimeSeconds() + TackleCooldown;
+		LaunchTackle();
+	}
+	ServerTackle();
+}
+
+void AFTOCharacter::LaunchTackle()
+{
+	// Low and fast, with a little hop so the dive clears the kerb.
+	LaunchCharacter(GetActorForwardVector() * 950.f + FVector(0.f, 0.f, 220.f), true, true);
+}
+
+void AFTOCharacter::ServerTackle_Implementation()
+{
+	if (!CanTackle())
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	NextTackleTime = Now + TackleCooldown;
+	LaunchTackle();
+	PlayTimedAction(EFTOAnimAction::Tackle, 0.75f);
+	TackleReachUntil = Now + 0.45f;
+	GetWorldTimerManager().SetTimer(TackleTimer, this, &AFTOCharacter::CheckTackle, 0.05f, true, 0.05f);
+}
+
+void AFTOCharacter::CheckTackle()
+{
+	if (GetWorld()->GetTimeSeconds() > TackleReachUntil)
+	{
+		GetWorldTimerManager().ClearTimer(TackleTimer);
+		return;
+	}
+	// Whoever's just ahead of the dive goes down (one per tackle).
+	const FVector Fwd = GetActorForwardVector();
+	TArray<FOverlapResult> InReach;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOTackle), false, this);
+	if (GetWorld()->OverlapMultiByObjectType(InReach, GetActorLocation() + Fwd * 90.f, GetActorQuat(), FCollisionObjectQueryParams(ECC_Pawn), FCollisionShape::MakeCapsule(60.f, 90.f), Params))
+	{
+		for (const FOverlapResult& Overlap : InReach)
+		{
+			if (Overlap.GetActor() != this && FTOImpact::Tackle(Overlap.GetActor(), Fwd, GetController()))
+			{
+				GetWorldTimerManager().ClearTimer(TackleTimer);
+				return;
+			}
+		}
 	}
 }
 
@@ -458,6 +526,10 @@ EFTOAnimAction AFTOCharacter::GetAnimAction() const
 	if (CurrentVehicle && CurrentSeat != EFTOSeat::None)
 	{
 		return FTOSeats::RidingPose(CurrentSeat);
+	}
+	if (Knockdown && Knockdown->IsDazed())
+	{
+		return EFTOAnimAction::Dazed;
 	}
 
 	const UWorld* World = GetWorld();

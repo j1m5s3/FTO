@@ -1,4 +1,6 @@
 #include "Vehicles/FTOCruiser.h"
+#include "Physics/FTOImpact.h"
+#include "Physics/FTOKnockdownComponent.h"
 #include "Art/FTOArt.h"
 #include "City/FTOTrafficCar.h"
 #include "Core/FTOCharacter.h"
@@ -464,6 +466,20 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// Stop passing through people we bowled over a moment ago.
+	const float Now = GetWorld()->GetTimeSeconds();
+	for (int32 i = BowledOver.Num() - 1; i >= 0; --i)
+	{
+		if (Now >= BowledOver[i].Value || !BowledOver[i].Key.IsValid())
+		{
+			if (AActor* Victim = BowledOver[i].Key.Get())
+			{
+				Collision->IgnoreActorWhenMoving(Victim, false);
+			}
+			BowledOver.RemoveAtSwap(i);
+		}
+	}
+
 	if (IsSimulatingLocally())
 	{
 		Simulate(DeltaSeconds);
@@ -577,6 +593,12 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 
 	FHitResult Hit;
 	AddActorWorldOffset(Velocity * Dt, true, &Hit);
+	if (Hit.bBlockingHit && BowlOver(Hit.GetActor(), Velocity))
+	{
+		// Straight on through them (they're off flying), a little slower.
+		Velocity *= 0.85f;
+		AddActorWorldOffset(Velocity * Dt * (1.f - Hit.Time), true, &Hit);
+	}
 	if (Hit.bBlockingHit)
 	{
 		// Bounce off walls and other cars, losing most of the speed.
@@ -591,6 +613,40 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 	LateralSpeed = FVector::DotProduct(Velocity, NewRight);
 
 	FollowGround();
+}
+
+bool AFTOCruiser::BowlOver(AActor* Victim, const FVector& Velocity)
+{
+	// Only people (anyone who can be knocked over), and only at speed: walls, cars and slow bumps still bounce.
+	const UFTOKnockdownComponent* Knockdown = Victim ? Victim->FindComponentByClass<UFTOKnockdownComponent>() : nullptr;
+	if (!Knockdown || Velocity.Size2D() < FTOImpact::MinRunOverSpeed)
+	{
+		return false;
+	}
+	// Pass through them for a moment (someone already sprawled in the road doesn't stop a car either).
+	Collision->IgnoreActorWhenMoving(Victim, true);
+	BowledOver.Emplace(Victim, GetWorld()->GetTimeSeconds() + 2.f);
+	if (!Knockdown->IsDown())
+	{
+		if (HasAuthority())
+		{
+			FTOImpact::RunOver(Victim, GetActorLocation(), Velocity, GetController());
+		}
+		else
+		{
+			ServerBowlOver(Victim, Velocity);
+		}
+	}
+	return true;
+}
+
+void AFTOCruiser::ServerBowlOver_Implementation(AActor* Victim, FVector_NetQuantize10 Velocity)
+{
+	// The driver's machine saw the hit; make sure it's plausible before sending anyone flying.
+	if (Victim && FVector::DistSquared(Victim->GetActorLocation(), GetActorLocation()) < FMath::Square(900.f))
+	{
+		FTOImpact::RunOver(Victim, GetActorLocation(), FVector(Velocity).GetClampedToMaxSize(MaxSpeed * 1.2f), GetController());
+	}
 }
 
 void AFTOCruiser::FollowGround()
