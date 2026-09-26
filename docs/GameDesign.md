@@ -59,12 +59,14 @@ Medium-scale procedural grid city (a few districts: downtown, residential, indus
 ## Art & animation
 - Stylized low-poly, bright palette, chunky proportions.
 - Only free (CC0) or in-house assets: Kenney, Quaternius, Poly Pizza CC0, plus Blender-scripted in-house models and animations.
-- Until art lands, everything is built from engine primitives ("bean cops"), which already fits the tone.
+- Everything so far is in-house and Blender-scripted: characters, vehicles, and a modular building kit (bevelled walls,
+  shopfronts, awnings, signs, rooftop clutter, furniture, street dressing) that the city is assembled from at runtime.
 
 ## Tech notes
 - UE 5.8, C++ first. Gameplay systems in C++; Blueprints subclass for tuning and art.
 - Input is created at runtime in C++ (Enhanced Input) so the project boots with no binary assets.
-- Placeholder map: engine `Template_Default`; the city is generated at runtime.
+- Placeholder map: engine `Template_Default`; the city is generated at runtime from the building kit, every piece
+  instanced (one component per piece, painted per instance) and Nanite where opaque.
 
 ## Roadmap
 Done:
@@ -83,9 +85,13 @@ Done:
 - Phase 2: vehicles v2. Real cabins behind see-through glass, with a citizen at the wheel of every car (and
   sometimes passengers), a fully kitted cruiser interior (MDT laptop, radio, radar, shotgun rack, cage, lightbar
   switches), officers sat visibly at the wheel, a seat-view camera, riding shotgun, and suspects sulking in the back.
+- Phase 2: buildings v2. The city is built from an in-house modular kit and every ground floor is enterable and
+  furnished: shops, diners, bars, offices, homes, warehouses, the bank (with its vault) and the precinct (front desk,
+  briefing room, armory, holding cells). Streets get crossings, traffic lights, lamps, hydrants, benches, bins, bus
+  stops, planters and trees.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (enterable buildings with interior life, destruction, armory and
-ballistics, arrests v2, radio, scoring, Steam invites).
+Next: see [Phase 2 plan](Phase2Plan.md) (people in every building and indoor crime, ragdolls in the world,
+destruction, armory and ballistics, arrests v2, radio, scoring, Steam invites).
 
 Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame

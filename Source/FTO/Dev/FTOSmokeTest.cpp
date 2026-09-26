@@ -350,6 +350,82 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddShot(TEXT("07_sidewalk"), 1.f);
 
+	// Inside every kind of building: from just in the door, looking into the room (room space is X into the
+	// room from the door, Y across it).
+	struct FInside
+	{
+		EFTOBuildingType Type;
+		const TCHAR* Shot;
+		FVector Eye;
+		FVector Look;
+	};
+	static const FInside Insides[] =
+	{
+		{ EFTOBuildingType::Shop,      TEXT("12a_shop"),        FVector(60.f, -150.f, 240.f), FVector(700.f, 100.f, 60.f) },
+		{ EFTOBuildingType::Diner,     TEXT("12b_diner"),       FVector(60.f, -150.f, 240.f), FVector(800.f, 100.f, 60.f) },
+		{ EFTOBuildingType::Bar,       TEXT("12c_bar"),         FVector(60.f, -150.f, 240.f), FVector(700.f, 250.f, 60.f) },
+		{ EFTOBuildingType::Office,    TEXT("12d_office"),      FVector(60.f, -150.f, 240.f), FVector(700.f, 100.f, 60.f) },
+		{ EFTOBuildingType::Home,      TEXT("12e_home"),        FVector(40.f, 100.f, 230.f),  FVector(500.f, -150.f, 60.f) },
+		{ EFTOBuildingType::Warehouse, TEXT("12f_warehouse"),   FVector(80.f, 0.f, 350.f),    FVector(1200.f, 0.f, 100.f) },
+		{ EFTOBuildingType::Bank,      TEXT("12g_bank"),        FVector(60.f, -300.f, 260.f), FVector(1300.f, 0.f, 120.f) },
+		{ EFTOBuildingType::Bank,      TEXT("12h_vault"),       FVector(1700.f, -500.f, 250.f), FVector(2500.f, 300.f, 100.f) },
+		{ EFTOBuildingType::Precinct,  TEXT("13a_lobby"),       FVector(60.f, -400.f, 250.f), FVector(320.f, 150.f, 100.f) },
+		{ EFTOBuildingType::Precinct,  TEXT("13b_armory"),      FVector(700.f, -250.f, 250.f), FVector(1340.f, 50.f, 120.f) },
+		{ EFTOBuildingType::Precinct,  TEXT("13c_cells"),       FVector(650.f, 700.f, 250.f), FVector(1250.f, 900.f, 100.f) },
+		{ EFTOBuildingType::Precinct,  TEXT("13d_briefing"),    FVector(620.f, -700.f, 260.f), FVector(1340.f, -900.f, 120.f) },
+	};
+	for (const FInside& Inside : Insides)
+	{
+		AddStep(TEXT("go inside"), 1.2f, [this, Inside]()
+		{
+			const AFTOCityGenerator* City = GetCity();
+			if (const FFTOBuilding* B = City ? City->FindBuilding(Inside.Type) : nullptr)
+			{
+				ViewFrom(B->Room.TransformPosition(Inside.Eye), B->Room.TransformPosition(Inside.Look));
+			}
+		});
+		AddShot(Inside.Shot, 0.3f, false);
+	}
+
+	// Walk in through front doors: the doorways must really be open. (Server only: a client can't teleport itself.)
+	for (const EFTOBuildingType Type : { EFTOBuildingType::Diner, EFTOBuildingType::Precinct, EFTOBuildingType::Home })
+	{
+		if (GetNetMode() == NM_Client)
+		{
+			break;
+		}
+		AddStep(TEXT("to the door"), 2.6f, [this, Type]()
+		{
+			AFTOCityGenerator* City = GetCity();
+			APawn* Officer = GetPawn();
+			const FFTOBuilding* B = City ? City->FindBuilding(Type) : nullptr;
+			if (B && Officer)
+			{
+				const FVector In = B->Room.GetRotation().GetForwardVector();
+				Officer->TeleportTo(B->DoorOutside + FVector(0.f, 0.f, 100.f), In.Rotation());
+				WalkDirection = In;
+				bWalkOfficer = true;
+				ViewFrom(B->Room.TransformPosition(FVector(500.f, 250.f, 260.f)), B->Room.TransformPosition(FVector(0.f, 0.f, 80.f)));
+			}
+		});
+		AddStep(TEXT("check inside"), 0.3f, [this, Type]()
+		{
+			bWalkOfficer = false;
+			AFTOCityGenerator* City = GetCity();
+			const FFTOBuilding* B = City ? City->FindBuilding(Type) : nullptr;
+			if (const APawn* Officer = GetPawn(); B && Officer)
+			{
+				const float Inside = B->Room.InverseTransformPosition(Officer->GetActorLocation()).X;
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: walked into the %s: %s (%.0f cm in)."), *StaticEnum<EFTOBuildingType>()->GetNameStringByValue(int64(Type)),
+					Inside > 100.f ? TEXT("yes") : TEXT("NO"), Inside);
+			}
+		});
+		if (Type == EFTOBuildingType::Diner)
+		{
+			AddShot(TEXT("14_walked_in"), 0.3f, false);
+		}
+	}
+
 	// Side-on look at a passing car.
 	AddStep(TEXT("traffic"), 0.05f, [this]()
 	{
