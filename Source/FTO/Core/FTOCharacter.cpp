@@ -15,6 +15,7 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Interaction/FTOInteractable.h"
 #include "Engine/OverlapResult.h"
+#include "Physics/FTOKnockdownComponent.h"
 #include "City/FTOPedestrian.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
@@ -53,6 +54,8 @@ AFTOCharacter::AFTOCharacter()
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
+
+	Knockdown = CreateDefaultSubobject<UFTOKnockdownComponent>(TEXT("Knockdown"));
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	BaseMaterial = BaseMat.Object;
@@ -131,6 +134,9 @@ void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 void AFTOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	Knockdown->OnKnockedDown.AddUObject(this, &AFTOCharacter::HandleKnockedDown);
+	Knockdown->OnRecovered.AddUObject(this, &AFTOCharacter::HandleRecovered);
 
 	if (CapMesh)
 	{
@@ -441,4 +447,14 @@ void AFTOCharacter::ApplyVehicleState()
 		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 	}
+}
+
+void AFTOCharacter::HandleKnockedDown()
+{
+	GetCharacterMovement()->DisableMovement();
+}
+
+void AFTOCharacter::HandleRecovered()
+{
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
 }

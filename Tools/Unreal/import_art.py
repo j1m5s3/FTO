@@ -13,14 +13,16 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ART = os.path.join(REPO, "Art", "Source")
 BASE_MATERIAL = "/Game/FTO/Materials/M_FTOBase"
 # Blender works in metres; Unreal in centimetres.
-METRES_TO_CM = 100.0
+METRES_TO_CM = 1.0  # FBX from Tools/Blender already carries centimetres
 
 OFFICER_SKELETON = "/Game/FTO/Characters/Officer/SK_Officer_Skeleton"
 
 # Everyone shares the officer's skeleton, so the officer's clips animate every character.
 CHARACTERS = [
     {"folder": "Characters/Officer", "meshes": ["SK_Officer"],
-     "clips": ["Idle", "Walk", "Run", "Jump", "Interact", "Cheer"],
+     "clips": ["Idle", "Walk", "Run", "Jump", "Interact", "Cheer",
+               "Sit", "Drive", "Talk", "Work", "HandsUp", "Kneel", "Cuffed", "Cuffing", "Struggle", "Tackle",
+               "Punch", "Cower", "AimPistol", "AimRifle", "Dance", "Slump", "Dazed"],
      "dest": "/Game/FTO/Characters/Officer"},
     {"folder": "Characters/Civilians",
      "meshes": [f"SK_Civilian_{i:02d}" for i in range(1, 9)] + ["SK_Suspect"],
@@ -79,7 +81,7 @@ def skeletal_options(skeleton=None):
     ui.set_editor_property("import_animations", False)
     ui.set_editor_property("import_materials", False)
     ui.set_editor_property("import_textures", False)
-    ui.set_editor_property("create_physics_asset", True)
+    ui.set_editor_property("create_physics_asset", False)  # built properly by ensure_physics_assets()
     ui.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
     data = ui.get_editor_property("skeletal_mesh_import_data")
     data.set_editor_property("import_uniform_scale", METRES_TO_CM)
@@ -215,12 +217,28 @@ def import_group(group):
         unreal.log(f"FTO: asset {path}")
 
 
+def ensure_physics_assets():
+    """Ragdolls need a capsule per limb; the importer's auto physics asset merges our small bones away."""
+    for group in CHARACTERS:
+        for mesh_name in group["meshes"]:
+            mesh = eal.load_asset(f"{group['dest']}/{mesh_name}")
+            if not mesh:
+                continue
+            bodies = unreal.FTOEditorLibrary.rebuild_physics_asset(mesh, 2.0)
+            physics = mesh.get_editor_property("physics_asset")
+            if physics:
+                eal.save_loaded_asset(physics)
+            eal.save_loaded_asset(mesh)
+            unreal.log(f"FTO: {mesh_name} physics asset has {bodies} bodies")
+
+
 # FTO_IMPORT=characters|statics limits the run (default: everything).
 ONLY = os.environ.get("FTO_IMPORT", "").lower()
 
 if ONLY in ("", "characters"):
     for character_group in CHARACTERS:
         import_group(character_group)
+    ensure_physics_assets()
 
 if ONLY in ("", "statics"):
     for static_group in STATICS:

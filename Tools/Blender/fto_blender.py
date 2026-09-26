@@ -5,7 +5,10 @@ Everything is built from code so art stays reproducible, reviewable and 100% in-
 low-poly parts get flat colours baked into a vertex colour layer ("Col"). Vertex alpha = 1
 marks areas the game tints at runtime (uniform, car paint); see Tools/Unreal/create_materials.py.
 
-Units: Blender metres, character faces -Y, Z up. Exported FBX lands in Unreal as centimetres.
+Units: scripts author in metres (easy to reason about); the helpers emit centimetres (UNIT = 100) into a
+scene whose unit is 1 cm, so the FBX carries real centimetres and Unreal imports at 1:1. (Letting Unreal apply
+a x100 import scale instead puts that scale on the root bone, which breaks physics and attachments.)
+Characters face -Y, Z up.
 """
 import math
 import os
@@ -14,6 +17,9 @@ import sys
 import bmesh
 import bpy
 from mathutils import Euler, Matrix, Vector
+
+# Metres (what the scripts write) to Blender units (centimetres in an 0.01 m-unit scene).
+UNIT = 100.0
 
 
 # --------------------------------------------------------------------------------------
@@ -42,7 +48,7 @@ def reset_scene(fps=30):
     scene = bpy.context.scene
     scene.render.fps = fps
     scene.unit_settings.system = 'METRIC'
-    scene.unit_settings.scale_length = 1.0
+    scene.unit_settings.scale_length = 0.01  # 1 Blender unit = 1 cm
     return scene
 
 
@@ -74,9 +80,9 @@ class Part:
 
 
 def _transform(loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
-    return (Matrix.Translation(Vector(loc))
+    return (Matrix.Translation(Vector(loc) * UNIT)
             @ Euler([math.radians(a) for a in rot], 'XYZ').to_matrix().to_4x4()
-            @ Matrix.Diagonal(Vector(scale).to_4d()))
+            @ Matrix.Diagonal((Vector(scale) * UNIT).to_4d()))
 
 
 def make_part(kind, color, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), bone=None,
@@ -103,7 +109,7 @@ def make_part(kind, color, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), bone=N
     bmesh.ops.transform(bm, matrix=_transform(loc, rot, scale), verts=bm.verts)
 
     if bevel > 0.0:
-        bmesh.ops.bevel(bm, geom=list(bm.edges) + list(bm.verts), offset=bevel, segments=2,
+        bmesh.ops.bevel(bm, geom=list(bm.edges) + list(bm.verts), offset=bevel * UNIT, segments=2,
                         affect='EDGES', profile=0.5, clamp_overlap=True)
 
     col_layer = bm.loops.layers.color.new("Col")
@@ -113,7 +119,7 @@ def make_part(kind, color, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), bone=N
         face.smooth = smooth
         face_rgba = rgba
         if stripes:
-            band = int(math.floor(face.calc_center_median().z / stripes[1]))
+            band = int(math.floor(face.calc_center_median().z / (stripes[1] * UNIT)))
             if band % 2:
                 face_rgba = (stripes[0][0], stripes[0][1], stripes[0][2], alpha)
         for loop in face.loops:
@@ -168,8 +174,8 @@ def build_armature(bones, name="Armature"):
     bpy.ops.object.mode_set(mode='EDIT')
     for bone_name, head, tail, parent in bones:
         eb = data.edit_bones.new(bone_name)
-        eb.head = Vector(head)
-        eb.tail = Vector(tail)
+        eb.head = Vector(head) * UNIT
+        eb.tail = Vector(tail) * UNIT
         eb.roll = 0.0
         if parent:
             eb.parent = data.edit_bones[parent]
@@ -203,7 +209,7 @@ def key_pose(arm_obj, frame, pose):
         rot = spec.get("rot", (0.0, 0.0, 0.0))
         loc = spec.get("loc", (0.0, 0.0, 0.0))
         pb.rotation_euler = [math.radians(a) for a in rot]
-        pb.location = loc
+        pb.location = [v * UNIT for v in loc]
         pb.keyframe_insert(data_path="rotation_euler", frame=frame)
         pb.keyframe_insert(data_path="location", frame=frame)
 
@@ -269,6 +275,8 @@ def setup_preview(resolution=(640, 640)):
 
     cam_data = bpy.data.cameras.new("PreviewCam")
     cam_data.type = 'ORTHO'
+    cam_data.clip_start = 1.0
+    cam_data.clip_end = 100000.0
     cam = link(bpy.data.objects.new("PreviewCam", cam_data))
     scene.camera = cam
     return cam
@@ -276,10 +284,10 @@ def setup_preview(resolution=(640, 640)):
 
 def render_view(path, cam, location, look_at, ortho_scale, frame=0):
     scene = bpy.context.scene
-    cam.location = Vector(location)
-    direction = Vector(look_at) - Vector(location)
+    cam.location = Vector(location) * UNIT
+    direction = (Vector(look_at) - Vector(location)) * UNIT
     cam.rotation_euler = direction.to_track_quat('-Z', 'Y').to_euler()
-    cam.data.ortho_scale = ortho_scale
+    cam.data.ortho_scale = ortho_scale * UNIT
     scene.frame_set(frame)
     scene.render.filepath = path
     bpy.ops.render.render(write_still=True)

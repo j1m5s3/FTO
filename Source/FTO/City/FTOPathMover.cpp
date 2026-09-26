@@ -81,9 +81,26 @@ void AFTOPathMover::Hold()
 	ForceNetUpdate();
 }
 
+void AFTOPathMover::TeleportAndHold(const FVector& Location)
+{
+	check(HasAuthority());
+	Segment.From = Location;
+	Segment.To = Location;
+	Segment.StartTime = GetNetTime();
+	Segment.Speed = 0.f;
+	bArrivalHandled = true;
+	SetActorLocation(Location);
+	ForceNetUpdate();
+}
+
 void AFTOPathMover::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (IsMovementFrozen())
+	{
+		return;
+	}
 
 	const FVector NewLocation = EvaluateLocation();
 	SetActorLocation(NewLocation);

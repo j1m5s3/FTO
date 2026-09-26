@@ -43,6 +43,8 @@ public:
 	UFUNCTION(Exec) void FTOAddChaos(float Amount);
 	UFUNCTION(Exec) void FTOSkipBriefing();
 	UFUNCTION(Exec) void FTOEndShift(bool bSurvived = true);
+	UFUNCTION(Exec) void FTOKnockdown(float Radius = 1500.f);
+	UFUNCTION(Exec) void FTOAnimGallery();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")

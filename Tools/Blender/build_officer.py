@@ -188,6 +188,290 @@ def cheer(t):
     }
 
 
+# ---- Phase 2 clips ----
+# Pelvis "loc" is in the pelvis bone's space: y is up, z is forward.
+
+def seated_legs(pelvis_drop=0.26, knee=90, feet=0):
+    return {
+        "pelvis": {"loc": (0, -pelvis_drop, -0.02)},
+        "thigh_l": {"rot": (-90, 0, 0)},
+        "thigh_r": {"rot": (-90, 0, 0)},
+        "calf_l": {"rot": (knee, 0, 0)},
+        "calf_r": {"rot": (knee, 0, 0)},
+        "foot_l": {"rot": (feet, 0, 0)},
+        "foot_r": {"rot": (feet, 0, 0)},
+    }
+
+
+def kneeling_legs():
+    return {
+        "pelvis": {"loc": (0, -0.32, 0.0)},
+        "thigh_l": {"rot": (-10, 0, 0)},
+        "thigh_r": {"rot": (-10, 0, 0)},
+        "calf_l": {"rot": (100, 0, 0)},
+        "calf_r": {"rot": (100, 0, 0)},
+        "foot_l": {"rot": (55, 0, 0)},
+        "foot_r": {"rot": (55, 0, 0)},
+    }
+
+
+def sit(t):
+    b = s(t)
+    pose = seated_legs()
+    pose.update({
+        "spine": {"rot": (-4 + 1.5 * b, 0, 0)},
+        "head": {"rot": (-1.5 * b, 6 * s(t), 0)},
+        "upperarm_l": {"rot": (-35, 0, 10)},
+        "upperarm_r": {"rot": (-35, 0, -10)},
+        "lowerarm_l": {"rot": (-45, 0, 0)},
+        "lowerarm_r": {"rot": (-45, 0, 0)},
+    })
+    return pose
+
+
+def drive(t):
+    pose = seated_legs(knee=75)
+    steer = 4 * s(t)
+    pose.update({
+        "spine": {"rot": (-6, 0, 0)},
+        "head": {"rot": (0, 5 * s(t), 0)},
+        "upperarm_l": {"rot": (-65 + steer, 0, 12)},
+        "upperarm_r": {"rot": (-65 - steer, 0, -12)},
+        "lowerarm_l": {"rot": (-35, 0, 0)},
+        "lowerarm_r": {"rot": (-35, 0, 0)},
+    })
+    return pose
+
+
+def talk(t):
+    g = s(t, 2)
+    return {
+        "spine": {"rot": (2, 5 * s(t), 0)},
+        "head": {"rot": (5 * s(t, 2), 8 * s(t), 0)},
+        "upperarm_r": {"rot": (-45 + 20 * g, 0, 15)},
+        "lowerarm_r": {"rot": (-70 + 25 * s(t, 2) * 0.8, 0, 0)},
+        "upperarm_l": {"rot": (-15, 0, -10)},
+        "lowerarm_l": {"rot": (-30, 0, 0)},
+    }
+
+
+def work(t):
+    sweep = 8 * s(t, 2)
+    return {
+        "spine": {"rot": (12, 0, 0)},
+        "head": {"rot": (18, 0, 0)},
+        "upperarm_l": {"rot": (-35, 0, 15 + sweep)},
+        "upperarm_r": {"rot": (-35, 0, -15 + sweep)},
+        "lowerarm_l": {"rot": (-80, 0, 0)},
+        "lowerarm_r": {"rot": (-80, 0, 0)},
+    }
+
+
+def hands_up(t):
+    shake = 2 * s(t, 3)
+    return {
+        "spine": {"rot": (-3, 0, shake)},
+        "head": {"rot": (-5, 0, 0)},
+        "upperarm_l": {"rot": (-165, 0, -15 + shake)},
+        "upperarm_r": {"rot": (-165, 0, 15 - shake)},
+        "lowerarm_l": {"rot": (-20, 0, 0)},
+        "lowerarm_r": {"rot": (-20, 0, 0)},
+    }
+
+
+def kneel(t):
+    pose = kneeling_legs()
+    pose.update({
+        "spine": {"rot": (4 + s(t), 0, 0)},
+        "head": {"rot": (8, 0, 0)},
+        # Hands laced on the head.
+        "upperarm_l": {"rot": (-150, 0, -55)},
+        "upperarm_r": {"rot": (-150, 0, 55)},
+        "lowerarm_l": {"rot": (-125, 0, 0)},
+        "lowerarm_r": {"rot": (-125, 0, 0)},
+    })
+    return pose
+
+
+def cuffed(t):
+    pose = kneeling_legs()
+    pose.update({
+        "spine": {"rot": (8, 0, 2 * s(t))},
+        "head": {"rot": (15, 6 * s(t), 0)},
+        # Wrists together behind the back.
+        "upperarm_l": {"rot": (40, 0, 18)},
+        "upperarm_r": {"rot": (40, 0, -18)},
+        "lowerarm_l": {"rot": (-60, 0, 0)},
+        "lowerarm_r": {"rot": (-60, 0, 0)},
+    })
+    return pose
+
+
+def cuffing(t):
+    fiddle = s(t, 2)
+    return {
+        "pelvis": {"loc": (0, -0.12, 0)},
+        "thigh_l": {"rot": (-35, 0, 0)},
+        "thigh_r": {"rot": (-35, 0, 0)},
+        "calf_l": {"rot": (55, 0, 0)},
+        "calf_r": {"rot": (55, 0, 0)},
+        "foot_l": {"rot": (-15, 0, 0)},
+        "foot_r": {"rot": (-15, 0, 0)},
+        "spine": {"rot": (35, 0, 0)},
+        "head": {"rot": (20, 0, 0)},
+        "upperarm_l": {"rot": (-55 + 5 * fiddle, 0, 10)},
+        "upperarm_r": {"rot": (-55 - 5 * fiddle, 0, -10)},
+        "lowerarm_l": {"rot": (-35 + 10 * fiddle, 0, 0)},
+        "lowerarm_r": {"rot": (-35 - 10 * fiddle, 0, 0)},
+    }
+
+
+def struggle(t):
+    w = s(t, 2)
+    return {
+        "spine": {"rot": (5, 20 * s(t), 18 * w)},
+        "head": {"rot": (0, -10 * s(t), -12 * w)},
+        "upperarm_l": {"rot": (-50 + 40 * w, 0, -20)},
+        "upperarm_r": {"rot": (-50 - 40 * w, 0, 20)},
+        "lowerarm_l": {"rot": (-60, 0, 0)},
+        "lowerarm_r": {"rot": (-60, 0, 0)},
+        "thigh_l": {"rot": (-15 * s(t), 0, 0)},
+        "thigh_r": {"rot": (15 * s(t), 0, 0)},
+        "calf_l": {"rot": (15 * max(0.0, s(t)), 0, 0)},
+        "calf_r": {"rot": (15 * max(0.0, -s(t)), 0, 0)},
+    }
+
+
+def tackle(t):
+    # Flying dive: the whole body tips forward over the feet, arms reaching.
+    reach = 1.0  # held pose; the game blends into it as the officer launches
+    return {
+        "root": {"rot": (75 * reach, 0, 0)},
+        "pelvis": {"loc": (0, 0.05, 0)},
+        "spine": {"rot": (-10 * reach, 0, 0)},
+        "head": {"rot": (-35 * reach, 0, 0)},
+        "upperarm_l": {"rot": (-170 * reach, 0, -10)},
+        "upperarm_r": {"rot": (-170 * reach, 0, 10)},
+        "lowerarm_l": {"rot": (-10, 0, 0)},
+        "lowerarm_r": {"rot": (-10, 0, 0)},
+        "thigh_l": {"rot": (15, 0, 0)},
+        "thigh_r": {"rot": (5, 0, 0)},
+        "calf_l": {"rot": (30, 0, 0)},
+        "calf_r": {"rot": (15, 0, 0)},
+    }
+
+
+def punch(t):
+    # Boxing stance, jab right then left.
+    def jab(phase_start):
+        u = (t - phase_start) % 1.0
+        return max(0.0, math.sin(math.pi * u / 0.25)) if u < 0.25 else 0.0
+    right, left = jab(0.0), jab(0.5)
+    return {
+        "pelvis": {"loc": (0, 0.02 * s(t, 2), 0)},
+        "spine": {"rot": (8, 15 * (right - left), 0)},
+        "head": {"rot": (5, 0, 0)},
+        "upperarm_r": {"rot": (-45 - 50 * right, 0, -15)},
+        "lowerarm_r": {"rot": (-120 + 110 * right, 0, 0)},
+        "upperarm_l": {"rot": (-45 - 50 * left, 0, 15)},
+        "lowerarm_l": {"rot": (-120 + 110 * left, 0, 0)},
+        "thigh_l": {"rot": (-15, 0, 0)},
+        "thigh_r": {"rot": (10, 0, 0)},
+        "calf_l": {"rot": (15, 0, 0)},
+        "calf_r": {"rot": (15, 0, 0)},
+    }
+
+
+def cower(t):
+    tremble = 2 * s(t, 4)
+    return {
+        "pelvis": {"loc": (0, -0.28, 0)},
+        "thigh_l": {"rot": (-70, 0, 0)},
+        "thigh_r": {"rot": (-70, 0, 0)},
+        "calf_l": {"rot": (110, 0, 0)},
+        "calf_r": {"rot": (110, 0, 0)},
+        "spine": {"rot": (45, 0, tremble)},
+        "head": {"rot": (25, 0, 0)},
+        "upperarm_l": {"rot": (-150, 0, -35)},
+        "upperarm_r": {"rot": (-150, 0, 35)},
+        "lowerarm_l": {"rot": (-110, 0, 0)},
+        "lowerarm_r": {"rot": (-110, 0, 0)},
+    }
+
+
+def aim_pistol(t):
+    sway = 1.5 * s(t)
+    return {
+        "spine": {"rot": (0, 0, 0)},
+        "head": {"rot": (0, 0, 0)},
+        "upperarm_l": {"rot": (-88 + sway, 0, 28)},
+        "upperarm_r": {"rot": (-90 + sway, 0, -22)},
+        "lowerarm_l": {"rot": (-12, 0, 0)},
+        "lowerarm_r": {"rot": (-5, 0, 0)},
+    }
+
+
+def aim_rifle(t):
+    sway = 1.5 * s(t)
+    return {
+        "spine": {"rot": (0, 12, 0)},
+        "head": {"rot": (4, -8, 0)},
+        "upperarm_r": {"rot": (-70 + sway, 0, -20)},
+        "lowerarm_r": {"rot": (-60, 0, 0)},
+        "upperarm_l": {"rot": (-82 + sway, 0, 40)},
+        "lowerarm_l": {"rot": (-25, 0, 0)},
+    }
+
+
+def dance(t):
+    w = s(t)
+    return {
+        "pelvis": {"loc": (0, 0.04 * abs(w), 0), "rot": (0, 0, 10 * w)},
+        "spine": {"rot": (0, 0, -8 * w)},
+        "head": {"rot": (0, 15 * w, 0)},
+        "upperarm_l": {"rot": (-120 + 50 * w, 0, -30)},
+        "upperarm_r": {"rot": (-120 - 50 * w, 0, 30)},
+        "lowerarm_l": {"rot": (-40, 0, 0)},
+        "lowerarm_r": {"rot": (-40, 0, 0)},
+        "thigh_l": {"rot": (-20 * max(0.0, w), 0, 0)},
+        "thigh_r": {"rot": (-20 * max(0.0, -w), 0, 0)},
+        "calf_l": {"rot": (40 * max(0.0, w), 0, 0)},
+        "calf_r": {"rot": (40 * max(0.0, -w), 0, 0)},
+    }
+
+
+def slump(t):
+    b = s(t)
+    return {
+        "pelvis": {"loc": (0, -0.02, 0)},
+        "spine": {"rot": (25 + 2 * b, 0, 0)},
+        "head": {"rot": (35, 0, 0)},
+        "upperarm_l": {"rot": (-5, 0, -2)},
+        "upperarm_r": {"rot": (-5, 0, 2)},
+        "lowerarm_l": {"rot": (-5, 0, 0)},
+        "lowerarm_r": {"rot": (-5, 0, 0)},
+        "calf_l": {"rot": (8, 0, 0)},
+        "calf_r": {"rot": (8, 0, 0)},
+    }
+
+
+def dazed(t):
+    # Sat on the ground seeing stars.
+    return {
+        "pelvis": {"loc": (0, -0.55, 0.05)},
+        "thigh_l": {"rot": (-85, 0, -8)},
+        "thigh_r": {"rot": (-85, 0, 8)},
+        "calf_l": {"rot": (10, 0, 0)},
+        "calf_r": {"rot": (10, 0, 0)},
+        "spine": {"rot": (-12, 0, 0)},
+        "head": {"rot": (8 * s(t), 0, 8 * c(t))},
+        "upperarm_l": {"rot": (30, 0, -25)},
+        "upperarm_r": {"rot": (30, 0, 25)},
+        "lowerarm_l": {"rot": (0, 0, 0)},
+        "lowerarm_r": {"rot": (0, 0, 0)},
+    }
+
+
 # name, frames at 30 fps, pose function
 CLIPS = [
     ("Idle", 60, idle),
@@ -196,6 +480,23 @@ CLIPS = [
     ("Jump", 20, jump),
     ("Interact", 36, interact),
     ("Cheer", 30, cheer),
+    ("Sit", 60, sit),
+    ("Drive", 60, drive),
+    ("Talk", 60, talk),
+    ("Work", 45, work),
+    ("HandsUp", 30, hands_up),
+    ("Kneel", 60, kneel),
+    ("Cuffed", 45, cuffed),
+    ("Cuffing", 30, cuffing),
+    ("Struggle", 18, struggle),
+    ("Tackle", 15, tackle),
+    ("Punch", 24, punch),
+    ("Cower", 30, cower),
+    ("AimPistol", 60, aim_pistol),
+    ("AimRifle", 60, aim_rifle),
+    ("Dance", 30, dance),
+    ("Slump", 60, slump),
+    ("Dazed", 45, dazed),
 ]
 
 
@@ -225,7 +526,10 @@ def main():
         fb.reset_pose(arm)
         fb.render_view(os.path.join(preview_dir, "officer_front.png"), cam, (0, -6, 1.0), (0, 0, 0.95), 2.3)
         fb.render_view(os.path.join(preview_dir, "officer_side.png"), cam, (6, 0, 1.0), (0, 0, 0.95), 2.3)
+        only = set(args["clips"].split(",")) if isinstance(args.get("clips"), str) else None
         for name, frames, action in actions:
+            if only and name not in only:
+                continue
             arm.animation_data.action = action
             for i, frac in enumerate((0.0, 0.25, 0.5, 0.75)):
                 frame = int(round(frames * frac))

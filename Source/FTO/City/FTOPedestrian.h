@@ -10,6 +10,7 @@ class AFTOCityGenerator;
 class UCapsuleComponent;
 class USkeletalMeshComponent;
 class USkeletalMesh;
+class UFTOKnockdownComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 
@@ -46,6 +47,9 @@ public:
 	}
 	virtual float GetAnimSpeed() const override { return GetCurrentSpeed(); }
 
+	virtual bool IsMovementFrozen() const override;
+	UFTOKnockdownComponent* GetKnockdown() const { return Knockdown; }
+
 	/** Capsule half-height; the path runs this far above the sidewalk. */
 	static constexpr float HalfHeight = 92.f;
 
@@ -59,6 +63,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCapsuleComponent> Capsule;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USkeletalMeshComponent> Body;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UFTOKnockdownComponent> Knockdown;
+
+	void HandleRecovered();
 
 	/** Civilian variants to pick from (Tools/Blender/build_civilians.py). */
 	UPROPERTY() TArray<TObjectPtr<USkeletalMesh>> Looks;

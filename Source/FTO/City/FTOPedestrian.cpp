@@ -7,6 +7,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Animation/FTOCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Physics/FTOKnockdownComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/World.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -66,6 +67,8 @@ AFTOPedestrian::AFTOPedestrian()
 	Body->SetAnimInstanceClass(UFTOCharacterAnimInstance::StaticClass());
 	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
 
+	Knockdown = CreateDefaultSubobject<UFTOKnockdownComponent>(TEXT("Knockdown"));
+
 	TurnRate = 540.f;
 }
 
@@ -80,6 +83,7 @@ void AFTOPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 void AFTOPedestrian::BeginPlay()
 {
 	Super::BeginPlay();
+	Knockdown->OnRecovered.AddUObject(this, &AFTOPedestrian::HandleRecovered);
 	OnRep_Look();
 }
 
@@ -252,4 +256,22 @@ void AFTOPedestrian::Interact(AFTOCharacter* Officer)
 	}
 
 	PC->ClientToast(FText::FromString(SmallTalk[Rng.RandRange(0, int32(UE_ARRAY_COUNT(SmallTalk)) - 1)]), FLinearColor::White);
+}
+
+bool AFTOPedestrian::IsMovementFrozen() const
+{
+	return Knockdown && Knockdown->IsDown();
+}
+
+void AFTOPedestrian::HandleRecovered()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// Dust ourselves off where we landed, then carry on.
+	TeleportAndHold(GetActorLocation());
+	bChatting = false;
+	bHandsUp = false;
+	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::WalkToNextCorner, 1.6f, false);
 }
