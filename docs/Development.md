@@ -48,6 +48,12 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 | Q: police whistle (citizens freeze, nearby crimes get called in) | H: horn |
 | E: interact (tickets, chat, get in) | E: get out |
 
+## Sharing a build
+`powershell -ExecutionPolicy Bypass -File Tools/Build/package.ps1` builds, cooks and packages a Windows
+Development build into `Build/Package/Windows` (about 900 MB). Zip that folder and send it: friends just run
+`FTO.exe`, with no Unreal install needed. Add `-Config Shipping` for a lean release build (no console or dev tools).
+The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest -FTOSmokeTestQuit`.
+
 ## Smoke test
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
