@@ -122,6 +122,26 @@ FVector AFTOCityGenerator::BlockOrigin(int32 X, int32 Y) const
 	return GetActorLocation() + FVector((X - (BlocksX - 1) * 0.5f) * Pitch, (Y - (BlocksY - 1) * 0.5f) * Pitch, CityZ);
 }
 
+FVector AFTOCityGenerator::GetIntersection(int32 I, int32 J) const
+{
+	const float Pitch = BlockSize + RoadWidth;
+	return GetActorLocation() + FVector((I - BlocksX * 0.5f) * Pitch, (J - BlocksY * 0.5f) * Pitch, CityZ);
+}
+
+FVector AFTOCityGenerator::GetSidewalkCorner(int32 BlockX, int32 BlockY, int32 Corner) const
+{
+	// Clockwise when seen from above: (-,-) (+,-) (+,+) (-,+)
+	static const FVector2D Signs[] = { {-1.f, -1.f}, {1.f, -1.f}, {1.f, 1.f}, {-1.f, 1.f} };
+	const FVector2D& Sign = Signs[((Corner % 4) + 4) % 4];
+	const float Inset = BlockSize * 0.5f - SidewalkWidth * 0.5f;
+	return BlockOrigin(BlockX, BlockY) + FVector(Sign.X * Inset, Sign.Y * Inset, CurbHeight);
+}
+
+float AFTOCityGenerator::GetCurbHeight() const
+{
+	return CityZ + CurbHeight;
+}
+
 void AFTOCityGenerator::BuildLayout()
 {
 	Blocks.Reset();

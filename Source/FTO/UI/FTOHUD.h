@@ -21,6 +21,9 @@ class FTO_API AFTOHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 
+	/** Short-lived message stacked above the prompt area. */
+	void AddToast(const FText& Message, const FLinearColor& Color);
+
 	/** Max dispatch entries listed at once. */
 	UPROPERTY(EditDefaultsOnly, Category="HUD")
 	int32 MaxDispatchRows = 7;
@@ -34,6 +37,8 @@ protected:
 	void DrawOnSceneProgress(const AFTOGameState* GS);
 	void DrawBriefing(const AFTOGameState* GS);
 	void DrawShiftReport(const AFTOGameState* GS);
+	void DrawInteractPrompt();
+	void DrawToasts();
 
 	/** Projects a world point, clamping to the screen edge when off-screen. Returns true if on-screen. */
 	bool ProjectToScreenEdge(const FVector& World, float Margin, FVector2D& OutScreen) const;
@@ -48,4 +53,12 @@ protected:
 	float DisplayedChaos = 0.f;
 	float LastChaos = 0.f;
 	float ChaosPulse = 0.f;
+
+	struct FToast
+	{
+		FString Text;
+		FLinearColor Color;
+		float ExpireTime = 0.f;
+	};
+	TArray<FToast> Toasts;
 };

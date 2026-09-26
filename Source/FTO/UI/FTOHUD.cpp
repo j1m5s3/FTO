@@ -7,6 +7,8 @@
 #include "Engine/Font.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
+#include "Core/FTOCharacter.h"
+#include "Interaction/FTOInteractable.h"
 
 namespace
 {
@@ -72,12 +74,15 @@ void AFTOHUD::DrawHUD()
 		DrawShiftClock(GS);
 		DrawDispatchBoard(GS);
 		DrawOnSceneProgress(GS);
+		DrawInteractPrompt();
 		break;
 
 	default:
 		DrawShiftReport(GS);
 		break;
 	}
+
+	DrawToasts();
 }
 
 void AFTOHUD::DrawPanel(float X, float Y, float W, float H, const FLinearColor& Color)
@@ -368,7 +373,7 @@ void AFTOHUD::DrawBriefing(const AFTOGameState* GS)
 	DrawCenteredText(TEXT("ROLL CALL"), CX, CY - 20.f * S, FLinearColor(0.6f, 0.8f, 1.f), GEngine->GetLargeFont(), S * 1.5f);
 	DrawCenteredText(TEXT("Keep the city's chaos under 100% until the end of the shift."), CX, CY + 30.f * S, FLinearColor::White, GEngine->GetMediumFont(), S);
 	DrawCenteredText(FString::Printf(TEXT("On duty in %s"), *FormatClock(GS->GetBriefingTimeRemaining())), CX, CY + 70.f * S, FLinearColor(1.f, 0.85f, 0.2f), GEngine->GetLargeFont(), S);
-	DrawCenteredText(TEXT("WASD move  |  Shift sprint  |  Space jump  |  stand at a scene to handle it"), CX, CY + 110.f * S, FLinearColor(0.7f, 0.7f, 0.7f), GEngine->GetSmallFont(), S * 1.1f);
+	DrawCenteredText(TEXT("WASD move  |  Shift sprint  |  Space jump  |  E interact  |  stand at a scene to handle it"), CX, CY + 110.f * S, FLinearColor(0.7f, 0.7f, 0.7f), GEngine->GetSmallFont(), S * 1.1f);
 }
 
 void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
@@ -392,7 +397,7 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 	};
 	const int32 Pick = FMath::Abs(GS->ShiftSeed) % 3;
 
-	DrawPanel(CX - 460.f * S, CY - 30.f * S, 920.f * S, 360.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
+	DrawPanel(CX - 460.f * S, CY - 30.f * S, 920.f * S, 400.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
 	DrawCenteredText(bSurvived ? TEXT("SHIFT SURVIVED!") : TEXT("THE CITY FELL INTO CHAOS"), CX, CY - 20.f * S,
 		bSurvived ? FLinearColor(0.3f, 1.f, 0.4f) : FLinearColor(1.f, 0.25f, 0.25f), GEngine->GetLargeFont(), S * 1.6f);
 	DrawCenteredText(FString::Printf(TEXT("\"%s\""), bSurvived ? WinHeadlines[Pick] : LoseHeadlines[Pick]), CX, CY + 40.f * S,
@@ -402,6 +407,7 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 	{
 		FString::Printf(TEXT("Incidents handled:     %d"), GS->IncidentsResolved),
 		FString::Printf(TEXT("Caught in the act:     %d"), GS->IncidentsWitnessed),
+		FString::Printf(TEXT("Traffic stops:         %d"), GS->TrafficStops),
 		FString::Printf(TEXT("Went cold / escalated: %d"), GS->IncidentsFailed),
 		FString::Printf(TEXT("Peak chaos:            %d%%"), FMath::RoundToInt(GS->PeakChaos)),
 	};
@@ -411,4 +417,65 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 		DrawCenteredText(Line, CX, Y, FLinearColor::White, GEngine->GetMediumFont(), S * 1.1f);
 		Y += 40.f * S;
 	}
+}
+
+void AFTOHUD::AddToast(const FText& Message, const FLinearColor& Color)
+{
+	FToast& Toast = Toasts.AddDefaulted_GetRef();
+	Toast.Text = Message.ToString();
+	Toast.Color = Color;
+	Toast.ExpireTime = GetWorld()->GetTimeSeconds() + 5.f;
+
+	while (Toasts.Num() > 4)
+	{
+		Toasts.RemoveAt(0);
+	}
+}
+
+void AFTOHUD::DrawToasts()
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	Toasts.RemoveAll([Now](const FToast& T) { return T.ExpireTime <= Now; });
+
+	const float S = UIScale();
+	UFont* Font = GEngine->GetMediumFont();
+	float Y = Canvas->ClipY * 0.62f;
+	for (int32 i = Toasts.Num() - 1; i >= 0; --i)
+	{
+		const FToast& Toast = Toasts[i];
+		const float Fade = FMath::Clamp(Toast.ExpireTime - Now, 0.f, 1.f);
+		FLinearColor Color = Toast.Color;
+		Color.A = Fade;
+
+		float W = 0.f, H = 0.f;
+		GetTextSize(Toast.Text, W, H, Font, S);
+		DrawPanel(Canvas->ClipX * 0.5f - W * 0.5f - 12.f * S, Y - 4.f * S, W + 24.f * S, H + 8.f * S, FLinearColor(0.f, 0.f, 0.f, 0.6f * Fade));
+		DrawCenteredText(Toast.Text, Canvas->ClipX * 0.5f, Y, Color, Font, S);
+		Y -= H + 14.f * S;
+	}
+}
+
+void AFTOHUD::DrawInteractPrompt()
+{
+	const AFTOCharacter* Officer = Cast<AFTOCharacter>(GetOwningPawn());
+	AActor* Target = Officer ? Officer->GetFocusedInteractable() : nullptr;
+	const IFTOInteractable* Interactable = Cast<IFTOInteractable>(Target);
+	if (!Interactable)
+	{
+		return;
+	}
+
+	FVector2D Screen;
+	if (!ProjectToScreenEdge(Interactable->GetInteractLocation() + FVector(0.f, 0.f, 180.f), 40.f, Screen))
+	{
+		return;
+	}
+
+	const float S = UIScale();
+	UFont* Font = GEngine->GetMediumFont();
+	const FString Text = FString::Printf(TEXT("[E]  %s"), *Interactable->GetInteractPrompt(Officer).ToString());
+	float W = 0.f, H = 0.f;
+	GetTextSize(Text, W, H, Font, S);
+	DrawPanel(Screen.X - W * 0.5f - 10.f * S, Screen.Y - 4.f * S, W + 20.f * S, H + 8.f * S, FLinearColor(0.05f, 0.1f, 0.25f, 0.85f));
+	DrawCenteredText(Text, Screen.X, Screen.Y, FLinearColor(1.f, 0.95f, 0.6f), Font, S);
 }

@@ -27,6 +27,11 @@ public:
 	virtual void PossessedBy(AController* NewController) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** The interactable the local officer would use if they pressed Interact now. */
+	AActor* GetFocusedInteractable() const { return FocusedInteractable.Get(); }
+
 	/** Re-tints the uniform from the owning player state's badge colour. */
 	void RefreshOfficerColor();
 
@@ -75,6 +80,15 @@ protected:
 	void Look(const FInputActionValue& Value);
 	void SprintStarted();
 	void SprintStopped();
+
+	/** Picks the nearest usable interactable in range (local player only). */
+	void UpdateFocus();
+
+	UFUNCTION(Server, Reliable)
+	void ServerInteract(AActor* Target);
+
+	TWeakObjectPtr<AActor> FocusedInteractable;
+	float FocusAccumulator = 0.f;
 
 	/** Interact is routed to gameplay systems in later features. */
 	virtual void InteractPressed();

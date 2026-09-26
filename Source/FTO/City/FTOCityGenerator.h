@@ -57,6 +57,17 @@ public:
 	UFUNCTION(BlueprintPure, Category="City") FVector GetCityExtent() const;
 	UFUNCTION(BlueprintPure, Category="City") int32 GetSeed() const { return Seed; }
 
+	// ---- Road / sidewalk graph for ambient traffic and pedestrians ----
+	/** Intersections are indexed 0..BlocksX by 0..BlocksY. */
+	int32 NumIntersectionsX() const { return BlocksX + 1; }
+	int32 NumIntersectionsY() const { return BlocksY + 1; }
+	FVector GetIntersection(int32 I, int32 J) const;
+	/** Corner 0..3 of a block's sidewalk ring, going round the block. */
+	FVector GetSidewalkCorner(int32 BlockX, int32 BlockY, int32 Corner) const;
+	float GetRoadWidth() const { return RoadWidth; }
+	float GetCurbHeight() const;
+	const TArray<FFTOCityBlock>& GetBlocks() const { return Blocks; }
+
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksY = 8;

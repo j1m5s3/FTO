@@ -1,4 +1,5 @@
 #include "Core/FTOGameMode.h"
+#include "City/FTOAmbientPopulation.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameState.h"
@@ -52,6 +53,15 @@ void AFTOGameMode::InitGame(const FString& MapName, const FString& Options, FStr
 void AFTOGameMode::StartPlay()
 {
 	Super::StartPlay();
+
+	if (CityGenerator)
+	{
+		if (AFTOAmbientPopulation* Population = GetWorld()->SpawnActor<AFTOAmbientPopulation>(AFTOAmbientPopulation::StaticClass(), FTransform::Identity))
+		{
+			Population->Populate(CityGenerator, ShiftSeed);
+		}
+	}
+
 	CrimeDirector->BeginShift(ShiftSeed);
 }
 
