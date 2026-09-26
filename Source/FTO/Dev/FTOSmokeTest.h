@@ -12,6 +12,7 @@ class AFTOGameMode;
 class AFTOPedestrian;
 class AFTOPerp;
 class AFTOTrafficCar;
+class UInstancedStaticMeshComponent;
 class APawn;
 class APlayerController;
 
@@ -93,6 +94,18 @@ protected:
 	TWeakObjectPtr<AFTOPerp> RiderPerp;
 	/** Stages Crime Ahead cm in front of the local officer (in the street, the perp facing them) and returns its perp. */
 	AFTOPerp* StagePerp(FName Crime, float Ahead);
+	/** Point the local officer's crosshair at Target (through their over-the-shoulder camera, as a player would). */
+	void AimAt(const FVector& Target);
+	/** The ground under a spot (a trace down), or the spot's own height if there's nothing. */
+	float GroundZ(const FVector& At) const;
+	/** The instance of a city Mesh nearest Near (skipping broken ones): its component, index and transform. */
+	bool FindCityInstance(const TCHAR* Mesh, const FVector& Near, UInstancedStaticMeshComponent*& OutISM, int32& OutIndex, FTransform& OutTransform) const;
+	/** The destruction checks: what's being shot at or driven into, and where from. */
+	TWeakObjectPtr<UInstancedStaticMeshComponent> TestISM;
+	int32 TestInstance = INDEX_NONE;
+	FVector TestTarget = FVector::ZeroVector;
+	FVector TestAway = FVector::ZeroVector;
+	float CrashHealthBefore = 0.f;
 	/** The nearest perp at a Crime incident to the local officer. */
 	AFTOPerp* FindNearestPerp(FName Crime) const;
 	/** Films the officer and a suspect side on. */

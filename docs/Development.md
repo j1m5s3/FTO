@@ -64,7 +64,9 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 - **Driving a cruiser**: W/S to drive and brake, A/D to steer, Space for the handbrake (drift). Q switches the lights
   and siren (offending cars ahead pull over), H honks. C (right stick click) swaps the chase camera for the view from
   the seat, and the mouse / right stick glances around (it eases back to the road). E gets out. Anyone you hit at
-  speed goes flying (and hitting citizens costs chaos).
+  speed goes flying (and hitting citizens costs chaos), and so does street furniture: bins and hydrants at a jog,
+  lamp posts and trees only flat out. Hard crashes dent the car, then it smokes, catches fire and is written off
+  (the motor pool fetches it back to the lot once it's been left empty for a while).
 - **Riding shotgun**: the mouse / right stick looks around, Q works the lights and siren, C swaps cameras, E gets out.
 - **Radio** (anywhere, on foot or in a car): hold V (d-pad down) to talk to the squad; teammates hear you through a
   walkie-talkie filter with a squelch at each end, and see who's on air. Hold T (d-pad up) for the callout wheel:
@@ -92,12 +94,14 @@ hold-up and a bar brawl, questions a crook, walks through front doors, checks th
 drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (then
 cuffs them where they fell), has a downed officer helped up (the radio calls it in), makes the arrests that don't go
 quietly: a brawler wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who
-gives up beside their car, then opens the callout wheel and keys the radio; the log (`SMOKE:` lines) reports each check.
+gives up beside their car, then opens the callout wheel and keys the radio, then shoots out a shop window and a
+hydrant, knocks a lamp post flat with a cruiser, crashes the cruiser until it's a burning wreck, and writes off a
+citizen's car; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, gets out
 and arrests a shoplifter the host puts beside them. Then the client calls for backup and stays on air, and the host
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
-host).
+host). Finally the client checks it sees everything the host broke broken too.
 
 ## Art pipeline
 - **Characters**: `Tools/Blender/build_officer.py` models, rigs and animates the officer entirely from code and exports FBX
@@ -114,7 +118,9 @@ host).
   `Glow` (lights, dials, screens). `SOCKET_*` empties become sockets: `Wheel_*`, `Seat_*` (where a seated character's
   root goes), `Cam_*` (seat-view camera) and the cruiser's `Lightbar`. Seats are sized from the officer's car-seat
   pose (`build_officer.car_legs`); `--preview <dir>` also renders roofless cutaways with posed occupants and the
-  driver's-eye view to check the fit.
+  driver's-eye view to check the fit. `--dented` also exports each body's beaten-up twin (`*_Dented`: crumpled nose
+  and tail, a tented bonnet, knocked-in doors; same slots and sockets) that the game swaps in for badly damaged cars
+  (`--dented_only` just those, `--only SM_Car_Taxi,...` just some cars).
 - `Tools/Blender/build_weapons.py` builds the taser, pistol, shotgun and rifle into `Art/Source/Weapons`: barrel along
   +X with the grip at the origin (the game puts the grip in the hand and turns the barrel along the aim) and a
   `SOCKET_Muzzle` where rounds leave. `--preview <dir>` renders each one.
@@ -133,21 +139,31 @@ host).
   officers come near and empties them once they've gone.
 - **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (vertex colours, materials by slot name,
   sockets squared up to scale 1 and no rotation, Nanite for opaque kit pieces) and can be re-run after any Blender change:
-  (`FTO_IMPORT=characters`, `statics`, `vehicles`, `weapons` or `kit` limits a run to one group, and
-  `FTO_IMPORT=clips FTO_CLIPS=HandsBehind` imports just the named animation clips)
+  (`FTO_IMPORT=characters`, `statics`, `vehicles`, `weapons` or `kit` limits a run to one group,
+  `FTO_IMPORT=clips FTO_CLIPS=HandsBehind` imports just the named animation clips, and `FTO_MESHES=SM_Car_Van_Dented`
+  just the named vehicle or weapon meshes)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
 - **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
-  radio squelch, chimes, alarm, fanfare, sad trombone, the knockdown bonk, gunshots, handcuffs, a scuffle) into
+  radio squelch, chimes, alarm, fanfare, sad trombone, the knockdown bonk, gunshots, handcuffs, a scuffle, breaking
+  glass, car crashes, clangs, a gushing hydrant and a burning car) into
   `Art/Source/Audio` and imports them to `/Game/FTO/Audio` (`FTO_SOUNDS=SW_Bonk` rebuilds just the ones named).
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
   idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) crossfading straight
   into one another, and an upper-body layer on top (aiming, or hands cuffed behind the back). Actors animating several
   people (a car's driver and passengers) pick each one's action per mesh. Two-person moves (cuffing, a struggle) lock
   the officer onto a spot beside the suspect (`AFTOCharacter::BeginSyncedAction`) so the two clips line up.
+- **Destruction** (`Source/FTO/Physics`): `AFTODestruction` keeps the list of broken pieces of the city, a replicated
+  fast array of instanced-component name plus instance index (every machine builds the city identically, so those
+  agree everywhere). Each machine tucks the broken instance away and has `UFTODebris` put on the show: Chaos rigid-body
+  chunks, glass shards and knocked-off props, fading bullet-hole decals, and hydrant fountains, all cosmetic and made
+  per machine. `UFTOVehicleDamage` gives cars health (server-side) and the look to match everywhere: panels flying off,
+  the dented body, smoke, fire and scorching. What breaks what (speeds, rounds, chaos) is the table in
+  `FTODestruction.cpp`.
 - **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials`: `M_FTOBase` (vertex colour ×
-  `Color` tint, glowing in its own colour by `Emissive`), `M_FTOGlass` (tinted see-through glass), `MI_FTOGlow`
-  (the base material, glowing), `MI_FTOCity` (tinted per instance from custom data, for the instanced city) and
-  `MI_FTOCityInterior` (the same, a little self-lit for rooms).
+  `Color` tint, glowing in its own colour by `Emissive`, charred towards black by `Scorch`), `M_FTOGlass` (tinted
+  see-through glass), `MI_FTOGlow` (the base material, glowing), `MI_FTOCity` (tinted per instance from custom data,
+  for the instanced city), `MI_FTOCityInterior` (the same, a little self-lit for rooms) and `M_FTODecal` (a bullet
+  hole: a deferred decal that fades out). `FTO_MATERIALS=M_FTODecal` builds just the named ones.
   Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
 - Nearly everything uses `M_FTOBase`. Engine primitives have no vertex colour, so they just take `Color`.
   Blender assets bake flat colours into vertex colours; vertex alpha = 1 marks tintable areas (uniforms, car paint).

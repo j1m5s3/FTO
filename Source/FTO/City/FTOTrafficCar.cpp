@@ -1,6 +1,7 @@
 #include "City/FTOTrafficCar.h"
 #include "Engine/OverlapResult.h"
 #include "Physics/FTOImpact.h"
+#include "Physics/FTOVehicleDamage.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameMode.h"
@@ -56,9 +57,11 @@ AFTOTrafficCar::AFTOTrafficCar()
 	for (const TCHAR* Style : { TEXT("SM_Car_Sedan"), TEXT("SM_Car_Hatchback"), TEXT("SM_Car_Van"), TEXT("SM_Car_Pickup"), TEXT("SM_Car_Taxi"), TEXT("SM_Car_IceCream") })
 	{
 		ConstructorHelpers::FObjectFinder<UStaticMesh> Finder(*FString::Printf(TEXT("/Game/FTO/Vehicles/%s.%s"), Style, Style));
+		ConstructorHelpers::FObjectFinder<UStaticMesh> Beaten(*FString::Printf(TEXT("/Game/FTO/Vehicles/%s_Dented.%s_Dented"), Style, Style));
 		if (Finder.Succeeded())
 		{
 			BodyStyles.Add(Finder.Object);
+			DentedStyles.Add(Beaten.Object);
 		}
 	}
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> WheelAsset(TEXT("/Game/FTO/Vehicles/SM_Wheel.SM_Wheel"));
@@ -105,6 +108,8 @@ AFTOTrafficCar::AFTOTrafficCar()
 		Occupants.Add(Occupant);
 	}
 
+	Damage = CreateDefaultSubobject<UFTOVehicleDamage>(TEXT("Damage"));
+
 	Indicator = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Indicator"));
 	Indicator->SetupAttachment(Collision);
 	Indicator->SetRelativeLocation(FVector(0.f, 0.f, 260.f));
@@ -131,6 +136,31 @@ void AFTOTrafficCar::BeginPlay()
 	Super::BeginPlay();
 	OnRep_Look();
 	RefreshIndicator();
+	if (HasAuthority())
+	{
+		Damage->OnWrecked.AddUObject(this, &AFTOTrafficCar::HandleWrecked);
+	}
+}
+
+void AFTOTrafficCar::HandleWrecked()
+{
+	// A getaway ends here: the driver climbs out and gives up (the chase incident takes it from there).
+	if (CarState == EFTOCarState::Fleeing && ChaseIncident)
+	{
+		ChaseIncident->TalkedDown();
+		return;
+	}
+	if (CarState == EFTOCarState::Busted)
+	{
+		return;
+	}
+	CarState = EFTOCarState::Wrecked;
+	Violation = EFTOCarViolation::None;
+	bWaitingForClearRoad = false;
+	GetWorldTimerManager().ClearTimer(TicketTimer);
+	Hold();
+	RefreshIndicator();
+	SetLifeSpan(30.f); // towed away
 }
 
 void AFTOTrafficCar::OnRep_Look()
@@ -160,6 +190,7 @@ void AFTOTrafficCar::OnRep_Look()
 		PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Paint, 0.f, FTOArt::BodySlot(Body));
 	}
 	FTOArt::SetColor(PaintMaterial, Paint);
+	Damage->SetBody(Body, DentedStyles.IsValidIndex(Style) ? DentedStyles[Style].Get() : nullptr);
 
 	SeatOccupants(LookRng, Style);
 }
@@ -212,7 +243,7 @@ void AFTOTrafficCar::SeatOccupants(FRandomStream& LookRng, int32 Style)
 
 EFTOAnimAction AFTOTrafficCar::GetAnimActionFor(const USkeletalMeshComponent* Mesh) const
 {
-	if (CarState == EFTOCarState::Busted)
+	if (CarState == EFTOCarState::Busted || CarState == EFTOCarState::Wrecked)
 	{
 		return EFTOAnimAction::SitHandsUp;
 	}
@@ -566,6 +597,8 @@ void AFTOTrafficCar::MakeGetaway()
 	check(HasAuthority());
 	// Floor it! The chase incident rides along with us.
 	CarState = EFTOCarState::Fleeing;
+	// A crook's getaway car now: running it off the road is fair game, not property damage.
+	Damage->bCitizensCar = false;
 	FleeUntil = GetWorld()->GetTimeSeconds() + 120.f;
 	Violation = EFTOCarViolation::None;
 	bWaitingForClearRoad = false;

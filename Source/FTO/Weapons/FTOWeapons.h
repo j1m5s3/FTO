@@ -52,6 +52,8 @@ struct FFTOWeaponSpec
 	float Push = 600.f;
 	/** A zap rather than a knockout (lighter on citizens, still drops a perp). */
 	bool bStun = false;
+	/** What each round does to a car (out of 100). */
+	float CarDamage = 0.f;
 };
 
 namespace FTOWeapons

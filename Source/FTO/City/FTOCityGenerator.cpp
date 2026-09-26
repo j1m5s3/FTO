@@ -315,6 +315,7 @@ void AFTOCityGenerator::FlushInstances()
 
 			ISM->RegisterComponent();
 			ISM->AddInstances(Batch.Transforms, false, true, false);
+			Instanced.Add(Name, ISM);
 			ISM->SetCustomData(0, Batch.Transforms.Num() - 1, Batch.Colors, true);
 
 			++Components;
@@ -547,4 +548,10 @@ TArray<FTransform> AFTOCityGenerator::GetPrecinctParkingSpots() const
 		}
 	}
 	return Spots;
+}
+
+UInstancedStaticMeshComponent* AFTOCityGenerator::FindInstanced(FName Name) const
+{
+	const TObjectPtr<UInstancedStaticMeshComponent>* Found = Instanced.Find(Name);
+	return Found ? Found->Get() : nullptr;
 }

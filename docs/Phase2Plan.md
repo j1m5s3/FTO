@@ -15,7 +15,7 @@ and there's no gore. Everything stays in-house: art from Blender scripts, audio 
   simulated at once, so interiors populate within a radius of any officer and go dormant behind them.
 
 ## Features and delivery order
-Each line is one PR. Done so far: 1 to 7.
+Each line is one PR. Done so far: 1 to 11.
 
 1. **Animation set v2 + ragdoll foundation.** New clips: sit, drive, talk, work (cashier/typing), hands up,
    kneel, cuffed, cuffing, struggle, tackle, punch, cower, aim pistol, aim rifle, dance, slump. Upper-body layering
