@@ -8,6 +8,7 @@
 class AFTOCityGenerator;
 class UBoxComponent;
 class UStaticMeshComponent;
+class UStaticMesh;
 class UTextRenderComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
@@ -60,6 +61,9 @@ public:
 	virtual FVector GetInteractLocation() const override { return GetActorLocation(); }
 	virtual float GetInteractRange() const override;
 
+	/** Height of the collision box centre above the road. */
+	static constexpr float RideHeight = 95.f;
+
 	UPROPERTY(EditDefaultsOnly, Category="Traffic") float CruiseSpeed = 900.f;
 	UPROPERTY(EditDefaultsOnly, Category="Traffic") float TicketSeconds = 3.f;
 	/** Chance a stopped car turns out to be wanted and flees. */
@@ -81,8 +85,9 @@ protected:
 	void RefreshIndicator();
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UBoxComponent> Collision;
-	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Chassis;
-	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Cabin;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Body;
+	/** Body styles to pick from; index 4 is the taxi, 5 the ice cream truck. */
+	UPROPERTY() TArray<TObjectPtr<UStaticMesh>> BodyStyles;
 	UPROPERTY(VisibleAnywhere, Category="Components") TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Indicator;
 

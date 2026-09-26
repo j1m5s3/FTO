@@ -41,33 +41,33 @@ AFTOTrafficCar::AFTOTrafficCar()
 	Collision->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 	RootComponent = Collision;
 
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	BaseMaterial = BaseMat.Object;
 
-	Chassis = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Chassis"));
-	Chassis->SetupAttachment(Collision);
-	Chassis->SetStaticMesh(CubeMesh.Object);
-	Chassis->SetRelativeLocation(FVector(0.f, 0.f, -10.f));
-	Chassis->SetRelativeScale3D(FVector(4.6f, 2.1f, 0.9f));
-	Chassis->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	// In-house vehicle models (Tools/Blender/build_vehicles.py): origin on the ground, facing +X.
+	for (const TCHAR* Style : { TEXT("SM_Car_Sedan"), TEXT("SM_Car_Hatchback"), TEXT("SM_Car_Van"), TEXT("SM_Car_Pickup"), TEXT("SM_Car_Taxi"), TEXT("SM_Car_IceCream") })
+	{
+		ConstructorHelpers::FObjectFinder<UStaticMesh> Finder(*FString::Printf(TEXT("/Game/FTO/Vehicles/%s.%s"), Style, Style));
+		if (Finder.Succeeded())
+		{
+			BodyStyles.Add(Finder.Object);
+		}
+	}
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> WheelAsset(TEXT("/Game/FTO/Vehicles/SM_Wheel.SM_Wheel"));
 
-	Cabin = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Cabin"));
-	Cabin->SetupAttachment(Collision);
-	Cabin->SetStaticMesh(CubeMesh.Object);
-	Cabin->SetRelativeLocation(FVector(-30.f, 0.f, 70.f));
-	Cabin->SetRelativeScale3D(FVector(2.4f, 1.9f, 0.8f));
-	Cabin->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
+	Body->SetupAttachment(Collision);
+	Body->SetRelativeLocation(FVector(0.f, 0.f, -RideHeight));
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
+	// Wheels ride on the body mesh's SOCKET_Wheel_* sockets.
+	static const FName WheelSockets[] = { TEXT("Wheel_FL"), TEXT("Wheel_FR"), TEXT("Wheel_RL"), TEXT("Wheel_RR") };
 	for (int32 i = 0; i < 4; ++i)
 	{
 		UStaticMeshComponent* Wheel = CreateDefaultSubobject<UStaticMeshComponent>(*FString::Printf(TEXT("Wheel%d"), i));
-		Wheel->SetupAttachment(Collision);
-		Wheel->SetStaticMesh(CylinderMesh.Object);
-		Wheel->SetRelativeLocation(FVector(i < 2 ? 150.f : -150.f, i % 2 ? 105.f : -105.f, -55.f));
-		Wheel->SetRelativeRotation(FRotator(0.f, 0.f, 90.f));
-		Wheel->SetRelativeScale3D(FVector(0.8f, 0.8f, 0.35f));
+		Wheel->SetupAttachment(Body, WheelSockets[i]);
+		Wheel->SetUsingAbsoluteScale(true); // never inherit socket/import scale
+		Wheel->SetStaticMesh(WheelAsset.Object);
 		Wheel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Wheels.Add(Wheel);
 	}
@@ -101,21 +101,31 @@ void AFTOTrafficCar::BeginPlay()
 
 void AFTOTrafficCar::OnRep_Look()
 {
+	if (BodyStyles.Num() == 0)
+	{
+		return;
+	}
+
+	// Mostly everyday cars; the odd taxi, and very occasionally an ice cream truck.
 	FRandomStream LookRng(LookSeed);
-	const FLinearColor Paint = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 200, 240);
+	const float Roll = LookRng.FRand();
+	int32 Style = LookRng.RandRange(0, FMath::Min(3, BodyStyles.Num() - 1));
+	if (Roll < 0.05f && BodyStyles.IsValidIndex(5))
+	{
+		Style = 5;
+	}
+	else if (Roll < 0.15f && BodyStyles.IsValidIndex(4))
+	{
+		Style = 4;
+	}
+	Body->SetStaticMesh(BodyStyles[Style]);
+
+	const FLinearColor Paint = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 190, 240);
 	if (!PaintMaterial)
 	{
-		PaintMaterial = FTOArt::ApplyColor(Chassis, BaseMaterial, Paint);
-		FTOArt::ApplyColor(Cabin, BaseMaterial, FLinearColor(0.55f, 0.75f, 0.9f));
-		for (UStaticMeshComponent* Wheel : Wheels)
-		{
-			FTOArt::ApplyColor(Wheel, BaseMaterial, FLinearColor(0.02f, 0.02f, 0.02f));
-		}
+		PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Paint);
 	}
 	FTOArt::SetColor(PaintMaterial, Paint);
-	// Some cars are comically long, some are tiny.
-	const float Length = LookRng.FRandRange(0.8f, 1.25f);
-	Chassis->SetRelativeScale3D(FVector(4.6f * Length, 2.1f, 0.9f));
 }
 
 void AFTOTrafficCar::OnRep_CarState()
@@ -264,7 +274,8 @@ void AFTOTrafficCar::Tick(float DeltaSeconds)
 	{
 		for (UStaticMeshComponent* Wheel : Wheels)
 		{
-			Wheel->AddLocalRotation(FRotator(0.f, GetCurrentSpeed() * DeltaSeconds * 0.8f, 0.f));
+			// Roll forward: 360 degrees per wheel circumference (r = 38 cm).
+			Wheel->AddLocalRotation(FRotator(-GetCurrentSpeed() * DeltaSeconds * 1.508f, 0.f, 0.f));
 		}
 	}
 

@@ -37,8 +37,11 @@ tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy a
   (`--preview` renders turnaround and clip frames; `Tools/Blender/contact_sheet.py` tiles them into one image.)
 - `Tools/Blender/build_civilians.py` makes eight citizen variants and the striped-jumper suspect on the **same skeleton**,
   so every character shares the officer's clips. Shirts are tinted per pedestrian at runtime.
+- `Tools/Blender/build_vehicles.py` builds the cars (sedan, hatchback, van, pickup, taxi, ice cream truck, cruiser) and
+  a shared wheel as static meshes facing +X; `SOCKET_Wheel_*` empties become wheel sockets in Unreal.
 - **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (metres to centimetres, vertex colours,
   master material) and can be re-run after any Blender change:
+  (`FTO_IMPORT=characters` or `FTO_IMPORT=statics` limits a run to one group)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
   idle/walk/run by speed, with jump, interact (tickets, scenes) and cheer layered on top.
