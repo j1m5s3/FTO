@@ -1,6 +1,14 @@
 # FTO — Game Design (living document)
 
-> Working title. "FTO" = Field Training Officer.
+> "FTO" = Field Training Officer.
+
+## Decided
+- **Title**: FTO.
+- **Camera**: third person (over the shoulder when a weapon is up; chase or seat view in a cruiser).
+- **Hosting**: listen server, the host plays (the code stays dedicated-server ready).
+- **Shift length**: 20 minutes. When the clock runs out the squad gets an end-of-shift prompt to **extend the shift**
+  (another round of time with the chaos carried over) or clock off to the scoreboard. Everyone votes; the host's
+  choice settles a tie or a vote nobody answers.
 
 ## Pitch
 A 4-player online co-op party game. You and three friends run a city police precinct for one shift. Crimes pop up all over a living, medium-sized city — from someone stealing a garden gnome to a full-blown bank heist to a (cartoonishly incompetent) terrorist plot. Every call you ignore, every traffic violation you let slide, pushes the city's **Chaos Meter** up. Hit 100% and the city descends into slapstick anarchy and your shift is over.
@@ -14,12 +22,13 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
 4. **Never the same shift twice.** Crimes are procedurally generated from templates, modifiers and escalation chains.
 5. **Light-hearted.** No gore. Suspects are "bonked" and "cuffed", not killed. Crime flavour text is jokey.
 
-## Core loop (one shift ≈ 20–30 min)
+## Core loop (one shift = 20 min, extendable)
 1. Shift starts at the precinct. Dispatch board shows incoming calls.
 2. Players split up: take calls, patrol, run traffic stops.
 3. Unattended incidents tick the Chaos Meter up; resolving them pulls it down.
 4. Incidents escalate if ignored (a domestic dispute becomes a standoff; a shoplifter becomes a getaway chase).
-5. Survive to end of shift → score, grade, silly headline ("LOCAL COPS ONLY MILDLY RESPONSIBLE FOR MAYHEM").
+5. Survive to end of shift → vote to extend the shift or clock off.
+6. Clock off → score, grade, silly headline ("LOCAL COPS ONLY MILDLY RESPONSIBLE FOR MAYHEM").
 
 ## Chaos Meter
 - Range 0–100, replicated from the server (`AFTOGameState`).
@@ -56,7 +65,7 @@ Modifiers (random): *in progress* (witnessable), *armed*, *fleeing*, *repeat off
 Medium-scale procedural grid city (a few districts: downtown, residential, industrial, waterfront), roads, sidewalks, NPC pedestrians and traffic. Built from modular low-poly pieces so it can be generated and later hand-dressed.
 
 ## Multiplayer
-- Up to 4 players, listen-server (host plays) as the default; dedicated-server-ready code (all gameplay is server-authoritative and replicated).
+- Up to 4 players, listen server (the host plays); dedicated-server-ready code (all gameplay is server-authoritative and replicated).
 - Online subsystem: Null for LAN/dev; Steam or EOS for release (both free).
 
 ## Art & animation
@@ -118,7 +127,8 @@ Done:
   suspects (shot, tased, tackled or run over) kneel for the cuffs; car chases end with the driver climbing out and
   giving up beside the car. A suspect who outruns everyone, or is left kneeling alone, gets away.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (destruction, radio, scoring, Steam invites).
+Next: see [Phase 2 plan](Phase2Plan.md) (destruction, radio, scoring, shift extension, Steam invites),
+tracked in [TODO](TODO.md).
 
 Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame
