@@ -299,6 +299,28 @@ def scuffle():
     return normalize(concat(*parts[:8], gain(grunt, 0.6), *parts[8:]), 0.6)
 
 
+def squelch_open():
+    # Keying the radio: a click and a quick hiss of static.
+    click_ = envelope(tone(lambda t: 1800.0, 0.012, square), 0.0005, 0.006)
+    hiss = envelope(lowpass(noise(0.12), 4500), 0.002, 0.08, decay=0.05)
+    return normalize(concat(gain(click_, 0.5), hiss), 0.4)
+
+
+def squelch_close():
+    # Letting go: the "roger beep" and the static cutting off.
+    hiss = envelope(lowpass(noise(0.09), 4500), 0.002, 0.01)
+    beep = envelope(tone(lambda t: 1400.0, 0.07, square), 0.002, 0.01)
+    return normalize(lowpass(concat(hiss, gain(beep, 0.35)), 5000), 0.4)
+
+
+def callout():
+    # A quick callout on the squad channel: a rising two-tone chirp over a crackle.
+    lo = envelope(tone(lambda t: 880.0, 0.07, square), 0.002, 0.01)
+    hi = envelope(tone(lambda t: 1320.0, 0.1, square), 0.002, 0.02)
+    crackle = envelope(lowpass(noise(0.22), 3000), 0.005, 0.12, decay=0.1)
+    return normalize(mix(lowpass(concat(lo, silence(0.02), hi), 4000), concat(silence(0.05), gain(crackle, 0.35))), 0.5)
+
+
 SOUNDS = {
     "SW_SirenLoop": (siren_loop, True),
     "SW_Whistle": (whistle, False),
@@ -322,6 +344,9 @@ SOUNDS = {
     "SW_DryFire": (dry_fire, False),
     "SW_Cuffs": (cuffs, False),
     "SW_Scuffle": (scuffle, False),
+    "SW_SquelchOpen": (squelch_open, False),
+    "SW_SquelchClose": (squelch_close, False),
+    "SW_Callout": (callout, False),
 }
 
 

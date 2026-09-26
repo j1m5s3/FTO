@@ -127,7 +127,11 @@ Done:
   suspects (shot, tased, tackled or run over) kneel for the cuffs; car chases end with the driver climbing out and
   giving up beside the car. A suspect who outruns everyone, or is left kneeling alone, gets away.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (destruction, radio, scoring, shift extension, Steam invites),
+- Phase 2: the radio. Push-to-talk squad voice through a walkie-talkie filter with squelch, and a callout wheel
+  (need backup, suspect fleeing, officer down, 10-4) that needs no mic and drops pings on everyone's HUD. Going down
+  calls "officer down" automatically.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (destruction, scoring, shift extension, Steam invites),
 tracked in [TODO](TODO.md).
 
 Later ideas:

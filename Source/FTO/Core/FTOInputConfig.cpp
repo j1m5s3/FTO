@@ -113,4 +113,24 @@ void UFTOInputConfig::Build()
 	DefaultContext->MapKey(Slots[0], EKeys::One);
 	DefaultContext->MapKey(Slots[1], EKeys::Two);
 	DefaultContext->MapKey(Slots[2], EKeys::Three);
+
+	// Radio
+	Radio      = MakeAction(TEXT("IA_Radio"),      (int32)EInputActionValueType::Boolean);
+	RadioWheel = MakeAction(TEXT("IA_RadioWheel"), (int32)EInputActionValueType::Boolean);
+	DefaultContext->MapKey(Radio, EKeys::V);
+	DefaultContext->MapKey(Radio, EKeys::Gamepad_DPad_Down);
+	DefaultContext->MapKey(RadioWheel, EKeys::T);
+	DefaultContext->MapKey(RadioWheel, EKeys::Gamepad_DPad_Up);
+
+	WheelContext = NewObject<UInputMappingContext>(this, TEXT("IMC_FTORadioWheel"));
+	RadioAim = MakeAction(TEXT("IA_RadioAim"), (int32)EInputActionValueType::Axis2D);
+	RadioAimStick = MakeAction(TEXT("IA_RadioAimStick"), (int32)EInputActionValueType::Axis2D);
+	WheelContext->MapKey(RadioAim, EKeys::Mouse2D);
+	WheelContext->MapKey(RadioAimStick, EKeys::Gamepad_Right2D);
+	const FKey CalloutKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four };
+	for (int32 i = 0; i < UE_ARRAY_COUNT(CalloutKeys); ++i)
+	{
+		Callouts.Add(MakeAction(*FString::Printf(TEXT("IA_Callout%d"), i + 1), (int32)EInputActionValueType::Boolean));
+		WheelContext->MapKey(Callouts[i], CalloutKeys[i]);
+	}
 }

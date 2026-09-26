@@ -1,5 +1,7 @@
 #include "Core/FTOPlayerController.h"
 #include "Core/FTOInputConfig.h"
+#include "Core/FTOPlayerState.h"
+#include "InputActionValue.h"
 #include "UI/FTOHUD.h"
 #include "Dev/FTOSmokeTest.h"
 #include "Core/FTOCharacter.h"
@@ -66,6 +68,156 @@ void AFTOPlayerController::SetupInputComponent()
 	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InputComponent))
 	{
 		EIC->BindAction(GetInputConfig()->Menu, ETriggerEvent::Started, this, &AFTOPlayerController::ToggleMenu);
+
+		// The radio works on foot, at the wheel and in the lobby alike, so it lives here rather than on the pawn.
+		UFTOInputConfig* Config = GetInputConfig();
+		EIC->BindAction(Config->Radio, ETriggerEvent::Started, this, &AFTOPlayerController::RadioPressed);
+		EIC->BindAction(Config->Radio, ETriggerEvent::Completed, this, &AFTOPlayerController::RadioReleased);
+		EIC->BindAction(Config->RadioWheel, ETriggerEvent::Started, this, &AFTOPlayerController::WheelOpened);
+		EIC->BindAction(Config->RadioWheel, ETriggerEvent::Completed, this, &AFTOPlayerController::WheelClosed);
+		EIC->BindAction(Config->RadioAim, ETriggerEvent::Triggered, this, &AFTOPlayerController::WheelAimed);
+		EIC->BindAction(Config->RadioAimStick, ETriggerEvent::Triggered, this, &AFTOPlayerController::WheelStick);
+		for (int32 i = 0; i < Config->Callouts.Num(); ++i)
+		{
+			EIC->BindAction(Config->Callouts[i], ETriggerEvent::Started, this, &AFTOPlayerController::CalloutPicked, i);
+		}
+	}
+}
+
+// ------------------------------------------------------------------------------------------
+// Radio
+// ------------------------------------------------------------------------------------------
+
+void AFTOPlayerController::RadioPressed()
+{
+	if (bTransmitting || IsMenuVisible())
+	{
+		return;
+	}
+	bTransmitting = true;
+	StartTalking();
+	UGameplayStatics::PlaySound2D(this, FTORadio::SquelchOpen(), 0.5f);
+	ServerSetOnRadio(true);
+}
+
+void AFTOPlayerController::RadioReleased()
+{
+	if (!bTransmitting)
+	{
+		return;
+	}
+	bTransmitting = false;
+	StopTalking();
+	UGameplayStatics::PlaySound2D(this, FTORadio::SquelchClose(), 0.5f);
+	ServerSetOnRadio(false);
+}
+
+void AFTOPlayerController::ServerSetOnRadio_Implementation(bool bOn)
+{
+	if (AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>())
+	{
+		PS->SetOnRadio(bOn);
+	}
+}
+
+void AFTOPlayerController::WheelOpened()
+{
+	if (bWheelOpen || IsMenuVisible())
+	{
+		return;
+	}
+	bWheelOpen = true;
+	WheelAim = FVector2D::ZeroVector;
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	{
+		Subsystem->AddMappingContext(GetInputConfig()->WheelContext, 100);
+	}
+}
+
+void AFTOPlayerController::WheelClosed()
+{
+	if (!bWheelOpen)
+	{
+		return;
+	}
+	// Let go while pointing at a callout to send it (let go in the middle to call nothing).
+	const EFTOCallout Choice = GetWheelChoice();
+	bWheelOpen = false;
+	WheelAim = FVector2D::ZeroVector;
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(GetLocalPlayer()))
+	{
+		Subsystem->RemoveMappingContext(GetInputConfig()->WheelContext);
+	}
+	SendCallout(Choice);
+}
+
+void AFTOPlayerController::WheelAimed(const FInputActionValue& Value)
+{
+	// The mouse nudges a cursor round the wheel.
+	WheelAim += Value.Get<FVector2D>() / 60.f;
+	if (WheelAim.SizeSquared() > 1.f)
+	{
+		WheelAim.Normalize();
+	}
+}
+
+void AFTOPlayerController::WheelStick(const FInputActionValue& Value)
+{
+	// The stick points straight at a slice (and stays on it when let go).
+	const FVector2D Input = Value.Get<FVector2D>();
+	if (Input.SizeSquared() > 0.25f)
+	{
+		WheelAim = Input.GetSafeNormal();
+	}
+}
+
+void AFTOPlayerController::CalloutPicked(int32 Index)
+{
+	static const EFTOCallout ByKey[] = { EFTOCallout::Backup, EFTOCallout::Fleeing, EFTOCallout::OfficerDown, EFTOCallout::Copy };
+	if (bWheelOpen && Index >= 0 && Index < UE_ARRAY_COUNT(ByKey))
+	{
+		WheelAim = FVector2D::ZeroVector; // sent: letting go of T now calls nothing more
+		SendCallout(ByKey[Index]);
+	}
+}
+
+EFTOCallout AFTOPlayerController::GetWheelChoice() const
+{
+	if (!bWheelOpen || WheelAim.SizeSquared() < FMath::Square(0.4f))
+	{
+		return EFTOCallout::None;
+	}
+	if (FMath::Abs(WheelAim.Y) >= FMath::Abs(WheelAim.X))
+	{
+		return WheelAim.Y > 0.f ? EFTOCallout::Backup : EFTOCallout::OfficerDown;
+	}
+	return WheelAim.X > 0.f ? EFTOCallout::Fleeing : EFTOCallout::Copy;
+}
+
+void AFTOPlayerController::SendCallout(EFTOCallout Callout)
+{
+	if (Callout != EFTOCallout::None)
+	{
+		ServerCallout(Callout);
+	}
+}
+
+void AFTOPlayerController::ServerCallout_Implementation(EFTOCallout Callout)
+{
+	AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>();
+	if (PS && !PS->MakeCallout(Callout))
+	{
+		ClientToast(INVTEXT("Radio's busy, give it a second."), FLinearColor(0.7f, 0.7f, 0.7f));
+	}
+}
+
+void AFTOPlayerController::FTOCallout(const FString& Name)
+{
+	const UEnum* Enum = StaticEnum<EFTOCallout>();
+	const int64 Value = Enum->GetValueByNameString(Name);
+	if (Value != INDEX_NONE)
+	{
+		SendCallout(static_cast<EFTOCallout>(Value));
 	}
 }
 
@@ -92,6 +244,13 @@ void AFTOPlayerController::SetMenuVisible(bool bVisible)
 
 	if (bVisible)
 	{
+		// Opening the menu mid-transmission (or with the wheel up) lets go of the radio.
+		RadioReleased();
+		if (bWheelOpen)
+		{
+			WheelAim = FVector2D::ZeroVector;
+			WheelClosed();
+		}
 		if (!Menu)
 		{
 			Menu = CreateWidget<UFTOMenuWidget>(this, UFTOMenuWidget::StaticClass());

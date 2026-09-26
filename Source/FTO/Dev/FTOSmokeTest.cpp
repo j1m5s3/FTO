@@ -7,7 +7,11 @@
 #include "Core/FTOGameMode.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
+#include "Core/FTOPlayerState.h"
 #include "Dev/FTOAnimDummy.h"
+#include "InputActionValue.h"
+#include "Radio/FTORadio.h"
+#include "Sound/SoundEffectSource.h"
 #include "Physics/FTOKnockdownComponent.h"
 #include "Physics/FTOImpact.h"
 #include "Weapons/FTOArmoryRack.h"
@@ -1317,6 +1321,57 @@ void AFTOSmokeTest::BuildSteps()
 		{
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});
+
+		// Radio: going down called "officer down" by itself; then the callout wheel (up for backup), and push-to-talk.
+		AddStep(TEXT("radio wheel"), 0.6f, [this]()
+		{
+			AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC());
+			const AFTOPlayerState* PS = PC ? PC->GetPlayerState<AFTOPlayerState>() : nullptr;
+			if (!PC || !PS)
+			{
+				return;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: radio after the officer went down: %s."), PS->GetCallout().Callout == EFTOCallout::OfficerDown ? TEXT("officer down called in") : TEXT("NOTHING CALLED IN"));
+			PC->WheelOpened();
+			PC->WheelStick(FInputActionValue(FVector2D(0.f, 1.f)));
+		});
+		AddShot(TEXT("19a_radio_wheel"), 0.2f);
+		AddStep(TEXT("radio callout"), 0.8f, [this]()
+		{
+			AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC());
+			if (PC)
+			{
+				const EFTOCallout Picked = PC->GetWheelChoice();
+				PC->WheelClosed();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: radio wheel pointed at %s."), *StaticEnum<EFTOCallout>()->GetNameStringByValue(int64(Picked)));
+			}
+		});
+		AddStep(TEXT("radio transmit"), 0.5f, [this]()
+		{
+			AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC());
+			const AFTOPlayerState* PS = PC ? PC->GetPlayerState<AFTOPlayerState>() : nullptr;
+			if (!PC || !PS)
+			{
+				return;
+			}
+			const USoundEffectSourcePresetChain* Filter = FTORadio::GetVoiceFilter();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: radio callout: %s; voice filter has %d effects; squelch %s, chirp %s."),
+				*StaticEnum<EFTOCallout>()->GetNameStringByValue(int64(PS->GetCallout().Callout)), Filter ? Filter->Chain.Num() : 0,
+				FTORadio::SquelchOpen() && FTORadio::SquelchClose() ? TEXT("loaded") : TEXT("MISSING"), FTORadio::CalloutChirp() ? TEXT("loaded") : TEXT("MISSING"));
+			PC->RadioPressed();
+		});
+		AddShot(TEXT("19b_radio_transmitting"), 0.3f);
+		AddStep(TEXT("radio release"), 0.3f, [this]()
+		{
+			AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC());
+			const AFTOPlayerState* PS = PC ? PC->GetPlayerState<AFTOPlayerState>() : nullptr;
+			if (PC && PS)
+			{
+				const bool bWasOn = PS->IsOnRadio();
+				PC->RadioReleased();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: push-to-talk: %s, then %s."), bWasOn ? TEXT("on air") : TEXT("NOT ON AIR"), PS->IsOnRadio() ? TEXT("STILL ON AIR") : TEXT("off"));
+			}
+		});
 	}
 
 	// Two players (-FTOSmokeRideAlong): the host parks in a cruiser and waits; the client (whose tour
@@ -1394,6 +1449,41 @@ void AFTOSmokeTest::BuildSteps()
 				}
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: the client's arrest: %s."), Following > 0 ? TEXT("cuffed, following the client's officer") : TEXT("NO ARRESTEE"));
 			});
+
+			// Then the client calls for backup and keys the radio: their callout and voice should reach us.
+			AddStep(TEXT("listen to the radio"), 0.f, [this]()
+			{
+				SetHUDVisible(true);
+				if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+			});
+			AddWait(TEXT("hear the client"), 40.f, [this]()
+			{
+				for (const APlayerState* PS : GetWorld()->GetGameState()->PlayerArray)
+				{
+					const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
+					if (Officer && !Officer->IsLocalOfficer() && Officer->IsOnRadio() && Officer->GetCallout().Callout == EFTOCallout::Backup)
+					{
+						return true;
+					}
+				}
+				return false;
+			});
+			AddStep(TEXT("heard on the radio"), 0.f, [this]()
+			{
+				const AGameStateBase* GS = GetWorld()->GetGameState();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: host's radio has %d officers on it."), GS ? GS->PlayerArray.Num() : -1);
+				for (const APlayerState* PS : GS ? GS->PlayerArray : TArray<TObjectPtr<APlayerState>>())
+				{
+					const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
+					if (Officer && !Officer->IsLocalOfficer())
+					{
+						UE_LOG(LogFTO, Display, TEXT("SMOKE: host heard %s: callout %s (%.1f s ago), %s, their voice %s."), *Officer->GetCallsign(),
+							*StaticEnum<EFTOCallout>()->GetNameStringByValue(int64(Officer->GetCallout().Callout)), Officer->GetCalloutAge(),
+							Officer->IsOnRadio() ? TEXT("on air") : TEXT("off air"), Officer->HasRadioVoice() ? TEXT("through the radio filter") : TEXT("NOT SET UP"));
+					}
+				}
+			});
+			AddShot(TEXT("11g_host_hears_backup"), 1.f);
 		}
 		else
 		{
@@ -1492,6 +1582,28 @@ void AFTOSmokeTest::BuildSteps()
 				}
 			});
 			AddShot(TEXT("11d_client_fires"), 0.f);
+			// Call for backup and stay on air a while (the host is listening for it).
+			AddStep(TEXT("client radio"), 1.5f, [this]()
+			{
+				if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC()))
+				{
+					PC->RadioPressed();
+					PC->FTOCallout(TEXT("Backup"));
+					for (const APlayerState* PS : GetWorld()->GetGameState()->PlayerArray)
+					{
+						const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
+						if (Officer && !Officer->IsLocalOfficer())
+						{
+							UE_LOG(LogFTO, Display, TEXT("SMOKE: client hears %s's voice %s."), *Officer->GetCallsign(), Officer->HasRadioVoice() ? TEXT("through the radio filter") : TEXT("NOT SET UP"));
+						}
+					}
+				}
+			});
+			AddShot(TEXT("11f_client_on_radio"), 6.f);
+			AddStep(TEXT("client off the radio"), 5.f, [this]()
+			{
+				if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->RadioReleased(); }
+			});
 		}
 	}
 

@@ -37,6 +37,7 @@ free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invite
 | `FTOEndShift 1` | End the shift (1 = survived, 0 = overrun) |
 | `FTODrive` | Jump into the nearest free cruiser |
 | `FTORide` | Ride shotgun in the nearest cruiser that has a driver |
+| `FTOCallout Backup` | Make a radio callout (`Backup`, `Fleeing`, `OfficerDown`, `Copy`); works for any player |
 
 Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 
@@ -63,6 +64,11 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   the seat, and the mouse / right stick glances around (it eases back to the road). E gets out. Anyone you hit at
   speed goes flying (and hitting citizens costs chaos).
 - **Riding shotgun**: the mouse / right stick looks around, Q works the lights and siren, C swaps cameras, E gets out.
+- **Radio** (anywhere, on foot or in a car): hold V (d-pad down) to talk to the squad; teammates hear you through a
+  walkie-talkie filter with a squelch at each end, and see who's on air. Hold T (d-pad up) for the callout wheel:
+  point with the mouse / right stick and let go, or press 1-4: *Need backup!*, *Suspect fleeing!* (pings the nearest
+  getaway), *Officer down!* (pings the nearest downed partner) and *10-4*. Pings show on everyone's HUD for 20 s.
+  Going down calls *Officer down!* for you. Voice needs a microphone and uses the engine's VOIP (push-to-talk only).
 
 ## Sharing a build
 `powershell -ExecutionPolicy Bypass -File Tools/Build/package.ps1` builds, cooks and packages a Windows
@@ -76,12 +82,14 @@ tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy a
 Along the way it books a suspect into the cells, looks inside every kind of building (with their people), stages a
 hold-up and a bar brawl, questions a crook, walks through front doors, checks that shop windows let sight through,
 drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (then
-cuffs them where they fell), has a downed officer helped up, and makes the arrests that don't go quietly: a brawler
-wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who gives up beside their
-car; the log (`SMOKE:` lines) reports each check.
+cuffs them where they fell), has a downed officer helped up (the radio calls it in), makes the arrests that don't go
+quietly: a brawler wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who
+gives up beside their car, then opens the callout wheel and keys the radio; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, gets out
-and arrests a shoplifter the host puts beside them.
+and arrests a shoplifter the host puts beside them. Then the client calls for backup and stays on air, and the host
+checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
+host).
 
 ## Art pipeline
 - **Characters**: `Tools/Blender/build_officer.py` models, rigs and animates the officer entirely from code and exports FBX

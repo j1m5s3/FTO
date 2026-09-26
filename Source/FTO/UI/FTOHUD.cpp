@@ -103,6 +103,7 @@ void AFTOHUD::DrawHUD()
 		break;
 	}
 
+	DrawRadio(GS);
 	DrawToasts();
 }
 
