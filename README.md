@@ -18,4 +18,5 @@ then zip `Build/Package/Windows`.
 ## Docs
 - [Game design](docs/GameDesign.md)
 - [Development: build, play with friends, controls, console commands, art & audio pipelines](docs/Development.md)
+- [Phase 2 plan (incl. Steam invites)](docs/Phase2Plan.md)
 - [Credits & asset licences](docs/Credits.md)
