@@ -1,5 +1,7 @@
 #include "Crime/FTOIncident.h"
 #include "Core/FTOCharacter.h"
+#include "City/FTOCityGenerator.h"
+#include "EngineUtils.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -74,6 +76,14 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, StartTime);
 	DOREPLIFETIME(AFTOIncident, NeglectTime);
 	DOREPLIFETIME(AFTOIncident, bMobile);
+	DOREPLIFETIME(AFTOIncident, BuildingIndex);
+}
+
+void AFTOIncident::SetBuilding(int32 Index)
+{
+	check(HasAuthority());
+	BuildingIndex = Index;
+	RefreshVisuals();
 }
 
 void AFTOIncident::BeginPlay()
@@ -262,6 +272,21 @@ int32 AFTOIncident::CountOfficersOnScene() const
 		return 0;
 	}
 
+	// Indoor scenes are handled from inside, not through the shop window.
+	const FFTOBuilding* Building = nullptr;
+	if (IsIndoors())
+	{
+		if (!City.IsValid())
+		{
+			for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
+			{
+				City = *It;
+				break;
+			}
+		}
+		Building = City.IsValid() ? City->GetBuilding(BuildingIndex) : nullptr;
+	}
+
 	int32 Count = 0;
 	const FVector Here = GetActorLocation();
 	for (const APlayerState* PS : GS->PlayerArray)
@@ -276,7 +301,8 @@ int32 AFTOIncident::CountOfficersOnScene() const
 		{
 			continue;
 		}
-		if (FVector::DistSquared2D(Pawn->GetActorLocation(), Here) <= FMath::Square(GetSceneRadius()))
+		if (FVector::DistSquared2D(Pawn->GetActorLocation(), Here) <= FMath::Square(GetSceneRadius()) &&
+			(!Building || Building->Contains(Pawn->GetActorLocation() - FVector(0.f, 0.f, 90.f), 60.f)))
 		{
 			++Count;
 		}
@@ -358,8 +384,13 @@ void AFTOIncident::RefreshVisuals()
 		FTOArt::SetColor(BeaconMaterial, Color, 0.6f);
 	}
 
-	// Unreported incidents are just "something happening": no beacon until someone knows.
+	// Unreported incidents are just "something happening": no beacon until someone knows. Indoors, a smaller
+	// beacon and label hang under the ceiling.
 	Beacon->SetVisibility(State != EFTOIncidentState::Unreported);
+	Beacon->SetRelativeLocation(FVector(0.f, 0.f, IsIndoors() ? 300.f : 450.f));
+	Beacon->SetRelativeScale3D(IsIndoors() ? FVector(0.6f, 0.6f, 0.8f) : FVector(1.2f, 1.2f, 1.6f));
+	Label->SetRelativeLocation(FVector(0.f, 0.f, IsIndoors() ? 345.f : 620.f));
+	Label->SetWorldSize(IsIndoors() ? 34.f : 60.f);
 	// Handled perps are now a cuffed arrestee (or the incident is mobile and they're in the car).
 	Suspect->SetVisibility(!bMobile && !(State == EFTOIncidentState::Resolved && Info.bArrest));
 
@@ -375,17 +406,58 @@ void AFTOIncident::RefreshVisuals()
 	Label->SetTextRenderColor(Color.ToFColor(true));
 }
 
+namespace
+{
+	/** Crimes where the perp waves a (finger) gun about. */
+	bool IsHoldUp(FName Crime)
+	{
+		return Crime == TEXT("ArmedRobbery") || Crime == TEXT("BankHeist") || Crime == TEXT("HostageSituation") || Crime == TEXT("Standoff");
+	}
+
+	/** What the perp is up to before the police arrive. */
+	EFTOAnimAction PerpAction(FName Crime)
+	{
+		if (Crime == TEXT("BarFight") || Crime == TEXT("Riot") || Crime == TEXT("Vandalism"))
+		{
+			return EFTOAnimAction::Punch;
+		}
+		if (Crime == TEXT("NoiseComplaint"))
+		{
+			return EFTOAnimAction::Dance;
+		}
+		if (Crime == TEXT("DomesticDispute"))
+		{
+			return EFTOAnimAction::Talk;
+		}
+		if (Crime == TEXT("Shoplifting") || Crime == TEXT("Burglary") || Crime == TEXT("TerrorPlot") || Crime == TEXT("StolenGoods"))
+		{
+			return EFTOAnimAction::Work; // rummaging, stuffing pockets, fiddling with a ticking thing
+		}
+		if (IsHoldUp(Crime))
+		{
+			return EFTOAnimAction::None; // the gun hand says it all
+		}
+		return EFTOAnimAction::Interact; // up to no good
+	}
+}
+
 EFTOAnimAction AFTOIncident::GetAnimAction() const
 {
 	switch (State)
 	{
 	case EFTOIncidentState::Unreported:
 	case EFTOIncidentState::Reported:
-		return EFTOAnimAction::Interact;	// up to no good
+		return PerpAction(Info.TemplateId);
 	case EFTOIncidentState::Responding:
 	case EFTOIncidentState::Resolved:
-		return EFTOAnimAction::Cheer;		// hands up, it's a fair cop
+		return EFTOAnimAction::HandsUp;		// it's a fair cop
 	default:
 		return EFTOAnimAction::None;
 	}
+}
+
+EFTOAimPose AFTOIncident::GetAimPose() const
+{
+	const bool bBeforeThePolice = State == EFTOIncidentState::Unreported || State == EFTOIncidentState::Reported;
+	return bBeforeThePolice && IsHoldUp(Info.TemplateId) ? EFTOAimPose::Pistol : EFTOAimPose::None;
 }

@@ -18,6 +18,9 @@ struct FFTOMoveSegment
 	UPROPERTY() float StartTime = 0.f;
 	/** Units per second. 0 = standing still at From. */
 	UPROPERTY() float Speed = 0.f;
+	/** Standing still, turn to face FaceYaw (else keep facing wherever we were going). */
+	UPROPERTY() bool bFace = false;
+	UPROPERTY() float FaceYaw = 0.f;
 };
 
 /**
@@ -42,6 +45,10 @@ public:
 
 	/** Server: jump to a spot and stand there (e.g. after being knocked flying). */
 	void TeleportAndHold(const FVector& Location);
+
+	/** Server: while standing still, turn to face this way (everyone sees the turn). */
+	void FaceYaw(float Yaw);
+	void FaceToward(const FVector& Location) { FaceYaw((Location - GetActorLocation()).Rotation().Yaw); }
 
 	/** While true the actor isn't moved along its path (ragdolling, etc.). */
 	virtual bool IsMovementFrozen() const { return false; }

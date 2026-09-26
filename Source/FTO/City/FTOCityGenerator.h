@@ -78,7 +78,11 @@ public:
 
 	/** Every enterable ground floor, with its room, door and the spots people use inside. */
 	const TArray<FFTOBuilding>& GetBuildings() const { return Buildings; }
+	const FFTOBuilding* GetBuilding(int32 Index) const { return Buildings.IsValidIndex(Index) ? &Buildings[Index] : nullptr; }
 	const FFTOBuilding* FindBuilding(EFTOBuildingType Type) const;
+	int32 FindBuildingIndex(EFTOBuildingType Type) const;
+	/** The precinct's holding cells: where cuffed suspects are walked to be booked. */
+	FVector GetHoldingCellsLocation() const;
 
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
@@ -144,6 +148,14 @@ protected:
 	/** Room-space (X into the room from the door) to world. */
 	FTransform RoomToWorld(const FFTOBuilding& B, float X, float Y, float Yaw, float Z = 0.f) const;
 	void PlaceInRoom(const FFTOBuilding& B, const TCHAR* Piece, float X, float Y, float Yaw, const FLinearColor& Tint = FLinearColor::White, float Z = 0.f);
+	/** Someone standing at (X, Y) in room space, facing Yaw, doing Action. */
+	FFTOSpot StandingSpot(const FFTOBuilding& B, float X, float Y, float Yaw, EFTOAnimAction Action) const;
+	/**
+	 * Someone sat on the seat piece at (SeatX, SeatY) facing Yaw: their root goes Forward cm ahead of the piece's
+	 * origin (FTOKit::SitBack in front of its backrest) and FTOKit::SitDrop below SeatTop.
+	 */
+	FFTOSpot SeatedSpot(const FFTOBuilding& B, float SeatX, float SeatY, float Yaw, float Forward, float SeatTop,
+		EFTOAnimAction Action = EFTOAnimAction::Sit) const;
 	/**
 	 * A partition in room space from From to To, along Y at X = Line (bAlongY) or along X at Y = Line,
 	 * tiled with interior wall panels (doorways where Doors asks, the last panel squeezed to fit).

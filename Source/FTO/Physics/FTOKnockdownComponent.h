@@ -65,6 +65,7 @@ protected:
 
 	void StartRagdoll(const FVector& LaunchVelocity);
 	void StopRagdoll();
+	void EnsureStars();
 	void UpdateStars(float DeltaTime);
 
 	UPROPERTY(ReplicatedUsing=OnRep_State) FFTOKnockdownState State;

@@ -40,6 +40,9 @@ public:
 	/** Spawns a specific template at a given spot (e.g. a traffic stop gone wrong). */
 	AFTOIncident* SpawnIncidentAt(FName TemplateId, const FVector& Location, bool bForceReported = true);
 
+	/** Spawns a specific template with the perp standing at Where, inside building BuildingIndex (or INDEX_NONE). */
+	AFTOIncident* SpawnIncidentAt(FName TemplateId, const FTransform& Where, int32 BuildingIndex, bool bForceReported = true);
+
 	/** Optional designer override; defaults are built in. */
 	UPROPERTY(EditAnywhere, Category="Director")
 	TObjectPtr<UFTOCrimeCatalog> CatalogOverride;
@@ -92,9 +95,10 @@ protected:
 	int32 GetOfficerCount() const;
 
 	const FFTOCrimeTemplate* PickTemplate(float Chaos);
-	bool PickLocation(FName TemplateId, FVector& OutLocation);
+	/** Where the perp stands (spawn points face the way they face), and the building it's in, if any. */
+	bool PickLocation(FName TemplateId, FTransform& OutWhere, int32& OutBuilding);
 	bool IsTooCloseToActiveIncident(const FVector& Location) const;
-	AFTOIncident* SpawnFromTemplate(const FFTOCrimeTemplate& Template, const FVector& Location, bool bForceReported);
+	AFTOIncident* SpawnFromTemplate(const FFTOCrimeTemplate& Template, const FTransform& Where, int32 BuildingIndex, bool bForceReported);
 
 	void HandleResolved(AFTOIncident* Incident);
 	void HandleFailed(AFTOIncident* Incident);

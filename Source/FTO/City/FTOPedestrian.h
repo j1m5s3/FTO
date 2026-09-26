@@ -34,6 +34,9 @@ public:
 	/** Server: an officer blew a whistle: stop, hands up, look at them for a moment. */
 	void FreezeFor(const AActor* Officer, float Seconds);
 
+	/** Server: carry on with whatever we were doing (after a chat, a whistle, a tumble...). */
+	virtual void Resume();
+
 	// IFTOInteractable
 	virtual bool CanInteract(const AFTOCharacter* Officer) const override;
 	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
@@ -59,7 +62,16 @@ protected:
 
 	void WalkToNextCorner();
 
+	/** Server: turn to look at an officer who's talking to (or whistling at) us. */
+	virtual void FaceOfficer(const AActor* Officer);
+	/** A line for an officer who stops for a chat and has no tip-off coming. */
+	virtual FString GetSmallTalk();
+
 	UFUNCTION() void OnRep_Look();
+	/** Dress the body from LookSeed (every machine). */
+	virtual void ApplyLook();
+	/** Tint every material slot of Body with Color. */
+	void PaintBody(const FLinearColor& Color);
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCapsuleComponent> Capsule;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USkeletalMeshComponent> Body;

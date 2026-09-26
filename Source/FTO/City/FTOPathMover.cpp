@@ -65,6 +65,7 @@ void AFTOPathMover::MoveTo(const FVector& Target, float Speed)
 	Segment.To = Target;
 	Segment.StartTime = GetNetTime();
 	Segment.Speed = Speed;
+	Segment.bFace = false;
 	bArrivalHandled = false;
 	ForceNetUpdate();
 }
@@ -77,6 +78,7 @@ void AFTOPathMover::Hold()
 	Segment.To = Here;
 	Segment.StartTime = GetNetTime();
 	Segment.Speed = 0.f;
+	Segment.bFace = false;
 	bArrivalHandled = true;
 	ForceNetUpdate();
 }
@@ -88,8 +90,17 @@ void AFTOPathMover::TeleportAndHold(const FVector& Location)
 	Segment.To = Location;
 	Segment.StartTime = GetNetTime();
 	Segment.Speed = 0.f;
+	Segment.bFace = false;
 	bArrivalHandled = true;
 	SetActorLocation(Location);
+	ForceNetUpdate();
+}
+
+void AFTOPathMover::FaceYaw(float Yaw)
+{
+	check(HasAuthority());
+	Segment.bFace = true;
+	Segment.FaceYaw = FRotator::NormalizeAxis(Yaw);
 	ForceNetUpdate();
 }
 
@@ -103,13 +114,20 @@ void AFTOPathMover::Tick(float DeltaSeconds)
 	}
 
 	const FVector NewLocation = EvaluateLocation();
-	SetActorLocation(NewLocation);
+	if (!NewLocation.Equals(GetActorLocation(), 0.01f))
+	{
+		SetActorLocation(NewLocation);
+	}
 
 	const FVector Dir = GetMoveDirection();
 	if (Segment.Speed > 0.f && !Dir.IsNearlyZero())
 	{
 		const FRotator Target = Dir.Rotation();
 		SetActorRotation(FMath::RInterpConstantTo(GetActorRotation(), FRotator(0.f, Target.Yaw, 0.f), DeltaSeconds, TurnRate));
+	}
+	else if (Segment.bFace && FMath::Abs(FMath::FindDeltaAngleDegrees(GetActorRotation().Yaw, Segment.FaceYaw)) > 0.5f)
+	{
+		SetActorRotation(FMath::RInterpConstantTo(GetActorRotation(), FRotator(0.f, Segment.FaceYaw, 0.f), DeltaSeconds, TurnRate));
 	}
 
 	TickCosmetics(DeltaSeconds);

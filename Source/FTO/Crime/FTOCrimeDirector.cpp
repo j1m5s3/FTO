@@ -165,10 +165,11 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 		{
 			if (const FFTOCrimeTemplate* Template = PickTemplate(GS->GetChaos()))
 			{
-				FVector Location;
-				if (PickLocation(Template->Id, Location))
+				FTransform Where;
+				int32 Building = INDEX_NONE;
+				if (PickLocation(Template->Id, Where, Building))
 				{
-					SpawnFromTemplate(*Template, Location, false);
+					SpawnFromTemplate(*Template, Where, Building, false);
 				}
 			}
 		}
@@ -248,9 +249,11 @@ bool UFTOCrimeDirector::IsTooCloseToActiveIncident(const FVector& Location) cons
 	return false;
 }
 
-bool UFTOCrimeDirector::PickLocation(FName TemplateId, FVector& OutLocation)
+bool UFTOCrimeDirector::PickLocation(FName TemplateId, FTransform& OutWhere, int32& OutBuilding)
 {
-	// Prefer authored / generated spawn points.
+	OutBuilding = INDEX_NONE;
+
+	// Prefer authored / generated spawn points (indoors, the perp stands facing their victim).
 	TArray<AFTOCrimeSpawnPoint*> Candidates;
 	for (AFTOCrimeSpawnPoint* Point : SpawnPoints)
 	{
@@ -261,11 +264,14 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FVector& OutLocation)
 	}
 	if (Candidates.Num() > 0)
 	{
-		OutLocation = Candidates[Rng.RandRange(0, Candidates.Num() - 1)]->GetActorLocation();
+		const AFTOCrimeSpawnPoint* Point = Candidates[Rng.RandRange(0, Candidates.Num() - 1)];
+		OutWhere = FTransform(Point->IsIndoors() ? Point->GetActorRotation() : FRotator(0.f, Rng.FRandRange(0.f, 360.f), 0.f), Point->GetActorLocation());
+		OutBuilding = Point->BuildingIndex;
 		return true;
 	}
 
 	// Otherwise anywhere reachable on the navmesh, or failing that, anywhere on the ground.
+	const FRotator AnyWay(0.f, Rng.FRandRange(0.f, 360.f), 0.f);
 	for (int32 Attempt = 0; Attempt < 8; ++Attempt)
 	{
 		const FVector Guess(Rng.FRandRange(-FallbackRadius, FallbackRadius), Rng.FRandRange(-FallbackRadius, FallbackRadius), 0.f);
@@ -277,7 +283,7 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FVector& OutLocation)
 			{
 				if (!IsTooCloseToActiveIncident(NavLocation.Location))
 				{
-					OutLocation = NavLocation.Location;
+					OutWhere = FTransform(AnyWay, NavLocation.Location);
 					return true;
 				}
 				continue;
@@ -289,7 +295,7 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FVector& OutLocation)
 		const FVector End = Guess - FVector(0.f, 0.f, 5000.f);
 		if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility) && !IsTooCloseToActiveIncident(Hit.ImpactPoint))
 		{
-			OutLocation = Hit.ImpactPoint;
+			OutWhere = FTransform(AnyWay, Hit.ImpactPoint);
 			return true;
 		}
 	}
@@ -299,15 +305,16 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FVector& OutLocation)
 AFTOIncident* UFTOCrimeDirector::SpawnIncident(FName TemplateId, bool bForceReported)
 {
 	const FFTOCrimeTemplate* Template = Catalog ? Catalog->FindTemplate(TemplateId) : nullptr;
-	FVector Location;
-	if (!Template || !PickLocation(TemplateId, Location))
+	FTransform Where;
+	int32 Building = INDEX_NONE;
+	if (!Template || !PickLocation(TemplateId, Where, Building))
 	{
 		return nullptr;
 	}
-	return SpawnFromTemplate(*Template, Location, bForceReported);
+	return SpawnFromTemplate(*Template, Where, Building, bForceReported);
 }
 
-AFTOIncident* UFTOCrimeDirector::SpawnFromTemplate(const FFTOCrimeTemplate& Template, const FVector& Location, bool bForceReported)
+AFTOIncident* UFTOCrimeDirector::SpawnFromTemplate(const FFTOCrimeTemplate& Template, const FTransform& Where, int32 BuildingIndex, bool bForceReported)
 {
 	AFTOGameState* GS = GetFTOGameState();
 	if (!GS)
@@ -317,10 +324,15 @@ AFTOIncident* UFTOCrimeDirector::SpawnFromTemplate(const FFTOCrimeTemplate& Temp
 
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	AFTOIncident* Incident = GetWorld()->SpawnActor<AFTOIncident>(IncidentClass, Location, FRotator(0.f, Rng.FRandRange(0.f, 360.f), 0.f), Params);
+	AFTOIncident* Incident = GetWorld()->SpawnActor<AFTOIncident>(IncidentClass, Where, Params);
 	if (!Incident)
 	{
 		return nullptr;
+	}
+	const FVector Location = Where.GetLocation();
+	if (BuildingIndex != INDEX_NONE)
+	{
+		Incident->SetBuilding(BuildingIndex);
 	}
 
 	const FFTOIncidentInfo Info = Catalog->RollIncident(Template, Rng);
@@ -335,8 +347,9 @@ AFTOIncident* UFTOCrimeDirector::SpawnFromTemplate(const FFTOCrimeTemplate& Temp
 
 	GS->RegisterIncident(Incident);
 
-	UE_LOG(LogFTO, Log, TEXT("New incident: %s (%s) at %s%s"),
+	UE_LOG(LogFTO, Log, TEXT("New incident: %s (%s) at %s%s%s"),
 		*Info.Title.ToString(), *FTOCrime::TierName(Info.Tier).ToString(), *Location.ToCompactString(),
+		BuildingIndex != INDEX_NONE ? *FString::Printf(TEXT(" inside building %d"), BuildingIndex) : TEXT(""),
 		bReported ? TEXT("") : TEXT(" [unreported]"));
 	return Incident;
 }
@@ -423,19 +436,28 @@ void UFTOCrimeDirector::HandleFailed(AFTOIncident* Incident)
 	GS->AddChaos(Info.FailPenalty);
 	++GS->IncidentsFailed;
 
-	// Ignored problems grow into bigger problems.
+	// Ignored problems grow into bigger problems (indoors, right there in the same room).
 	if (!Info.EscalatesTo.IsNone() && GS->GetShiftPhase() == EFTOShiftPhase::OnDuty)
 	{
 		if (const FFTOCrimeTemplate* Next = Catalog->FindTemplate(Info.EscalatesTo))
 		{
-			const FVector Offset(Rng.FRandRange(-300.f, 300.f), Rng.FRandRange(-300.f, 300.f), 0.f);
-			SpawnFromTemplate(*Next, Incident->GetActorLocation() + Offset, true);
+			FTransform Where = Incident->GetActorTransform();
+			if (!Incident->IsIndoors())
+			{
+				Where.AddToTranslation(FVector(Rng.FRandRange(-300.f, 300.f), Rng.FRandRange(-300.f, 300.f), 0.f));
+			}
+			SpawnFromTemplate(*Next, Where, Incident->GetBuildingIndex(), true);
 		}
 	}
 }
 
 AFTOIncident* UFTOCrimeDirector::SpawnIncidentAt(FName TemplateId, const FVector& Location, bool bForceReported)
 {
+	return SpawnIncidentAt(TemplateId, FTransform(FRotator(0.f, Rng.FRandRange(0.f, 360.f), 0.f), Location), INDEX_NONE, bForceReported);
+}
+
+AFTOIncident* UFTOCrimeDirector::SpawnIncidentAt(FName TemplateId, const FTransform& Where, int32 BuildingIndex, bool bForceReported)
+{
 	const FFTOCrimeTemplate* Template = Catalog ? Catalog->FindTemplate(TemplateId) : nullptr;
-	return Template ? SpawnFromTemplate(*Template, Location, bForceReported) : nullptr;
+	return Template ? SpawnFromTemplate(*Template, Where, BuildingIndex, bForceReported) : nullptr;
 }

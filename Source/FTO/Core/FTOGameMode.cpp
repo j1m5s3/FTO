@@ -1,6 +1,7 @@
 #include "Core/FTOGameMode.h"
 #include "City/FTOAmbientPopulation.h"
 #include "City/FTOCityGenerator.h"
+#include "City/FTOInteriorLife.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
@@ -67,6 +68,11 @@ void AFTOGameMode::StartPlay()
 		if (AFTOAmbientPopulation* Population = GetWorld()->SpawnActor<AFTOAmbientPopulation>(AFTOAmbientPopulation::StaticClass(), FTransform::Identity))
 		{
 			Population->Populate(CityGenerator, ShiftSeed);
+		}
+		// Everyone indoors: staff, customers, residents and the odd crook, wherever officers are.
+		if (AFTOInteriorLife* Interiors = GetWorld()->SpawnActor<AFTOInteriorLife>(AFTOInteriorLife::StaticClass(), FTransform::Identity))
+		{
+			Interiors->Init(CityGenerator, ShiftSeed);
 		}
 	}
 

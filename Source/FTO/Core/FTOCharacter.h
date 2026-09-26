@@ -178,6 +178,8 @@ protected:
 
 	/** Picks the nearest usable interactable in range (local player only). */
 	void UpdateFocus();
+	/** Is there a wall (or window, or cell bars) between From and To? Furniture doesn't count. */
+	bool IsWallBetween(const FVector& From, const FVector& To, const AActor* Target) const;
 
 	UFUNCTION(Server, Reliable)
 	void ServerInteract(AActor* Target);

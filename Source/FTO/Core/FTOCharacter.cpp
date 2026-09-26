@@ -337,6 +337,35 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 	}
 }
 
+bool AFTOCharacter::IsWallBetween(const FVector& From, const FVector& To, const AActor* Target) const
+{
+	// Walls, windows and cell bars make a room a room; counters and tables don't stop a conversation.
+	auto IsWall = [](const UPrimitiveComponent* Component)
+	{
+		const UStaticMeshComponent* Mesh = Cast<UStaticMeshComponent>(Component);
+		const FString Name = Mesh && Mesh->GetStaticMesh() ? Mesh->GetStaticMesh()->GetName() : FString();
+		return Name.StartsWith(TEXT("SM_Wall")) || Name.StartsWith(TEXT("SM_IWall")) || Name.StartsWith(TEXT("SM_Corner")) ||
+			Name.StartsWith(TEXT("SM_VaultWall")) || Name.StartsWith(TEXT("SM_CellBars"));
+	};
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOWallBetween), false, this);
+	Params.AddIgnoredActor(Target);
+	for (int32 Tries = 0; Tries < 4; ++Tries)
+	{
+		FHitResult Hit;
+		if (!GetWorld()->LineTraceSingleByObjectType(Hit, From, To, FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+		{
+			return false;
+		}
+		if (IsWall(Hit.GetComponent()))
+		{
+			return true;
+		}
+		Params.AddIgnoredComponent(Hit.GetComponent());
+	}
+	return false;
+}
+
 void AFTOCharacter::UpdateFocus()
 {
 	FocusedInteractable.Reset();
@@ -367,6 +396,12 @@ void AFTOCharacter::UpdateFocus()
 		const FVector ToTarget = Interactable->GetInteractLocation() - GetActorLocation();
 		const float Distance = ToTarget.Size2D();
 		if (Distance > Interactable->GetInteractRange())
+		{
+			continue;
+		}
+
+		// Not through walls (or shop windows): the clerk on the other side of the wall can't hear you.
+		if (IsWallBetween(GetActorLocation() + FVector(0.f, 0.f, 50.f), Interactable->GetInteractLocation() + FVector(0.f, 0.f, 40.f), Actor))
 		{
 			continue;
 		}
