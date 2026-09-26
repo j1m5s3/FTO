@@ -40,6 +40,12 @@ public:
 	/** Server: stand still where we are. */
 	void Hold();
 
+	/** Server: jump to a spot and stand there (e.g. after being knocked flying). */
+	void TeleportAndHold(const FVector& Location);
+
+	/** While true the actor isn't moved along its path (ragdolling, etc.). */
+	virtual bool IsMovementFrozen() const { return false; }
+
 	bool HasArrived() const;
 	FVector EvaluateLocation() const;
 	float GetCurrentSpeed() const { return Segment.Speed; }

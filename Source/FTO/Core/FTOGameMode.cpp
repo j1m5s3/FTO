@@ -8,6 +8,8 @@
 #include "Crime/FTOCrimeDirector.h"
 #include "UI/FTOHUD.h"
 #include "Vehicles/FTOCruiser.h"
+#include "Physics/FTOKnockdownComponent.h"
+#include "Dev/FTOAnimDummy.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
@@ -212,5 +214,70 @@ void AFTOGameMode::FTOEndShift(bool bSurvived)
 	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
 	{
 		GS->SetShiftPhase(bSurvived ? EFTOShiftPhase::Survived : EFTOShiftPhase::Overrun);
+	}
+}
+
+void AFTOGameMode::FTOKnockdown(float Radius)
+{
+	// Debug: bowl over everyone near the first player.
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const APawn* Center = PC ? PC->GetPawn() : nullptr;
+	if (!Center)
+	{
+		return;
+	}
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		UFTOKnockdownComponent* Target = It->FindComponentByClass<UFTOKnockdownComponent>();
+		if (Target && FVector::DistSquared(It->GetActorLocation(), Center->GetActorLocation()) < FMath::Square(Radius))
+		{
+			const FVector Away = (It->GetActorLocation() - Center->GetActorLocation()).GetSafeNormal2D();
+			Target->Knockdown(Away * 450.f + FVector(FMath::FRandRange(-150.f, 150.f), FMath::FRandRange(-150.f, 150.f), 550.f), 3.5f);
+		}
+	}
+}
+
+void AFTOGameMode::FTOAnimGallery()
+{
+	// Debug: two rows of mannequins in front of the first player, one per action/aim clip.
+	const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	const APawn* Center = PC ? PC->GetPawn() : nullptr;
+	if (!Center)
+	{
+		return;
+	}
+	for (TActorIterator<AFTOAnimDummy> It(GetWorld()); It; ++It)
+	{
+		It->Destroy();
+	}
+
+	struct FEntry { EFTOAnimAction Action; EFTOAimPose Aim; };
+	TArray<FEntry> Entries;
+	const UEnum* Actions = StaticEnum<EFTOAnimAction>();
+	for (int32 i = 0; i < Actions->NumEnums() - 1; ++i)
+	{
+		const EFTOAnimAction Action = static_cast<EFTOAnimAction>(Actions->GetValueByIndex(i));
+		if (Action != EFTOAnimAction::None)
+		{
+			Entries.Add({ Action, EFTOAimPose::None });
+		}
+	}
+	Entries.Add({ EFTOAnimAction::None, EFTOAimPose::Pistol });
+	Entries.Add({ EFTOAnimAction::None, EFTOAimPose::Rifle });
+
+	const FVector Fwd = Center->GetActorForwardVector();
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+	const FVector Feet = Center->GetActorLocation() - FVector(0.f, 0.f, 96.f);
+	const int32 PerRow = (Entries.Num() + 1) / 2;
+	for (int32 i = 0; i < Entries.Num(); ++i)
+	{
+		const int32 Row = i / PerRow;
+		const int32 Col = i % PerRow;
+		const FVector Location = Feet + Fwd * (900.f + Row * 320.f) + Right * ((Col - (PerRow - 1) * 0.5f) * 160.f);
+		const FRotator FacePlayer(0.f, (-Fwd).Rotation().Yaw, 0.f);
+		if (AFTOAnimDummy* Dummy = GetWorld()->SpawnActor<AFTOAnimDummy>(AFTOAnimDummy::StaticClass(), Location, FacePlayer))
+		{
+			Dummy->Setup(Entries[i].Action, Entries[i].Aim, (i % 2) == 0);
+		}
 	}
 }

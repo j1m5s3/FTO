@@ -180,7 +180,7 @@ def add_sockets(mesh_obj, sockets):
     for name, loc in sockets.items():
         empty = fb.link(bpy.data.objects.new(f"SOCKET_{name}", None))
         empty.empty_display_type = 'PLAIN_AXES'
-        empty.location = loc
+        empty.location = [v * fb.UNIT for v in loc]
         empty.parent = mesh_obj
         objects.append(empty)
     return objects
@@ -225,7 +225,7 @@ def main():
             for socket, loc in sockets.items():
                 wheel_parts, _ = wheel()
                 w = fb.build_mesh_object(f"preview_{socket}", wheel_parts)
-                w.location = loc
+                w.location = [v * fb.UNIT for v in loc]
             cam = fb.setup_preview((420, 300))
             fb.render_view(os.path.join(os.path.abspath(preview_dir), f"{name}.png"), cam, (7, -7, 4.5), (0, 0, 0.8), 6.5)
 

@@ -5,6 +5,7 @@
 #include "Core/FTOGameMode.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
+#include "Dev/FTOAnimDummy.h"
 #include "Crime/FTOCrimeDirector.h"
 #include "Vehicles/FTOCruiser.h"
 #include "Camera/CameraActor.h"
@@ -177,6 +178,40 @@ void AFTOSmokeTest::BuildSteps()
 		if (AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn())) { Officer->BlowWhistle(); }
 	});
 	AddShot(TEXT("01d_whistle"), 0.5f);
+
+	// Ragdoll: bowl over everyone nearby, then watch them get back up.
+	AddStep(TEXT("knockdown"), 1.4f, [this]()
+	{
+		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOKnockdown(1800.f); }
+		if (APawn* Officer = GetPawn())
+		{
+			ViewFrom(Officer->GetActorLocation() + FVector(-500.f, -500.f, 400.f), Officer->GetActorLocation());
+		}
+	});
+	AddShot(TEXT("01e_knockdown"), 3.6f);
+	AddShot(TEXT("01f_recovered"), 0.5f);
+
+	// Every new clip in engine, on mannequins.
+	AddStep(TEXT("anim gallery"), 1.5f, [this]()
+	{
+		SetHUDVisible(false);
+		AFTOGameMode* GM = GetAuthGameMode();
+		APawn* Officer = GetPawn();
+		if (!GM || !Officer)
+		{
+			return;
+		}
+		GM->FTOAnimGallery();
+		const FVector Fwd = Officer->GetActorForwardVector();
+		ViewFrom(Officer->GetActorLocation() + FVector(0.f, 0.f, 220.f), Officer->GetActorLocation() + Fwd * 1050.f - FVector(0.f, 0.f, 20.f));
+	});
+	AddShot(TEXT("01g_anim_gallery"), 0.5f, false);
+	AddStep(TEXT("clear gallery"), 0.5f, [this]()
+	{
+		SetHUDVisible(true);
+		for (TActorIterator<AFTOAnimDummy> It(GetWorld()); It; ++It) { It->Destroy(); }
+		if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+	});
 
 	// Start the shift and stage a few incidents in view (server/standalone only).
 	AddStep(TEXT("stage incidents"), 4.f, [this]()

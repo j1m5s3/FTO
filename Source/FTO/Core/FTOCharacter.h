@@ -10,6 +10,7 @@ class UCameraComponent;
 class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class UFTOKnockdownComponent;
 struct FInputActionValue;
 
 /**
@@ -40,6 +41,8 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="FTO")
 	AActor* GetCurrentVehicle() const { return CurrentVehicle; }
+
+	UFTOKnockdownComponent* GetKnockdown() const { return Knockdown; }
 
 	/** Blow the police whistle (what Q does on foot). */
 	void BlowWhistle() { ServerWhistle(); }
@@ -75,6 +78,13 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UCameraComponent> FollowCamera;
+
+	/** Ragdoll when bowled over, tackled or knocked out. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	TObjectPtr<UFTOKnockdownComponent> Knockdown;
+
+	void HandleKnockedDown();
+	void HandleRecovered();
 
 	/** Placeholder body pieces. */
 	UPROPERTY(VisibleAnywhere, Category="Components|Placeholder")
