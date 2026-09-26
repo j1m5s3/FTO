@@ -19,6 +19,15 @@ UFTOCrimeDirector::UFTOCrimeDirector()
 void UFTOCrimeDirector::BeginPlay()
 {
 	Super::BeginPlay();
+	EnsureCatalog();
+}
+
+void UFTOCrimeDirector::EnsureCatalog()
+{
+	if (Catalog)
+	{
+		return;
+	}
 
 	if (CatalogOverride)
 	{
@@ -45,6 +54,7 @@ void UFTOCrimeDirector::BeginShift(int32 Seed)
 		return;
 	}
 
+	EnsureCatalog();
 	Rng.Initialize(Seed);
 	GS->ShiftSeed = Seed;
 

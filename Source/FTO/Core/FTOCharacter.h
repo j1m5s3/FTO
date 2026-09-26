@@ -8,6 +8,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 struct FInputActionValue;
 
 /**
@@ -45,6 +46,8 @@ public:
 	float SprintSpeed = 850.f;
 
 protected:
+	virtual void BeginPlay() override;
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<USpringArmComponent> CameraBoom;
 
@@ -60,6 +63,9 @@ protected:
 
 	UPROPERTY(VisibleAnywhere, Category="Components|Placeholder")
 	TObjectPtr<UStaticMeshComponent> CapMesh;
+
+	UPROPERTY()
+	TObjectPtr<UMaterialInterface> BaseMaterial;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> UniformMaterial;

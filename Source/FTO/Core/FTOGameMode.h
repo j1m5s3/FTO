@@ -35,6 +35,7 @@ public:
 	// ---- Debug console commands (host only) ----
 	UFUNCTION(Exec) void FTOSpawnCrime(FName TemplateId);
 	UFUNCTION(Exec) void FTOAddChaos(float Amount);
+	UFUNCTION(Exec) void FTOSkipBriefing();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")

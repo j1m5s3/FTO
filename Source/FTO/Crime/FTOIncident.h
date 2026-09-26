@@ -9,6 +9,7 @@ class USceneComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 class AFTOIncident;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FFTOIncidentEvent, AFTOIncident*);
@@ -92,6 +93,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Suspect;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Label;
 
+	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> BeaconMaterial;
 
 	UPROPERTY(ReplicatedUsing=OnRep_Info) FFTOIncidentInfo Info;

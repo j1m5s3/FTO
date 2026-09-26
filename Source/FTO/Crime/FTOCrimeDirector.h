@@ -86,6 +86,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	void EnsureCatalog();
 	AFTOGameState* GetFTOGameState() const;
 	int32 CountActiveIncidents() const;
 	int32 GetOfficerCount() const;

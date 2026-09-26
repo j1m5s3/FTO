@@ -101,13 +101,13 @@ void AFTOHUD::DrawDiamond(const FVector2D& Center, float Size, const FLinearColo
 {
 	// Stack of shrinking rects reads as a chunky diamond without any textures.
 	const int32 Steps = 6;
+	const float RowH = Size / Steps;
 	for (int32 i = 0; i < Steps; ++i)
 	{
-		const float T = 1.f - float(i) / Steps;
-		const float Half = Size * T;
-		const float Offset = Size * (1.f - T);
-		DrawRect(Color, Center.X - Half, Center.Y - Size + Offset, Half * 2.f, Size / Steps);
-		DrawRect(Color, Center.X - Half, Center.Y + Size - Offset - Size / Steps, Half * 2.f, Size / Steps);
+		// Rows widen from the tips towards the middle.
+		const float Half = Size * (i + 0.5f) / Steps;
+		DrawRect(Color, Center.X - Half, Center.Y - Size + i * RowH, Half * 2.f, RowH + 0.5f);
+		DrawRect(Color, Center.X - Half, Center.Y + Size - (i + 1) * RowH, Half * 2.f, RowH + 0.5f);
 	}
 }
 

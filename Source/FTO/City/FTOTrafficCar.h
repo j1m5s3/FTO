@@ -10,6 +10,7 @@ class UBoxComponent;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 
 UENUM(BlueprintType)
 enum class EFTOCarState : uint8
@@ -71,7 +72,7 @@ protected:
 
 	void DriveToNextIntersection();
 	FVector LanePoint(int32 I, int32 J, const FIntPoint& Heading) const;
-	bool IsPathBlocked() const;
+	bool IsPathBlocked(bool bIncludeCars) const;
 	void FinishTicket();
 	void RollViolation();
 
@@ -85,6 +86,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Indicator;
 
+	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> PaintMaterial;
 	UPROPERTY(Transient) TObjectPtr<AFTOCityGenerator> City;
 
@@ -98,6 +100,10 @@ protected:
 	FVector PendingTarget = FVector::ZeroVector;
 	float PendingSpeed = 0.f;
 	bool bWaitingForClearRoad = false;
+	float WaitStartTime = 0.f;
+	float IgnoreCarsUntil = 0.f;
+	/** Seconds a car will wait behind other cars before nudging through. */
+	float MaxPatience = 3.f;
 	float BlockCheckAccumulator = 0.f;
 	float FleeUntil = 0.f;
 	FTimerHandle TicketTimer;

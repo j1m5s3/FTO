@@ -20,6 +20,7 @@ public:
 	void ClientToast(const FText& Message, FLinearColor Color);
 
 protected:
+	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;
 
 	UPROPERTY(Transient)
