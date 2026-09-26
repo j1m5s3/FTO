@@ -36,7 +36,7 @@ AFTOCruiser::AFTOCruiser()
 	AutoPossessAI = EAutoPossessAI::Disabled;
 
 	Collision = CreateDefaultSubobject<UBoxComponent>(TEXT("Collision"));
-	Collision->InitBoxExtent(FVector(235.f, 102.f, 70.f));
+	Collision->InitBoxExtent(FVector(240.f, 108.f, 72.f));
 	Collision->SetCollisionProfileName(TEXT("Pawn"));
 	RootComponent = Collision;
 
@@ -63,13 +63,13 @@ AFTOCruiser::AFTOCruiser()
 		Wheels.Add(Wheel);
 	}
 
-	// Glowing lenses over the modelled light bar (Blender roof bar at x -25, y +-40, z 170).
+	// Glowing lenses over the modelled light bar's red and blue blocks.
 	auto MakeLens = [&](FName Name, float Y) -> UStaticMeshComponent*
 	{
 		UStaticMeshComponent* Lens = CreateDefaultSubobject<UStaticMeshComponent>(Name);
-		Lens->SetupAttachment(Body);
+		Lens->SetupAttachment(Body, TEXT("Lightbar"));
 		Lens->SetStaticMesh(CubeMesh.Object);
-		Lens->SetRelativeLocation(FVector(-25.f, Y, 171.f));
+		Lens->SetRelativeLocation(FVector(0.f, Y, 0.f));
 		Lens->SetRelativeScale3D(FVector(0.43f, 0.63f, 0.19f));
 		Lens->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Lens->SetCastShadow(false);
@@ -94,6 +94,11 @@ AFTOCruiser::AFTOCruiser()
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
 	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 
+	InteriorCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("InteriorCamera"));
+	InteriorCamera->SetupAttachment(Body, FTOSeats::CameraSocket(EFTOSeat::Driver));
+	InteriorCamera->SetFieldOfView(95.f);
+	InteriorCamera->bAutoActivate = false;
+
 	// Sounds are assigned in BeginPlay from the shared sound set.
 	EngineAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("EngineAudio"));
 	EngineAudio->SetupAttachment(Collision);
@@ -111,13 +116,14 @@ void AFTOCruiser::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AFTOCruiser, bSiren);
 	DOREPLIFETIME(AFTOCruiser, StripeColor);
 	DOREPLIFETIME(AFTOCruiser, Driver);
+	DOREPLIFETIME(AFTOCruiser, Passenger);
 }
 
 void AFTOCruiser::BeginPlay()
 {
 	Super::BeginPlay();
 
-	PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, StripeColor);
+	PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, StripeColor, 0.f, FTOArt::BodySlot(Body));
 	const FFTOSoundSet& Sounds = AFTOGameState::Sounds();
 	EngineAudio->SetSound(Sounds.EngineLoop);
 	EngineAudio->AttenuationSettings = Sounds.World;
@@ -162,29 +168,61 @@ bool AFTOCruiser::IsSimulatingLocally() const
 // Entering / exiting
 // ------------------------------------------------------------------------------------------
 
+USceneComponent* AFTOCruiser::GetSeatParent() const
+{
+	return Body;
+}
+
 bool AFTOCruiser::CanInteract(const AFTOCharacter* Officer) const
 {
-	return Officer && !Driver;
+	return Officer && !Officer->GetCurrentVehicle() && (!Driver || !Passenger);
 }
 
 FText AFTOCruiser::GetInteractPrompt(const AFTOCharacter* Officer) const
 {
-	return INVTEXT("Drive cruiser");
+	return Driver ? INVTEXT("Ride shotgun") : INVTEXT("Drive cruiser");
 }
 
 void AFTOCruiser::Interact(AFTOCharacter* Officer)
 {
 	check(HasAuthority());
-	AController* OfficerController = Officer ? Officer->GetController() : nullptr;
-	if (Driver || !OfficerController)
+	if (!Officer || Officer->GetCurrentVehicle())
 	{
 		return;
 	}
 
-	Driver = Officer;
-	Officer->EnterVehicle(this);
-	OfficerController->Possess(this);
-	UE_LOG(LogFTO, Log, TEXT("%s is driving %s."), *GetNameSafe(OfficerController), *GetName());
+	if (!Driver)
+	{
+		AController* OfficerController = Officer->GetController();
+		if (!OfficerController)
+		{
+			return;
+		}
+		Driver = Officer;
+		Officer->EnterVehicle(this, EFTOSeat::Driver);
+		OfficerController->Possess(this);
+		UE_LOG(LogFTO, Log, TEXT("%s is driving %s."), *GetNameSafe(OfficerController), *GetName());
+	}
+	else if (!Passenger)
+	{
+		// Riding shotgun: the officer keeps their own controls (look around, work the lights, hop out).
+		Passenger = Officer;
+		Officer->EnterVehicle(this, EFTOSeat::Passenger);
+		UE_LOG(LogFTO, Log, TEXT("%s is riding shotgun in %s."), *GetNameSafe(Officer), *GetName());
+	}
+}
+
+void AFTOCruiser::LetOut(AFTOCharacter* Officer)
+{
+	check(HasAuthority());
+	if (Officer && Officer == Driver)
+	{
+		ExitDriver();
+	}
+	else if (Officer && Officer == Passenger)
+	{
+		ExitPassenger();
+	}
 }
 
 void AFTOCruiser::PossessedBy(AController* NewController)
@@ -227,19 +265,40 @@ void AFTOCruiser::ExitDriver()
 		return;
 	}
 
-	// Hop out of the driver's door (left side), or the passenger side if something's in the way.
-	const FVector Left = -GetActorRightVector();
-	FVector ExitLocation = GetActorLocation() + Left * 200.f + FVector(0.f, 0.f, 20.f);
-	FHitResult Hit;
-	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCruiserExit), false, this);
-	if (GetWorld()->SweepSingleByChannel(Hit, GetActorLocation(), ExitLocation, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeCapsule(42.f, 90.f), Params))
-	{
-		ExitLocation = GetActorLocation() - Left * 200.f + FVector(0.f, 0.f, 20.f);
-	}
-
+	// The driver's door is on the left.
+	const FVector ExitLocation = FindExitSpot(-1.f);
 	Driver = nullptr;
 	Officer->ExitVehicle(ExitLocation, GetActorRotation().Yaw);
 	DriverController->Possess(Officer);
+}
+
+void AFTOCruiser::ExitPassenger()
+{
+	AFTOCharacter* Officer = Passenger;
+	if (!Officer)
+	{
+		return;
+	}
+	Passenger = nullptr;
+	Officer->ExitVehicle(FindExitSpot(1.f), GetActorRotation().Yaw);
+}
+
+FVector AFTOCruiser::FindExitSpot(float Side) const
+{
+	// Out of our own door, or across and out of the other one if something's in the way.
+	const FVector Here = GetActorLocation();
+	const FVector Out = GetActorRightVector() * Side;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCruiserExit), false, this);
+	for (const float Direction : { 1.f, -1.f })
+	{
+		const FVector Spot = Here + Out * Direction * 210.f + FVector(0.f, 0.f, 20.f);
+		FHitResult Hit;
+		if (!GetWorld()->SweepSingleByChannel(Hit, Here, Spot, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeCapsule(42.f, 90.f), Params))
+		{
+			return Spot;
+		}
+	}
+	return Here + Out * 210.f + FVector(0.f, 0.f, 20.f);
 }
 
 // ------------------------------------------------------------------------------------------
@@ -261,6 +320,8 @@ void AFTOCruiser::SetupPlayerInputComponent(UInputComponent* PlayerInputComponen
 	UFTOInputConfig* Input = PC->GetInputConfig();
 	EIC->BindAction(Input->Move, ETriggerEvent::Triggered, this, &AFTOCruiser::OnMove);
 	EIC->BindAction(Input->Move, ETriggerEvent::Completed, this, &AFTOCruiser::OnMoveReleased);
+	EIC->BindAction(Input->Look, ETriggerEvent::Triggered, this, &AFTOCruiser::OnLook);
+	EIC->BindAction(Input->Camera, ETriggerEvent::Started, this, &AFTOCruiser::OnToggleCamera);
 	EIC->BindAction(Input->Jump, ETriggerEvent::Started, this, &AFTOCruiser::OnHandbrake);
 	EIC->BindAction(Input->Jump, ETriggerEvent::Completed, this, &AFTOCruiser::OnHandbrakeReleased);
 	EIC->BindAction(Input->Interact, ETriggerEvent::Started, this, &AFTOCruiser::OnExit);
@@ -279,6 +340,74 @@ void AFTOCruiser::OnMoveReleased(const FInputActionValue& Value)
 {
 	ThrottleInput = 0.f;
 	SteerInput = 0.f;
+}
+
+void AFTOCruiser::OnLook(const FInputActionValue& Value)
+{
+	// Glance around the cabin or out of the side windows; eases back to the road when left alone.
+	const FVector2D Axis = Value.Get<FVector2D>();
+	LookYaw = FMath::Clamp(LookYaw + Axis.X * LookRate, -150.f, 150.f);
+	LookPitch = FMath::Clamp(LookPitch - Axis.Y * LookRate, -35.f, 30.f);
+	LastLookTime = GetWorld()->GetRealTimeSeconds();
+}
+
+void AFTOCruiser::OnToggleCamera()
+{
+	SetInteriorView(!IsInteriorView());
+}
+
+void AFTOCruiser::SetInteriorView(bool bInterior)
+{
+	if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController()))
+	{
+		PC->bPreferInteriorView = bInterior;
+	}
+}
+
+bool AFTOCruiser::IsInteriorView() const
+{
+	const AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController());
+	return PC && PC->IsLocalController() && PC->bPreferInteriorView;
+}
+
+void AFTOCruiser::UpdateViews(float DeltaSeconds)
+{
+	const bool bInterior = IsLocallyControlled() && IsInteriorView();
+
+	if (GetWorld()->GetRealTimeSeconds() - LastLookTime > 1.5f)
+	{
+		LookYaw = FMath::FInterpTo(LookYaw, 0.f, DeltaSeconds, 2.f);
+		LookPitch = FMath::FInterpTo(LookPitch, 0.f, DeltaSeconds, 2.f);
+	}
+
+	if (InteriorCamera->IsActive() != bInterior)
+	{
+		InteriorCamera->SetActive(bInterior);
+		Camera->SetActive(!bInterior);
+	}
+	if (bInterior)
+	{
+		InteriorCamera->SetRelativeRotation(FRotator(LookPitch - 8.f, LookYaw, 0.f));
+	}
+	else
+	{
+		CameraBoom->SetRelativeRotation(FRotator(-12.f + LookPitch * 0.5f, LookYaw, 0.f));
+	}
+
+	// From the seat, the driver's own head would fill the view: hide it on this machine only.
+	AFTOCharacter* HideFor = bInterior ? Driver.Get() : nullptr;
+	if (HiddenHead.Get() != HideFor)
+	{
+		if (AFTOCharacter* Previous = HiddenHead.Get())
+		{
+			Previous->SetHeadHidden(false);
+		}
+		if (HideFor)
+		{
+			HideFor->SetHeadHidden(true);
+		}
+		HiddenHead = HideFor;
+	}
 }
 
 void AFTOCruiser::OnHandbrake(const FInputActionValue& Value)
@@ -376,6 +505,7 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 	}
 
 	UpdateCosmetics(DeltaSeconds);
+	UpdateViews(DeltaSeconds);
 }
 
 void AFTOCruiser::ServerMove_Implementation(FVector_NetQuantize10 Location, float Yaw, float Speed, float Lateral, float Steer)

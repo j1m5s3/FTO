@@ -48,6 +48,15 @@ public:
 	UFUNCTION(Server, Reliable)
 	void ServerEnterNearestCruiser();
 
+	/** Dev: ride shotgun in the nearest cruiser that has a driver. */
+	UFUNCTION(Exec) void FTORide();
+
+	UFUNCTION(Server, Reliable)
+	void ServerRideAlong();
+
+	/** In vehicles, look out from the seat instead of the chase camera (C toggles; local only). */
+	bool bPreferInteriorView = false;
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;

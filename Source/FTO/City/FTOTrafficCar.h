@@ -2,12 +2,15 @@
 
 #include "CoreMinimal.h"
 #include "City/FTOPathMover.h"
+#include "Animation/FTOAnimatedActor.h"
 #include "Interaction/FTOInteractable.h"
 #include "FTOTrafficCar.generated.h"
 
 class AFTOCityGenerator;
 class AFTOIncident;
 class UBoxComponent;
+class USkeletalMesh;
+class USkeletalMeshComponent;
 class UStaticMeshComponent;
 class UStaticMesh;
 class UTextRenderComponent;
@@ -36,11 +39,12 @@ enum class EFTOCarViolation : uint8
 };
 
 /**
- * Ambient traffic driving the road grid. Cars with a violation show a "!" and
- * can be pulled over for a routine traffic stop; a few are wanted and bolt.
+ * Ambient traffic driving the road grid, with a citizen at the wheel (and sometimes passengers)
+ * visible through the glass. Cars with a violation show a "!" and can be pulled over for a
+ * routine traffic stop; a few are wanted and bolt.
  */
 UCLASS()
-class FTO_API AFTOTrafficCar : public AFTOPathMover, public IFTOInteractable
+class FTO_API AFTOTrafficCar : public AFTOPathMover, public IFTOInteractable, public IFTOAnimatedActor
 {
 	GENERATED_BODY()
 
@@ -65,6 +69,11 @@ public:
 	virtual void Interact(AFTOCharacter* Officer) override;
 	virtual FVector GetInteractLocation() const override { return GetActorLocation(); }
 	virtual float GetInteractRange() const override;
+
+	// IFTOAnimatedActor (the people inside): hands on the wheel, passengers along for the ride,
+	// everyone's hands up once busted.
+	virtual EFTOAnimAction GetAnimActionFor(const USkeletalMeshComponent* Mesh) const override;
+	virtual float GetAnimSpeed() const override { return 0.f; }
 
 	/** Height of the collision box centre above the road. */
 	static constexpr float RideHeight = 95.f;
@@ -95,6 +104,14 @@ protected:
 	UPROPERTY() TArray<TObjectPtr<UStaticMesh>> BodyStyles;
 	UPROPERTY(VisibleAnywhere, Category="Components") TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Indicator;
+	/** Driver, front passenger and the two back seats (hidden when empty). */
+	UPROPERTY(VisibleAnywhere, Category="Components") TArray<TObjectPtr<USkeletalMeshComponent>> Occupants;
+
+	/** Who might be inside: the citizen looks. */
+	UPROPERTY() TArray<TObjectPtr<USkeletalMesh>> OccupantLooks;
+
+	/** Fills the seats for this car's look (deterministic, so every machine agrees). */
+	void SeatOccupants(FRandomStream& LookRng, int32 Style);
 
 	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> PaintMaterial;

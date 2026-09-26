@@ -23,6 +23,12 @@ namespace FTOArt
 	/** Updates an existing instance. */
 	FTO_API void SetColor(UMaterialInstanceDynamic* Material, const FLinearColor& Color, float Emissive = 0.f);
 
+	/**
+	 * The paintable slot: "Body" on Blender-built vehicles (whose other slots are glass and glowing
+	 * lights), else slot 0.
+	 */
+	FTO_API int32 BodySlot(const UPrimitiveComponent* Component);
+
 	/** A handful of friendly cartoon skin tones. */
 	FTO_API FLinearColor SkinTone(int32 Index);
 }

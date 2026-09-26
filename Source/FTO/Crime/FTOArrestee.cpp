@@ -13,6 +13,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Vehicles/FTOCruiser.h"
 #include "FTO.h"
 
 namespace
@@ -58,6 +59,8 @@ void AFTOArrestee::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFTOArrestee, Escort);
 	DOREPLIFETIME(AFTOArrestee, State);
+	DOREPLIFETIME(AFTOArrestee, RideVehicle);
+	DOREPLIFETIME(AFTOArrestee, RideSeat);
 	DOREPLIFETIME(AFTOArrestee, NetLocation);
 	DOREPLIFETIME(AFTOArrestee, NetYaw);
 	DOREPLIFETIME(AFTOArrestee, AnimSpeed);
@@ -87,6 +90,10 @@ void AFTOArrestee::Init(AFTOCharacter* Officer, float InBookingRelief, const FTe
 
 EFTOAnimAction AFTOArrestee::GetAnimAction() const
 {
+	if (State == EFTOArresteeState::InCruiser)
+	{
+		return EFTOAnimAction::SitCuffed;
+	}
 	return AnimSpeed < 20.f ? EFTOAnimAction::Cheer : EFTOAnimAction::None;
 }
 
@@ -161,10 +168,7 @@ void AFTOArrestee::ServerTick(float DeltaSeconds)
 		if (State == EFTOArresteeState::InCruiser)
 		{
 			// Officer got out: out we come too.
-			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-			SetActorLocation(Escort->GetActorLocation() - Escort->GetActorForwardVector() * FollowDistance);
-			State = EFTOArresteeState::Escorted;
-			OnRep_State();
+			LeaveCruiser();
 		}
 
 		// Trot along behind the officer.
@@ -197,17 +201,56 @@ void AFTOArrestee::ServerTick(float DeltaSeconds)
 
 void AFTOArrestee::SetInCruiser(AActor* Cruiser)
 {
+	// Behind the passenger, unless someone's already sulking there.
+	RideSeat = EFTOSeat::RearRight;
+	for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+	{
+		if (*It != this && It->RideVehicle == Cruiser && It->RideSeat == EFTOSeat::RearRight)
+		{
+			RideSeat = EFTOSeat::RearLeft;
+		}
+	}
+	RideVehicle = Cruiser;
 	State = EFTOArresteeState::InCruiser;
 	AnimSpeed = 0.f;
-	AttachToActor(Cruiser, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 	OnRep_State();
+}
+
+void AFTOArrestee::LeaveCruiser()
+{
+	RideVehicle = nullptr;
+	RideSeat = EFTOSeat::None;
+	State = EFTOArresteeState::Escorted;
+	OnRep_State();
+	SetActorLocation(Escort->GetActorLocation() - Escort->GetActorForwardVector() * FollowDistance - FVector(0.f, 0.f, 96.f - HalfHeight));
+	NetLocation = GetActorLocation();
+}
+
+void AFTOArrestee::ApplyRide()
+{
+	const AFTOCruiser* Cruiser = Cast<AFTOCruiser>(RideVehicle);
+	const FName Socket = FTOSeats::SeatSocket(RideSeat);
+	if (State == EFTOArresteeState::InCruiser && Cruiser && Socket != NAME_None)
+	{
+		AttachToComponent(Cruiser->GetSeatParent(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+		SetActorRelativeLocation(FVector(0.f, 0.f, HalfHeight));
+		SetActorRelativeRotation(FRotator::ZeroRotator);
+	}
+	else if (GetAttachParentActor())
+	{
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		SetActorRotation(FRotator(0.f, GetActorRotation().Yaw, 0.f));
+	}
 }
 
 void AFTOArrestee::OnRep_State()
 {
-	const bool bVisible = State == EFTOArresteeState::Escorted;
-	Body->SetVisibility(bVisible);
-	Tag->SetVisibility(bVisible);
+	ApplyRide();
+
+	// Visible on foot and in the back seat; the tag only on foot (it'd poke through the roof).
+	const bool bRiding = State == EFTOArresteeState::InCruiser;
+	Body->SetVisibility(State == EFTOArresteeState::Escorted || bRiding);
+	Tag->SetVisibility(State == EFTOArresteeState::Escorted);
 }
 
 void AFTOArrestee::Book()

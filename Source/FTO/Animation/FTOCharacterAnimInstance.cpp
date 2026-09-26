@@ -268,7 +268,7 @@ void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		Proxy.Speed = Animated->GetAnimSpeed();
 		Proxy.bInAir = Animated->IsAnimAirborne();
-		Proxy.Action = Animated->GetAnimAction();
+		Proxy.Action = Animated->GetAnimActionFor(GetSkelMeshComponent());
 		Proxy.Aim = Animated->GetAimPose();
 		Proxy.AimPitch = Animated->GetAimPitch();
 	}

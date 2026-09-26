@@ -4,6 +4,8 @@
 #include "UObject/Interface.h"
 #include "FTOAnimatedActor.generated.h"
 
+class USkeletalMeshComponent;
+
 /**
  * Full-body "action" layered over locomotion. Each value plays the clip A_Officer_<Name>
  * (every character shares the officer rig), so adding a clip is: key it in
@@ -29,7 +31,10 @@ enum class EFTOAnimAction : uint8
 	Cower,
 	Dance,
 	Slump,
-	Dazed		// sat on the ground seeing stars
+	Dazed,		// sat on the ground seeing stars
+	Ride,		// passenger seat, hands in the lap
+	SitCuffed,	// back of the cruiser, cuffed and sulking
+	SitHandsUp	// busted at the wheel
 };
 
 /** Upper-body weapon pose layered over whatever the legs are doing. */
@@ -57,6 +62,8 @@ class FTO_API IFTOAnimatedActor
 
 public:
 	virtual EFTOAnimAction GetAnimAction() const { return EFTOAnimAction::None; }
+	/** Per-mesh action, for actors that animate several people (a car's driver and passengers). */
+	virtual EFTOAnimAction GetAnimActionFor(const USkeletalMeshComponent* Mesh) const { return GetAnimAction(); }
 	virtual bool IsAnimAirborne() const { return false; }
 	/** Ground speed in cm/s used to pick idle/walk/run. */
 	virtual float GetAnimSpeed() const = 0;

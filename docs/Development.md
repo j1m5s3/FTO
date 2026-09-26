@@ -36,17 +36,18 @@ free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invite
 | `FTOSkipBriefing` | Start the shift immediately |
 | `FTOEndShift 1` | End the shift (1 = survived, 0 = overrun) |
 | `FTODrive` | Jump into the nearest free cruiser |
+| `FTORide` | Ride shotgun in the nearest cruiser that has a driver |
 
 Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 
 ## Controls
-| On foot | In a cruiser |
-|---|---|
-| WASD / left stick: move | W/S: drive and brake, A/D: steer |
-| Shift: sprint | Space: handbrake (drift) |
-| Space: jump | Q: lights and siren (pulls over offending cars ahead) |
-| Q: police whistle (citizens freeze, nearby crimes get called in) | H: horn |
-| E: interact (tickets, chat, get in) | E: get out |
+- **On foot**: WASD / left stick to move, Shift to sprint, Space to jump. Q blows the police whistle (citizens
+  freeze, nearby crimes get called in). E interacts: tickets, chats, taking a cruiser, or riding shotgun in one
+  someone's already driving.
+- **Driving a cruiser**: W/S to drive and brake, A/D to steer, Space for the handbrake (drift). Q switches the lights
+  and siren (offending cars ahead pull over), H honks. C (right stick click) swaps the chase camera for the view from
+  the seat, and the mouse / right stick glances around (it eases back to the road). E gets out.
+- **Riding shotgun**: the mouse / right stick looks around, Q works the lights and siren, C swaps cameras, E gets out.
 
 ## Sharing a build
 `powershell -ExecutionPolicy Bypass -File Tools/Build/package.ps1` builds, cooks and packages a Windows
@@ -57,6 +58,8 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 ## Smoke test
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
+For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
+(or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around and gets out.
 
 ## Art pipeline
 - **Characters**: `Tools/Blender/build_officer.py` models, rigs and animates the officer entirely from code and exports FBX
@@ -66,17 +69,25 @@ tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy a
 - `Tools/Blender/build_civilians.py` makes eight citizen variants and the striped-jumper suspect on the **same skeleton**,
   so every character shares the officer's clips. Shirts are tinted per pedestrian at runtime.
 - `Tools/Blender/build_vehicles.py` builds the cars (sedan, hatchback, van, pickup, taxi, ice cream truck, cruiser) and
-  a shared wheel as static meshes facing +X; `SOCKET_Wheel_*` empties become wheel sockets in Unreal.
-- **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (metres to centimetres, vertex colours,
-  master material) and can be re-run after any Blender change:
+  a shared wheel as static meshes facing +X. They're real shells: doors, floor, dashboard, seats and a steering wheel
+  behind see-through glass, plus the cruiser's police kit (MDT laptop, radio, radar, shotgun rack, cage, lightbar
+  switches, and donuts). Three material slots: `Body` (vertex colour, alpha 1 = paint the game tints), `Glass` and
+  `Glow` (lights, dials, screens). `SOCKET_*` empties become sockets: `Wheel_*`, `Seat_*` (where a seated character's
+  root goes), `Cam_*` (seat-view camera) and the cruiser's `Lightbar`. Seats are sized from the officer's car-seat
+  pose (`build_officer.car_legs`); `--preview <dir>` also renders roofless cutaways with posed occupants and the
+  driver's-eye view to check the fit.
+- **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (vertex colours, materials by slot name,
+  sockets squared up to scale 1 and no rotation) and can be re-run after any Blender change:
   (`FTO_IMPORT=characters` or `FTO_IMPORT=statics` limits a run to one group)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
 - **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
   radio squelch, chimes, alarm, fanfare, sad trombone) into `Art/Source/Audio` and imports them to `/Game/FTO/Audio`.
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
-  idle/walk/run by speed, with jump, interact (tickets, scenes) and cheer layered on top.
-- **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials/M_FTOBase` (vertex colour × `Color` tint, `Emissive`).
-  Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
-- Everything uses that one material. Engine primitives have no vertex colour, so they just take `Color`.
+  idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) and upper-body aiming
+  layered on top. Actors animating several people (a car's driver and passengers) pick each one's action per mesh.
+- **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials`: `M_FTOBase` (vertex colour ×
+  `Color` tint, glowing in its own colour by `Emissive`), `M_FTOGlass` (tinted see-through glass) and `MI_FTOGlow`
+  (the base material, glowing). Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
+- Nearly everything uses `M_FTOBase`. Engine primitives have no vertex colour, so they just take `Color`.
   Blender assets bake flat colours into vertex colours; vertex alpha = 1 marks tintable areas (uniforms, car paint).
 - Only free (CC0) or in-house assets. Record any third-party asset and its licence in `docs/Credits.md`.

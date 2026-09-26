@@ -192,6 +192,36 @@ void AFTOPlayerController::FTODrive()
 	ServerEnterNearestCruiser();
 }
 
+void AFTOPlayerController::FTORide()
+{
+	ServerRideAlong();
+}
+
+void AFTOPlayerController::ServerRideAlong_Implementation()
+{
+	AFTOCharacter* Officer = GetPawn<AFTOCharacter>();
+	if (!Officer || Officer->GetCurrentVehicle())
+	{
+		return;
+	}
+
+	AFTOCruiser* Nearest = nullptr;
+	float NearestDistSq = TNumericLimits<float>::Max(); // dev command: any distance
+	for (TActorIterator<AFTOCruiser> It(GetWorld()); It; ++It)
+	{
+		const float DistSq = FVector::DistSquared(It->GetActorLocation(), Officer->GetActorLocation());
+		if (It->HasDriver() && !It->GetPassenger() && DistSq < NearestDistSq)
+		{
+			Nearest = *It;
+			NearestDistSq = DistSq;
+		}
+	}
+	if (Nearest)
+	{
+		Nearest->Interact(Officer);
+	}
+}
+
 void AFTOPlayerController::ServerEnterNearestCruiser_Implementation()
 {
 	AFTOCharacter* Officer = GetPawn<AFTOCharacter>();

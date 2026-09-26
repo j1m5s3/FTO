@@ -31,6 +31,12 @@ namespace FTOArt
 		}
 	}
 
+	int32 BodySlot(const UPrimitiveComponent* Component)
+	{
+		const int32 Slot = Component ? Component->GetMaterialIndex(TEXT("Body")) : INDEX_NONE;
+		return Slot == INDEX_NONE ? 0 : Slot;
+	}
+
 	FLinearColor SkinTone(int32 Index)
 	{
 		static const FLinearColor Tones[] =

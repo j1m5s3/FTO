@@ -12,6 +12,14 @@ import unreal
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 ART = os.path.join(REPO, "Art", "Source")
 BASE_MATERIAL = "/Game/FTO/Materials/M_FTOBase"
+# Material slot name (from the Blender material) -> material; anything else gets BASE_MATERIAL.
+SLOT_MATERIALS = {
+    "glass": "/Game/FTO/Materials/M_FTOGlass",
+    "glow": "/Game/FTO/Materials/MI_FTOGlow",
+}
+# Sockets the game looks up on vehicle meshes (Tools/Blender/build_vehicles.py).
+VEHICLE_SOCKETS = ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR", "Seat_Driver", "Seat_Passenger", "Seat_RearL",
+                   "Seat_RearR", "Cam_Driver", "Cam_Passenger", "Lightbar"]
 # Blender works in metres; Unreal in centimetres.
 METRES_TO_CM = 1.0  # FBX from Tools/Blender already carries centimetres
 
@@ -22,7 +30,8 @@ CHARACTERS = [
     {"folder": "Characters/Officer", "meshes": ["SK_Officer"],
      "clips": ["Idle", "Walk", "Run", "Jump", "Interact", "Cheer",
                "Sit", "Drive", "Talk", "Work", "HandsUp", "Kneel", "Cuffed", "Cuffing", "Struggle", "Tackle",
-               "Punch", "Cower", "AimPistol", "AimRifle", "Dance", "Slump", "Dazed"],
+               "Punch", "Cower", "AimPistol", "AimRifle", "Dance", "Slump", "Dazed",
+               "Ride", "SitCuffed", "SitHandsUp"],
      "dest": "/Game/FTO/Characters/Officer"},
     {"folder": "Characters/Civilians",
      "meshes": [f"SK_Civilian_{i:02d}" for i in range(1, 9)] + ["SK_Suspect"],
@@ -134,28 +143,40 @@ def import_statics(group):
     destination = group["dest"]
     base = eal.load_asset(BASE_MATERIAL)
     for name in group["meshes"]:
-        remove_if_wrong_type(f"{destination}/{name}", "StaticMesh")
+        # Start fresh: a reimport keeps the old material slots, which then pile up in front of the new ones.
+        if eal.does_asset_exist(f"{destination}/{name}"):
+            eal.delete_asset(f"{destination}/{name}")
         run_import(os.path.join(source, name + ".fbx"), destination, name, static_options())
         mesh = eal.load_asset(f"{destination}/{name}")
         if not mesh:
             unreal.log_error(f"FTO: missing {destination}/{name} after import")
             continue
-        for index in range(len(mesh.get_editor_property("static_materials"))):
-            mesh.set_material(index, base)
+        slots = []
+        for index, slot in enumerate(mesh.get_editor_property("static_materials")):
+            slot_name = str(slot.get_editor_property("material_slot_name"))
+            path = SLOT_MATERIALS.get(slot_name.lower(), BASE_MATERIAL)
+            mesh.set_material(index, eal.load_asset(path) if path != BASE_MATERIAL else base)
+            slots.append(f"{index}:{slot_name}->{path.rsplit('/', 1)[-1]}")
         eal.save_loaded_asset(mesh)
         bounds = mesh.get_bounds()
         sockets = []
-        for socket_name in ("Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR"):
+        for socket_name in VEHICLE_SOCKETS:
             socket = mesh.find_socket(socket_name)
             if socket:
-                # The import scale leaks into socket scale; wheels must attach at 1:1.
+                # Anything attached here (wheels, people, cameras) must attach at 1:1 and square to
+                # the vehicle. Sockets from FBX empties carry the axis conversion (a 90 degree roll),
+                # which lays seated people on their backs and points cameras at the sky.
                 scale = socket.get_editor_property("relative_scale")
                 if abs(scale.x - 1.0) > 1e-3 or abs(scale.y - 1.0) > 1e-3 or abs(scale.z - 1.0) > 1e-3:
                     unreal.log(f"FTO: {name}.{socket_name} scale {scale.x:.1f} reset to 1")
                     socket.set_editor_property("relative_scale", unreal.Vector(1.0, 1.0, 1.0))
+                rot = socket.get_editor_property("relative_rotation")
+                if abs(rot.roll) > 1e-3 or abs(rot.pitch) > 1e-3 or abs(rot.yaw) > 1e-3:
+                    unreal.log(f"FTO: {name}.{socket_name} rotation ({rot.roll:.0f},{rot.pitch:.0f},{rot.yaw:.0f}) reset to 0")
+                    socket.set_editor_property("relative_rotation", unreal.Rotator(0.0, 0.0, 0.0))
                 loc = socket.get_editor_property("relative_location")
                 sockets.append(f"{socket_name}=({loc.x:.0f},{loc.y:.0f},{loc.z:.0f})")
-        unreal.log(f"FTO: {name} extent {bounds.box_extent} sockets {sockets}")
+        unreal.log(f"FTO: {name} extent {bounds.box_extent} slots {slots} sockets {sockets}")
         eal.save_loaded_asset(mesh)
     eal.save_directory(destination, only_if_is_dirty=False, recursive=True)
 

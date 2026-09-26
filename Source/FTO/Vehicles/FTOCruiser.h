@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
 #include "Interaction/FTOInteractable.h"
+#include "Vehicles/FTOVehicleSeats.h"
 #include "FTOCruiser.generated.h"
 
 class AFTOCharacter;
@@ -31,7 +32,9 @@ struct FFTOCruiserState
 };
 
 /**
- * A drivable police cruiser with arcade handling.
+ * A drivable police cruiser with arcade handling, a real cabin (the officers sit visibly inside,
+ * among the MDT, radio, radar, shotgun rack and cage), a chase or seat-view camera, and a
+ * passenger seat so a second officer can ride shotgun.
  *
  * Networking is driver-authoritative (fine for a co-op party game, and it keeps driving
  * snappy for clients): whoever drives simulates locally and streams their transform to the
@@ -54,7 +57,7 @@ public:
 	/** Server: paint the door stripe (badge colour of the officer this cruiser belongs to). */
 	void SetStripeColor(const FLinearColor& Color);
 
-	// IFTOInteractable (entering)
+	// IFTOInteractable (driving, or riding shotgun when someone's already at the wheel)
 	virtual bool CanInteract(const AFTOCharacter* Officer) const override;
 	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
 	virtual void Interact(AFTOCharacter* Officer) override;
@@ -65,6 +68,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Cruiser") bool IsSirenOn() const { return bSiren; }
 	UFUNCTION(BlueprintPure, Category="Cruiser") bool HasDriver() const { return Driver != nullptr; }
 	AFTOCharacter* GetDriver() const { return Driver; }
+	AFTOCharacter* GetPassenger() const { return Passenger; }
+
+	/** The body mesh; seats are sockets on it. */
+	USceneComponent* GetSeatParent() const;
 
 	/** Server: switch the lights and siren. */
 	void SetSiren(bool bOn) { bSiren = bOn; }
@@ -72,12 +79,26 @@ public:
 	/** Server: kick the driver out (also what E does from inside). */
 	void RequestExit() { OnExit(); }
 
+	/** Server: let an officer out of whichever seat they're in. */
+	void LetOut(AFTOCharacter* Officer);
+
+	/** Local: chase camera or the view from the driver's seat. */
+	void SetInteriorView(bool bInterior);
+	bool IsInteriorView() const;
+
 	/** Dev/testing: drive without a human on the controls. */
 	void SetAutopilot(bool bEnable, float Throttle = 0.f, float Steer = 0.f)
 	{
 		bAutopilot = bEnable;
 		ThrottleInput = Throttle;
 		SteerInput = Steer;
+	}
+
+	/** Dev/testing: stop dead on the spot (for photos). */
+	void StopDead()
+	{
+		ForwardSpeed = LateralSpeed = 0.f;
+		ThrottleInput = SteerInput = 0.f;
 	}
 
 	// ---- Handling (cm, seconds, degrees) ----
@@ -94,6 +115,9 @@ public:
 	/** Siren pulls over offending cars within this distance ahead. */
 	UPROPERTY(EditDefaultsOnly, Category="Siren") float SirenReach = 1800.f;
 
+	/** Degrees of look per unit of mouse/stick input (matches the on-foot camera). */
+	UPROPERTY(EditDefaultsOnly, Category="Camera") float LookRate = 2.5f;
+
 	static constexpr float RideHeight = 95.f;
 
 protected:
@@ -102,15 +126,18 @@ protected:
 	// Input
 	void OnMove(const FInputActionValue& Value);
 	void OnMoveReleased(const FInputActionValue& Value);
+	void OnLook(const FInputActionValue& Value);
 	void OnHandbrake(const FInputActionValue& Value);
 	void OnHandbrakeReleased(const FInputActionValue& Value);
 	void OnExit();
 	void OnSiren();
+	void OnToggleCamera();
 
 	/** Arcade car step; used by whoever owns the simulation. */
 	void Simulate(float DeltaSeconds);
 	void FollowGround();
 	void UpdateCosmetics(float DeltaSeconds);
+	void UpdateViews(float DeltaSeconds);
 	void ServerSirenTick();
 
 	UFUNCTION(Server, Unreliable)
@@ -132,6 +159,9 @@ protected:
 	UFUNCTION() void OnRep_StripeColor();
 
 	void ExitDriver();
+	void ExitPassenger();
+	/** A clear spot beside the car on one side (+1 right, -1 left), or the other side if blocked. */
+	FVector FindExitSpot(float Side) const;
 	bool IsSimulatingLocally() const;
 
 	// ---- Components ----
@@ -142,6 +172,8 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> LightBlue;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USpringArmComponent> CameraBoom;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCameraComponent> Camera;
+	/** Eye level in the driver's seat, looking out over the dash. */
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCameraComponent> InteriorCamera;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> EngineAudio;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SirenAudio;
 
@@ -154,8 +186,10 @@ protected:
 	UPROPERTY(Replicated) FFTOCruiserState NetState;
 	UPROPERTY(ReplicatedUsing=OnRep_Siren) bool bSiren = false;
 	UPROPERTY(ReplicatedUsing=OnRep_StripeColor) FLinearColor StripeColor = FLinearColor(0.1f, 0.35f, 1.f);
-	/** The officer inside (server-owned; replicated so HUDs can tell). */
+	/** The officer at the wheel (server-owned; replicated so HUDs can tell). */
 	UPROPERTY(Replicated) TObjectPtr<AFTOCharacter> Driver;
+	/** The officer riding shotgun, if any. */
+	UPROPERTY(Replicated) TObjectPtr<AFTOCharacter> Passenger;
 
 	// ---- Simulation ----
 	float ThrottleInput = 0.f;
@@ -170,4 +204,11 @@ protected:
 	float SirenScanAccumulator = 0.f;
 	float LastNetUpdateTime = 0.f;
 	int32 RemoteMoveCount = 0;
+
+	// ---- Local view ----
+	float LookYaw = 0.f;
+	float LookPitch = 0.f;
+	float LastLookTime = -10.f;
+	/** Whose head we've hidden for the seat view (only ever on this machine). */
+	TWeakObjectPtr<AFTOCharacter> HiddenHead;
 };

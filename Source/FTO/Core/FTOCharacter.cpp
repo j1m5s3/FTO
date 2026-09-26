@@ -25,6 +25,7 @@
 #include "Crime/FTOIncident.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
+#include "Vehicles/FTOCruiser.h"
 #include "FTO.h"
 
 AFTOCharacter::AFTOCharacter()
@@ -104,6 +105,7 @@ void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME_CONDITION(AFTOCharacter, bSprinting, COND_SkipOwner);
 	DOREPLIFETIME(AFTOCharacter, TimedAction);
 	DOREPLIFETIME(AFTOCharacter, CurrentVehicle);
+	DOREPLIFETIME(AFTOCharacter, CurrentSeat);
 	DOREPLIFETIME(AFTOCharacter, TimedActionEnd);
 }
 
@@ -129,6 +131,7 @@ void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	EIC->BindAction(Input->Interact, ETriggerEvent::Started, this, &AFTOCharacter::InteractPressed);
 	EIC->BindAction(Input->Interact, ETriggerEvent::Completed, this, &AFTOCharacter::InteractReleased);
 	EIC->BindAction(Input->Whistle, ETriggerEvent::Started, this, &AFTOCharacter::WhistlePressed);
+	EIC->BindAction(Input->Camera, ETriggerEvent::Started, this, &AFTOCharacter::ToggleCamera);
 }
 
 void AFTOCharacter::BeginPlay()
@@ -238,7 +241,28 @@ void AFTOCharacter::ApplySprint()
 void AFTOCharacter::InteractReleased() {}
 void AFTOCharacter::WhistlePressed()
 {
+	if (CurrentVehicle)
+	{
+		ServerToggleVehicleSiren(); // riding shotgun: work the lights instead
+		return;
+	}
 	ServerWhistle();
+}
+
+void AFTOCharacter::ServerToggleVehicleSiren_Implementation()
+{
+	if (AFTOCruiser* Cruiser = Cast<AFTOCruiser>(CurrentVehicle))
+	{
+		Cruiser->SetSiren(!Cruiser->IsSirenOn());
+	}
+}
+
+void AFTOCharacter::ServerLeaveVehicle_Implementation()
+{
+	if (AFTOCruiser* Cruiser = Cast<AFTOCruiser>(CurrentVehicle))
+	{
+		Cruiser->LetOut(this);
+	}
 }
 
 void AFTOCharacter::ServerWhistle_Implementation()
@@ -282,7 +306,7 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (IsLocallyControlled())
+	if (IsLocallyControlled() && !CurrentVehicle)
 	{
 		FocusAccumulator += DeltaSeconds;
 		if (FocusAccumulator >= 0.1f)
@@ -290,6 +314,26 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 			FocusAccumulator = 0.f;
 			UpdateFocus();
 		}
+	}
+	else
+	{
+		FocusedInteractable.Reset();
+	}
+
+	// Riding along, the view turns with the car so "ahead" stays ahead.
+	if (IsLocallyControlled() && CurrentVehicle && Controller)
+	{
+		const float VehicleYaw = CurrentVehicle->GetActorRotation().Yaw;
+		if (bTrackVehicleYaw)
+		{
+			Controller->SetControlRotation(Controller->GetControlRotation() + FRotator(0.f, FMath::FindDeltaAngleDegrees(LastVehicleYaw, VehicleYaw), 0.f));
+		}
+		LastVehicleYaw = VehicleYaw;
+		bTrackVehicleYaw = true;
+	}
+	else
+	{
+		bTrackVehicleYaw = false;
 	}
 }
 
@@ -339,6 +383,11 @@ void AFTOCharacter::UpdateFocus()
 
 void AFTOCharacter::InteractPressed()
 {
+	if (CurrentVehicle)
+	{
+		ServerLeaveVehicle();
+		return;
+	}
 	UpdateFocus();
 	if (AActor* Target = FocusedInteractable.Get())
 	{
@@ -371,6 +420,11 @@ void AFTOCharacter::PlayTimedAction(EFTOAnimAction Action, float Duration)
 
 EFTOAnimAction AFTOCharacter::GetAnimAction() const
 {
+	if (CurrentVehicle && CurrentSeat != EFTOSeat::None)
+	{
+		return FTOSeats::RidingPose(CurrentSeat);
+	}
+
 	const UWorld* World = GetWorld();
 	const AFTOGameState* GS = World ? World->GetGameState<AFTOGameState>() : nullptr;
 
@@ -410,10 +464,11 @@ float AFTOCharacter::GetAnimSpeed() const
 	return GetVelocity().Size2D();
 }
 
-void AFTOCharacter::EnterVehicle(AActor* Vehicle)
+void AFTOCharacter::EnterVehicle(AActor* Vehicle, EFTOSeat Seat)
 {
 	check(HasAuthority());
 	CurrentVehicle = Vehicle;
+	CurrentSeat = Seat;
 	ApplyVehicleState();
 }
 
@@ -421,6 +476,22 @@ void AFTOCharacter::ExitVehicle(const FVector& Location, float Yaw)
 {
 	check(HasAuthority());
 	CurrentVehicle = nullptr;
+	CurrentSeat = EFTOSeat::None;
+	ApplyVehicleState();
+	TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
+
+	// A remote officer who stayed in control (riding shotgun) is told directly; a driver gets
+	// re-possessed by the cruiser, which restarts them at the right spot anyway.
+	if (GetController() && !IsLocallyControlled())
+	{
+		ClientExitedVehicle(Location, Yaw);
+	}
+}
+
+void AFTOCharacter::ClientExitedVehicle_Implementation(FVector_NetQuantize Location, float Yaw)
+{
+	CurrentVehicle = nullptr;
+	CurrentSeat = EFTOSeat::None;
 	ApplyVehicleState();
 	TeleportTo(Location, FRotator(0.f, Yaw, 0.f));
 }
@@ -432,20 +503,93 @@ void AFTOCharacter::OnRep_CurrentVehicle()
 
 void AFTOCharacter::ApplyVehicleState()
 {
-	const bool bInVehicle = CurrentVehicle != nullptr;
-	SetActorHiddenInGame(bInVehicle);
-	SetActorEnableCollision(!bInVehicle);
+	UCharacterMovementComponent* MoveComp = GetCharacterMovement();
+	const AFTOCruiser* Cruiser = Cast<AFTOCruiser>(CurrentVehicle);
+	USceneComponent* SeatParent = Cruiser ? Cruiser->GetSeatParent() : nullptr;
+	const FName SeatSocket = FTOSeats::SeatSocket(CurrentSeat);
 
-	if (bInVehicle)
+	SetActorHiddenInGame(false);
+	if (SeatParent && SeatSocket != NAME_None)
 	{
-		// Ride along so anything tracking the officer (markers, scenes) follows the car.
-		GetCharacterMovement()->DisableMovement();
-		AttachToActor(CurrentVehicle, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+		// Sit in the seat (visible through the glass) and ride along with the car. Movement is
+		// switched off entirely so nothing fights the attachment.
+		SetActorEnableCollision(false);
+		MoveComp->StopMovementImmediately();
+		MoveComp->DisableMovement();
+		MoveComp->SetComponentTickEnabled(false);
+		GetMesh()->SetRelativeLocationAndRotation(GetBaseTranslationOffset(), GetBaseRotationOffset());
+		AttachToComponent(SeatParent, FAttachmentTransformRules::SnapToTargetNotIncludingScale, SeatSocket);
+		SetActorRelativeLocation(FVector(0.f, 0.f, GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()));
+		SetActorRelativeRotation(FRotator::ZeroRotator);
+
+		if (IsLocallyControlled() && Controller)
+		{
+			Controller->SetControlRotation(FRotator(-10.f, CurrentVehicle->GetActorRotation().Yaw, 0.f));
+		}
+		bSeated = true;
+	}
+	else if (bSeated)
+	{
+		// (Attachment replication may already have detached us on a client.)
+		if (GetAttachParentActor())
+		{
+			DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		}
+		SetActorRotation(FRotator(0.f, GetActorRotation().Yaw, 0.f));
+		SetActorEnableCollision(true);
+		MoveComp->SetComponentTickEnabled(true);
+		MoveComp->SetMovementMode(MOVE_Walking);
+		bSeated = false;
+	}
+	ApplyCameraMode();
+}
+
+void AFTOCharacter::ToggleCamera()
+{
+	AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController());
+	if (PC && CurrentVehicle)
+	{
+		PC->bPreferInteriorView = !PC->bPreferInteriorView;
+		ApplyCameraMode();
+	}
+}
+
+void AFTOCharacter::ApplyCameraMode()
+{
+	// A driver looks through the cruiser's cameras (it hides their head for its seat view), so
+	// this only ever takes over for passengers.
+	const AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController());
+	const bool bRiding = CurrentVehicle != nullptr;
+	const bool bPassenger = bRiding && CurrentSeat != EFTOSeat::Driver;
+	const bool bInterior = bPassenger && PC && PC->IsLocalController() && PC->bPreferInteriorView;
+
+	// On foot: over the shoulder. Riding along: pulled back to take in the car, or from the seat.
+	CameraBoom->bDoCollisionTest = !bRiding;
+	CameraBoom->bEnableCameraLag = !bInterior;
+	CameraBoom->TargetArmLength = bInterior ? 0.f : (bRiding ? 850.f : 550.f);
+	CameraBoom->SocketOffset = bInterior ? FVector::ZeroVector : (bRiding ? FVector(0.f, 0.f, 150.f) : FVector(0.f, 60.f, 120.f));
+	CameraBoom->SetRelativeLocation(bInterior ? FTOSeats::EyeOffset(GetCapsuleComponent()->GetUnscaledCapsuleHalfHeight()) : FVector::ZeroVector);
+
+	if (IsLocallyControlled() && CurrentSeat != EFTOSeat::Driver)
+	{
+		SetHeadHidden(bInterior);
+	}
+}
+
+void AFTOCharacter::SetHeadHidden(bool bHide)
+{
+	USkeletalMeshComponent* Body = GetMesh();
+	if (!Body || !Body->GetSkeletalMeshAsset())
+	{
+		return;
+	}
+	if (bHide)
+	{
+		Body->HideBoneByName(TEXT("head"), PBO_None);
 	}
 	else
 	{
-		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-		GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+		Body->UnHideBoneByName(TEXT("head"));
 	}
 }
 

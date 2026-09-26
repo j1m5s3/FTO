@@ -85,11 +85,57 @@ def _transform(loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
             @ Matrix.Diagonal((Vector(scale) * UNIT).to_4d()))
 
 
+def _create_torus(bm, minor, segments, rings):
+    """Ring in the XY plane, outer radius 0.5; `minor` is the tube radius at that size."""
+    uv = bm.loops.layers.uv.active
+    major = 0.5 - minor
+    grid = []
+    for i in range(segments):
+        u = 2.0 * math.pi * i / segments
+        row = []
+        for j in range(rings):
+            v = 2.0 * math.pi * j / rings
+            r = major + minor * math.cos(v)
+            row.append(bm.verts.new((r * math.cos(u), r * math.sin(u), minor * math.sin(v))))
+        grid.append(row)
+    for i in range(segments):
+        for j in range(rings):
+            i2, j2 = (i + 1) % segments, (j + 1) % rings
+            face = bm.faces.new((grid[i][j], grid[i2][j], grid[i2][j2], grid[i][j2]))
+            for loop, (a, b) in zip(face.loops, ((i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1))):
+                loop[uv].uv = (a / segments, b / rings)
+
+
+def _finish_part(bm, color, bone, tint, bevel, smooth, material, stripes=None):
+    """Bevel, flat vertex colour (alpha = tint mask) and material slot for a part's bmesh."""
+    if bevel > 0.0:
+        bmesh.ops.bevel(bm, geom=list(bm.edges) + list(bm.verts), offset=bevel * UNIT, segments=2,
+                        affect='EDGES', profile=0.5, clamp_overlap=True)
+
+    col_layer = bm.loops.layers.color.new("Col")
+    alpha = 1.0 if tint else 0.0
+    rgba = (color[0], color[1], color[2], alpha)
+    for face in bm.faces:
+        face.smooth = smooth
+        face.material_index = material
+        face_rgba = rgba
+        if stripes:
+            band = int(math.floor(face.calc_center_median().z / (stripes[1] * UNIT)))
+            if band % 2:
+                face_rgba = (stripes[0][0], stripes[0][1], stripes[0][2], alpha)
+        for loop in face.loops:
+            loop[col_layer] = face_rgba
+    return Part(bm, bone)
+
+
 def make_part(kind, color, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), bone=None,
-              tint=False, bevel=0.0, smooth=True, segments=16, rings=10, stripes=None):
+              tint=False, bevel=0.0, smooth=True, segments=16, rings=10, stripes=None,
+              material=0, minor=0.1):
     """
-    kind: 'sphere' | 'cube' | 'cylinder' | 'cone'. Unit-sized (1 m) before `scale`.
+    kind: 'sphere' | 'cube' | 'cylinder' | 'cone' | 'torus'. Unit-sized (1 m) before `scale`.
     color: sRGB tuple (0-1). tint=True sets vertex alpha 1 so the game can recolour it.
+    material: index into the object's material slots (see build_mesh_object).
+    minor: torus tube radius (the ring's outer radius is 0.5 before scaling).
     """
     bm = bmesh.new()
     bm.loops.layers.uv.new("UVMap")
@@ -103,34 +149,80 @@ def make_part(kind, color, loc=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1), bone=N
     elif kind == 'cone':
         bmesh.ops.create_cone(bm, cap_ends=True, cap_tris=False, segments=segments,
                               radius1=0.5, radius2=0.0, depth=1.0, calc_uvs=True)
+    elif kind == 'torus':
+        _create_torus(bm, minor, segments, rings)
     else:
         raise ValueError(kind)
 
     bmesh.ops.transform(bm, matrix=_transform(loc, rot, scale), verts=bm.verts)
+    return _finish_part(bm, color, bone, tint, bevel, smooth, material, stripes)
 
-    if bevel > 0.0:
-        bmesh.ops.bevel(bm, geom=list(bm.edges) + list(bm.verts), offset=bevel * UNIT, segments=2,
-                        affect='EDGES', profile=0.5, clamp_overlap=True)
 
-    col_layer = bm.loops.layers.color.new("Col")
-    alpha = 1.0 if tint else 0.0
-    rgba = (color[0], color[1], color[2], alpha)
-    for face in bm.faces:
-        face.smooth = smooth
-        face_rgba = rgba
-        if stripes:
-            band = int(math.floor(face.calc_center_median().z / (stripes[1] * UNIT)))
-            if band % 2:
-                face_rgba = (stripes[0][0], stripes[0][1], stripes[0][2], alpha)
+def make_prism(color, profile, y0, y1, tint=False, bevel=0.0, smooth=False, material=0, bone=None):
+    """
+    Extrudes a convex outline in the XZ plane (list of (x, z) metres) from y0 to y1: sloped hoods,
+    raked windscreens, trapezoid windows and other shapes a box can't make.
+    """
+    bm = bmesh.new()
+    uv = bm.loops.layers.uv.new("UVMap")
+    near = [bm.verts.new((x * UNIT, y0 * UNIT, z * UNIT)) for x, z in profile]
+    far = [bm.verts.new((x * UNIT, y1 * UNIT, z * UNIT)) for x, z in profile]
+    bm.faces.new(near)
+    bm.faces.new(list(reversed(far)))
+    for i in range(len(profile)):
+        j = (i + 1) % len(profile)
+        bm.faces.new((near[i], near[j], far[j], far[i]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    for face in bm.faces:  # rough planar UVs; FTO materials only read vertex colour
         for loop in face.loops:
-            loop[col_layer] = face_rgba
-    return Part(bm, bone)
+            co = loop.vert.co / (4.0 * UNIT)
+            loop[uv].uv = (co.x + co.y, co.z)
+    return _finish_part(bm, color, bone, tint, bevel, smooth, material)
 
 
-def build_mesh_object(name, parts, bone_names=None):
-    """Merges parts into one mesh object. Parts with a bone get a rigid weight of 1."""
+def make_text(text, color, loc=(0, 0, 0), rot=(0, 0, 0), size=0.2, depth=0.01, bold=0.03, material=0, tint=False):
+    """
+    Lettering from Blender's built-in font as a part. Before `rot` it reads along +X with its face
+    toward +Z, centred on `loc`; `size` is the letter height in metres.
+    """
+    curve = bpy.data.curves.new("FTOText", type='FONT')
+    curve.body = text
+    curve.size = size * UNIT
+    curve.extrude = depth * UNIT / 2
+    curve.offset = bold * size * UNIT
+    curve.align_x = 'CENTER'
+    curve.align_y = 'CENTER'
+    curve.resolution_u = 3  # low-poly letters
+    obj = link(bpy.data.objects.new("FTOText", curve))
+    evaluated = obj.evaluated_get(bpy.context.evaluated_depsgraph_get())
+    bm = bmesh.new()
+    bm.from_mesh(evaluated.to_mesh())
+    evaluated.to_mesh_clear()
+    bpy.context.scene.collection.objects.unlink(obj)
+    bpy.data.objects.remove(obj)
+    bpy.data.curves.remove(curve)
+    bpy.context.view_layer.update()
+
+    if not bm.loops.layers.uv:
+        bm.loops.layers.uv.new("UVMap")
+    for layer in list(bm.loops.layers.color):
+        bm.loops.layers.color.remove(layer)
+    matrix = Matrix.Translation(Vector(loc) * UNIT) @ Euler([math.radians(a) for a in rot], 'XYZ').to_matrix().to_4x4()
+    bmesh.ops.transform(bm, matrix=matrix, verts=bm.verts)
+    return _finish_part(bm, color, None, tint, 0.0, False, material)
+
+
+def build_mesh_object(name, parts, bone_names=None, materials=None):
+    """
+    Merges parts into one mesh object. Parts with a bone get a rigid weight of 1.
+    materials: slot names in order (a part's `material` indexes this list); each becomes an FBX
+    material, i.e. a named material slot in Unreal.
+    """
     bone_index = {b: i for i, b in enumerate(bone_names or [])}
     mesh = bpy.data.meshes.new(name)
+    for slot_name in materials or []:
+        mat = bpy.data.materials.get(slot_name) or bpy.data.materials.new(slot_name)
+        mesh.materials.append(mat)
     merged = bmesh.new()
     scratch = bpy.data.meshes.new(name + "_scratch")
 
