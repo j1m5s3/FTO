@@ -72,6 +72,8 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, BriefingEndTime);
 	DOREPLIFETIME(AFTOGameState, ShiftEndTime);
 	DOREPLIFETIME(AFTOGameState, VoteEndTime);
+	DOREPLIFETIME(AFTOGameState, VoteDuration);
+	DOREPLIFETIME(AFTOGameState, OvertimeOffer);
 	DOREPLIFETIME(AFTOGameState, Overtimes);
 	DOREPLIFETIME(AFTOGameState, Incidents);
 	DOREPLIFETIME(AFTOGameState, IncidentsResolved);
@@ -141,9 +143,11 @@ float AFTOGameState::GetVoteTimeRemaining() const
 	return ShiftPhase == EFTOShiftPhase::OvertimeVote ? FMath::Max(0.f, VoteEndTime - GetServerWorldTimeSeconds()) : 0.f;
 }
 
-void AFTOGameState::BeginOvertimeVote(float Seconds)
+void AFTOGameState::BeginOvertimeVote(float Seconds, float Offer)
 {
 	check(HasAuthority());
+	VoteDuration = Seconds;
+	OvertimeOffer = Offer;
 	VoteEndTime = GetServerWorldTimeSeconds() + Seconds;
 	SetShiftPhase(EFTOShiftPhase::OvertimeVote);
 }

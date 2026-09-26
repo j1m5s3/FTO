@@ -104,6 +104,8 @@ void AFTOHUD::DrawHUD()
 		DrawTeammateMarkers(GS);
 		DrawChaosMeter(GS);
 		DrawScoreTicker();
+		DrawInteractPrompt();
+		DrawArrestPanel(GS);
 		DrawOvertimeVote(GS);
 		break;
 

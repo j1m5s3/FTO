@@ -77,6 +77,7 @@ public:
 	UFUNCTION(Exec) void FTOVote(const FString& Name);
 	UFUNCTION(Server, Reliable)
 	void ServerShiftVote(EFTOShiftVote Vote);
+	void VotePressed(EFTOShiftVote Vote);
 
 	/** Local: the shift's over: watch the squad line up outside the precinct (and stand still for the photo). */
 	void ShowDebrief();

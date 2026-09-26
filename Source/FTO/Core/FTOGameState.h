@@ -116,8 +116,11 @@ public:
 	float GetVoteTimeRemaining() const;
 	/** How many times the squad has gone into overtime this shift. */
 	int32 GetOvertimes() const { return Overtimes; }
-	/** Server: the clock's run out: everyone has until Now + Seconds to vote. */
-	void BeginOvertimeVote(float Seconds);
+	/** How long the vote runs, and how much overtime is on offer (seconds). */
+	float GetVoteDuration() const { return VoteDuration; }
+	float GetOvertimeOffer() const { return OvertimeOffer; }
+	/** Server: the clock's run out: everyone has Seconds to vote for Offer seconds more, or to clock off. */
+	void BeginOvertimeVote(float Seconds, float Offer);
 	/** Server: the squad voted to keep going: Seconds more on the clock, chaos as it was. */
 	void StartOvertime(float Seconds);
 
@@ -150,6 +153,8 @@ protected:
 	UPROPERTY(Replicated) float BriefingEndTime = 0.f;
 	UPROPERTY(Replicated) float ShiftEndTime = 0.f;
 	UPROPERTY(Replicated) float VoteEndTime = 0.f;
+	UPROPERTY(Replicated) float VoteDuration = 20.f;
+	UPROPERTY(Replicated) float OvertimeOffer = 600.f;
 	UPROPERTY(Replicated) int32 Overtimes = 0;
 
 	UPROPERTY(Replicated) TArray<TObjectPtr<AFTOIncident>> Incidents;

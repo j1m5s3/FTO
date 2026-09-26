@@ -273,15 +273,17 @@ void AFTOHUD::DrawOvertimeVote(const AFTOGameState* GS)
 	const float Left = GS->GetVoteTimeRemaining();
 	const float BarW = W - 80.f * S;
 	DrawRect(FLinearColor(0.15f, 0.15f, 0.15f, 0.9f), CX - BarW * 0.5f, Top + 104.f * S, BarW, 8.f * S);
-	DrawRect(FLinearColor(1.f, 0.75f, 0.2f), CX - BarW * 0.5f, Top + 104.f * S, BarW * FMath::Clamp(Left / 20.f, 0.f, 1.f), 8.f * S);
+	DrawRect(FLinearColor(1.f, 0.75f, 0.2f), CX - BarW * 0.5f, Top + 104.f * S, BarW * FMath::Clamp(Left / FMath::Max(1.f, GS->GetVoteDuration()), 0.f, 1.f), 8.f * S);
 
 	// The two choices, ours lit up.
 	const AFTOPlayerState* Me = PC ? PC->GetPlayerState<AFTOPlayerState>() : nullptr;
 	const EFTOShiftVote Mine = Me ? Me->GetShiftVote() : EFTOShiftVote::None;
+	const int32 Offer = FMath::RoundToInt(GS->GetOvertimeOffer());
+	const FString OvertimeText = FString::Printf(TEXT("[Y] OVERTIME  +%d:%02d"), Offer / 60, Offer % 60);
 	struct FChoice { EFTOShiftVote Vote; const TCHAR* Text; FLinearColor Color; float X; };
 	const FChoice Choices[] =
 	{
-		{ EFTOShiftVote::Overtime, TEXT("[Y] OVERTIME  +10:00"), FLinearColor(1.f, 0.7f, 0.2f), CX - W * 0.25f },
+		{ EFTOShiftVote::Overtime, *OvertimeText, FLinearColor(1.f, 0.7f, 0.2f), CX - W * 0.25f },
 		{ EFTOShiftVote::ClockOff, TEXT("[N] CLOCK OFF"), FLinearColor(0.4f, 1.f, 0.5f), CX + W * 0.25f },
 	};
 	for (const FChoice& Choice : Choices)

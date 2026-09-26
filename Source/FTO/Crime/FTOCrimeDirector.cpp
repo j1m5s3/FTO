@@ -167,7 +167,7 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 				Officer->SetShiftVote(EFTOShiftVote::None);
 			}
 		}
-		GS->BeginOvertimeVote(OvertimeVoteSeconds);
+		GS->BeginOvertimeVote(OvertimeVoteSeconds, OvertimeSeconds);
 		UE_LOG(LogFTO, Log, TEXT("Shift clock ran out (resolved %d, failed %d): overtime vote."), GS->IncidentsResolved, GS->IncidentsFailed);
 		return;
 	}
@@ -496,15 +496,25 @@ AFTOIncident* UFTOCrimeDirector::SpawnIncidentAt(FName TemplateId, const FTransf
 
 void UFTOCrimeDirector::TickOvertimeVote()
 {
-	// Over as soon as everyone's had their say, or the time's up.
-	const AFTOGameState* GS = GetFTOGameState();
-	bool bAllVoted = GS->PlayerArray.Num() > 0;
+	// The city's paused, but anything still going on (a struggle, a booking) can tip it over.
+	AFTOGameState* GS = GetFTOGameState();
+	if (GS->GetChaos() >= AFTOGameState::MaxChaos)
+	{
+		GS->SetShiftPhase(EFTOShiftPhase::Overrun);
+		return;
+	}
+	// Over as soon as every officer has had their say, or the time's up.
+	int32 Officers = 0;
+	int32 Voted = 0;
 	for (const APlayerState* PS : GS->PlayerArray)
 	{
-		const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
-		bAllVoted &= Officer && Officer->GetShiftVote() != EFTOShiftVote::None;
+		if (const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS); Officer && !Officer->IsSpectator())
+		{
+			++Officers;
+			Voted += Officer->GetShiftVote() != EFTOShiftVote::None ? 1 : 0;
+		}
 	}
-	if (bAllVoted || GS->GetVoteTimeRemaining() <= 0.f)
+	if ((Officers > 0 && Voted == Officers) || GS->GetVoteTimeRemaining() <= 0.f)
 	{
 		ResolveOvertimeVote();
 	}
@@ -517,24 +527,34 @@ void UFTOCrimeDirector::ResolveOvertimeVote()
 	{
 		return;
 	}
-	// Most votes wins. The host's say settles a tie, and speaks for a squad that said nothing (clocking off if they
-	// didn't say either).
+	// Most votes wins. The host speaks for anyone who said nothing and settles a tie (clocking off if the host said
+	// nothing either).
 	int32 Keep = 0;
 	int32 Off = 0;
+	int32 Silent = 0;
 	EFTOShiftVote HostVote = EFTOShiftVote::None;
 	for (APlayerState* PS : GS->PlayerArray)
 	{
 		const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
-		if (!Officer)
+		if (!Officer || Officer->IsSpectator())
 		{
 			continue;
 		}
 		Keep += Officer->GetShiftVote() == EFTOShiftVote::Overtime ? 1 : 0;
 		Off += Officer->GetShiftVote() == EFTOShiftVote::ClockOff ? 1 : 0;
+		Silent += Officer->GetShiftVote() == EFTOShiftVote::None ? 1 : 0;
 		if (const APlayerController* PC = Officer->GetPlayerController(); PC && PC->IsLocalController())
 		{
 			HostVote = Officer->GetShiftVote();
 		}
+	}
+	if (HostVote == EFTOShiftVote::Overtime)
+	{
+		Keep += Silent;
+	}
+	else if (HostVote == EFTOShiftVote::ClockOff)
+	{
+		Off += Silent;
 	}
 	const bool bOvertime = Keep != Off ? Keep > Off : HostVote == EFTOShiftVote::Overtime;
 

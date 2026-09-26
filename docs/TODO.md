@@ -13,7 +13,7 @@ Details live in the [Phase 2 plan](Phase2Plan.md) and the [game design](GameDesi
 - [x] **Scoring** (plan item 10): per-officer points (arrests by tier, catches in the act, tickets, busts, revives;
   penalties for collateral and friendly fire), "+250 ARREST!" popups with combos, and an end-of-shift scoreboard
   that counts up with awards and grades while the squad dances (or slumps).
-- [x] **Shift extension**: when the 20 minutes are up, the squad votes to extend the shift (chaos carries over) or
+- [x] **Shift extension** (plan item 11): when the 20 minutes are up, the squad votes to extend the shift (chaos carries over) or
   clock off to the scoreboard; the host settles ties and unanswered votes.
 - [ ] **Steam invites** (see [the plan](Phase2Plan.md#steam-invites-plan-not-implemented-yet)): OnlineSubsystemSteam
   sessions, invites and "Join game" from the friends list, IP join kept as a fallback. Dev uses `SteamDevAppId=480`.
