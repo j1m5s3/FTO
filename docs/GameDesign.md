@@ -80,9 +80,10 @@ Done:
 - In-house art: officer, citizens, suspect, vehicles (Blender scripts), master material
 - In-house audio: synthesised siren, whistle, radio, chimes, fanfare, sad trombone...
 
-Next ideas:
+Next: see [Phase 2 plan](Phase2Plan.md) (enterable buildings with interior life, ragdolls, destruction, armory and
+ballistics, arrests v2, radio, scoring, Steam invites).
+
+Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame
 - Day/night shifts and weather; night-time lights and headlights
-- Steam (or EOS) sessions for invite-based online play
-- Radio/voice chat, emotes, officer customisation
-- Hand-dressed landmark blocks mixed into the procedural city
+- Emotes, officer customisation
