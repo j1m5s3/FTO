@@ -9,6 +9,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Core/FTOCharacter.h"
 #include "Interaction/FTOInteractable.h"
+#include "Vehicles/FTOCruiser.h"
 
 namespace
 {
@@ -75,6 +76,7 @@ void AFTOHUD::DrawHUD()
 		DrawDispatchBoard(GS);
 		DrawOnSceneProgress(GS);
 		DrawInteractPrompt();
+		DrawCruiserPanel();
 		break;
 
 	default:
@@ -330,7 +332,7 @@ void AFTOHUD::DrawOnSceneProgress(const AFTOGameState* GS)
 			continue;
 		}
 		const float DistSq = FVector::DistSquared2D(Me->GetActorLocation(), Incident->GetActorLocation());
-		if (DistSq <= FMath::Square(Incident->SceneRadius) && DistSq < NearestDistSq)
+		if (DistSq <= FMath::Square(Incident->GetSceneRadius()) && DistSq < NearestDistSq)
 		{
 			Nearest = Incident;
 			NearestDistSq = DistSq;
@@ -373,7 +375,7 @@ void AFTOHUD::DrawBriefing(const AFTOGameState* GS)
 	DrawCenteredText(TEXT("ROLL CALL"), CX, CY - 20.f * S, FLinearColor(0.6f, 0.8f, 1.f), GEngine->GetLargeFont(), S * 1.5f);
 	DrawCenteredText(TEXT("Keep the city's chaos under 100% until the end of the shift."), CX, CY + 30.f * S, FLinearColor::White, GEngine->GetMediumFont(), S);
 	DrawCenteredText(FString::Printf(TEXT("On duty in %s"), *FormatClock(GS->GetBriefingTimeRemaining())), CX, CY + 70.f * S, FLinearColor(1.f, 0.85f, 0.2f), GEngine->GetLargeFont(), S);
-	DrawCenteredText(TEXT("WASD move  |  Shift sprint  |  Space jump  |  E interact  |  stand at a scene to handle it"), CX, CY + 110.f * S, FLinearColor(0.7f, 0.7f, 0.7f), GEngine->GetSmallFont(), S * 1.1f);
+	DrawCenteredText(TEXT("WASD move  |  Shift sprint  |  Space jump  |  E interact / drive  |  stand at a scene to handle it"), CX, CY + 110.f * S, FLinearColor(0.7f, 0.7f, 0.7f), GEngine->GetSmallFont(), S * 1.1f);
 }
 
 void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
@@ -478,4 +480,30 @@ void AFTOHUD::DrawInteractPrompt()
 	GetTextSize(Text, W, H, Font, S);
 	DrawPanel(Screen.X - W * 0.5f - 10.f * S, Screen.Y - 4.f * S, W + 20.f * S, H + 8.f * S, FLinearColor(0.05f, 0.1f, 0.25f, 0.85f));
 	DrawCenteredText(Text, Screen.X, Screen.Y, FLinearColor(1.f, 0.95f, 0.6f), Font, S);
+}
+
+void AFTOHUD::DrawCruiserPanel()
+{
+	const AFTOCruiser* Cruiser = Cast<AFTOCruiser>(GetOwningPawn());
+	if (!Cruiser)
+	{
+		return;
+	}
+
+	const float S = UIScale();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float Y = Canvas->ClipY - 120.f * S;
+	const int32 Kmh = FMath::RoundToInt(FMath::Abs(Cruiser->GetSpeed()) * 0.036f);
+
+	DrawPanel(CX - 230.f * S, Y - 10.f * S, 460.f * S, 100.f * S);
+	DrawCenteredText(FString::Printf(TEXT("%d km/h"), Kmh), CX, Y, FLinearColor::White, GEngine->GetLargeFont(), S * 1.4f);
+
+	if (Cruiser->IsSirenOn())
+	{
+		const bool bRed = FMath::Fmod(GetWorld()->GetTimeSeconds() * 3.f, 2.f) < 1.f;
+		DrawCenteredText(TEXT("SIREN"), CX + 160.f * S, Y + 8.f * S, bRed ? FLinearColor(1.f, 0.2f, 0.2f) : FLinearColor(0.3f, 0.5f, 1.f), GEngine->GetMediumFont(), S);
+	}
+
+	DrawCenteredText(TEXT("W/S drive  |  A/D steer  |  Space handbrake  |  Q siren  |  E get out"),
+		CX, Y + 55.f * S, FLinearColor(0.75f, 0.75f, 0.75f), GEngine->GetSmallFont(), S * 1.1f);
 }

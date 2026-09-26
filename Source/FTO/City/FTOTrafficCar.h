@@ -6,6 +6,7 @@
 #include "FTOTrafficCar.generated.h"
 
 class AFTOCityGenerator;
+class AFTOIncident;
 class UBoxComponent;
 class UStaticMeshComponent;
 class UStaticMesh;
@@ -20,7 +21,8 @@ enum class EFTOCarState : uint8
 	PullingOver,
 	Stopped,	// waiting for the officer to write the ticket
 	WritingTicket,
-	Fleeing
+	Fleeing,
+	Busted		// caught at the end of a chase
 };
 
 UENUM(BlueprintType)
@@ -53,6 +55,9 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="Traffic") EFTOCarState GetCarState() const { return CarState; }
 	UFUNCTION(BlueprintPure, Category="Traffic") EFTOCarViolation GetViolation() const { return Violation; }
+
+	/** Server: pull over if we have a violation (officer on foot or a siren behind us). */
+	bool RequestPullOver();
 
 	// IFTOInteractable
 	virtual bool CanInteract(const AFTOCharacter* Officer) const override;
@@ -112,4 +117,9 @@ protected:
 	float BlockCheckAccumulator = 0.f;
 	float FleeUntil = 0.f;
 	FTimerHandle TicketTimer;
+
+	/** The chase this car is the target of, if it fled a stop. */
+	UPROPERTY(Transient) TObjectPtr<AFTOIncident> ChaseIncident;
+
+	void Bust();
 };

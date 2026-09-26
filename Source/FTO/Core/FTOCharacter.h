@@ -32,6 +32,15 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** Server: climb into a vehicle (hidden and carried along until ExitVehicle). */
+	void EnterVehicle(AActor* Vehicle);
+
+	/** Server: climb out at the given spot. */
+	void ExitVehicle(const FVector& Location, float Yaw);
+
+	UFUNCTION(BlueprintPure, Category="FTO")
+	AActor* GetCurrentVehicle() const { return CurrentVehicle; }
+
 	/** Server: play a full-body action for a while (ticket writing, chatting). */
 	void PlayTimedAction(EFTOAnimAction Action, float Duration);
 
@@ -82,6 +91,15 @@ protected:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> HeadMaterial;
+
+	/** The vehicle this officer is riding in, if any. */
+	UPROPERTY(ReplicatedUsing=OnRep_CurrentVehicle)
+	TObjectPtr<AActor> CurrentVehicle;
+
+	UFUNCTION()
+	void OnRep_CurrentVehicle();
+
+	void ApplyVehicleState();
 
 	/** Short replicated full-body action (e.g. writing a ticket) everyone should see. */
 	UPROPERTY(Replicated)

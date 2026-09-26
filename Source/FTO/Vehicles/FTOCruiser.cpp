@@ -1,0 +1,478 @@
+#include "Vehicles/FTOCruiser.h"
+#include "Art/FTOArt.h"
+#include "City/FTOTrafficCar.h"
+#include "Core/FTOCharacter.h"
+#include "Core/FTOInputConfig.h"
+#include "Core/FTOPlayerController.h"
+#include "Camera/CameraComponent.h"
+#include "Components/BoxComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "EnhancedInputComponent.h"
+#include "EngineUtils.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/World.h"
+#include "GameFramework/SpringArmComponent.h"
+#include "InputActionValue.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Net/UnrealNetwork.h"
+#include "UObject/ConstructorHelpers.h"
+#include "FTO.h"
+
+namespace
+{
+	constexpr float NetSendInterval = 1.f / 30.f;
+	constexpr float WheelDegreesPerCm = 360.f / (2.f * PI * 38.f);
+}
+
+AFTOCruiser::AFTOCruiser()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	bReplicates = true;
+	SetReplicateMovement(false);
+	SetNetUpdateFrequency(30.f);
+	bAlwaysRelevant = true; // only a handful, and chases cross the whole map
+	AutoPossessAI = EAutoPossessAI::Disabled;
+
+	Collision = CreateDefaultSubobject<UBoxComponent>(TEXT("Collision"));
+	Collision->InitBoxExtent(FVector(235.f, 102.f, 70.f));
+	Collision->SetCollisionProfileName(TEXT("Pawn"));
+	RootComponent = Collision;
+
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CruiserMesh(TEXT("/Game/FTO/Vehicles/SM_Car_Cruiser.SM_Car_Cruiser"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> WheelMesh(TEXT("/Game/FTO/Vehicles/SM_Wheel.SM_Wheel"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CubeMesh(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	BaseMaterial = BaseMat.Object;
+
+	Body = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Body"));
+	Body->SetupAttachment(Collision);
+	Body->SetStaticMesh(CruiserMesh.Object);
+	Body->SetRelativeLocation(FVector(0.f, 0.f, -RideHeight));
+	Body->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	static const FName WheelSockets[] = { TEXT("Wheel_FL"), TEXT("Wheel_FR"), TEXT("Wheel_RL"), TEXT("Wheel_RR") };
+	for (int32 i = 0; i < 4; ++i)
+	{
+		UStaticMeshComponent* Wheel = CreateDefaultSubobject<UStaticMeshComponent>(*FString::Printf(TEXT("Wheel%d"), i));
+		Wheel->SetupAttachment(Body, WheelSockets[i]);
+		Wheel->SetUsingAbsoluteScale(true);
+		Wheel->SetStaticMesh(WheelMesh.Object);
+		Wheel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Wheels.Add(Wheel);
+	}
+
+	// Glowing lenses over the modelled light bar (Blender roof bar at x -25, y +-40, z 170).
+	auto MakeLens = [&](FName Name, float Y) -> UStaticMeshComponent*
+	{
+		UStaticMeshComponent* Lens = CreateDefaultSubobject<UStaticMeshComponent>(Name);
+		Lens->SetupAttachment(Body);
+		Lens->SetStaticMesh(CubeMesh.Object);
+		Lens->SetRelativeLocation(FVector(-25.f, Y, 171.f));
+		Lens->SetRelativeScale3D(FVector(0.43f, 0.63f, 0.19f));
+		Lens->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Lens->SetCastShadow(false);
+		return Lens;
+	};
+	LightRed = MakeLens(TEXT("LightRed"), -40.f);
+	LightBlue = MakeLens(TEXT("LightBlue"), 40.f);
+
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(Collision);
+	CameraBoom->TargetArmLength = 950.f;
+	CameraBoom->SocketOffset = FVector(0.f, 0.f, 230.f);
+	CameraBoom->SetRelativeRotation(FRotator(-12.f, 0.f, 0.f));
+	CameraBoom->bUsePawnControlRotation = false;
+	CameraBoom->bInheritPitch = false;
+	CameraBoom->bInheritRoll = false;
+	CameraBoom->bEnableCameraLag = true;
+	CameraBoom->CameraLagSpeed = 8.f;
+	CameraBoom->bEnableCameraRotationLag = true;
+	CameraBoom->CameraRotationLagSpeed = 5.f;
+
+	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("Camera"));
+	Camera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+}
+
+void AFTOCruiser::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	// The driver is authoritative over their own car, so never correct them.
+	DOREPLIFETIME_CONDITION(AFTOCruiser, NetState, COND_SkipOwner);
+	DOREPLIFETIME(AFTOCruiser, bSiren);
+	DOREPLIFETIME(AFTOCruiser, StripeColor);
+	DOREPLIFETIME(AFTOCruiser, Driver);
+}
+
+void AFTOCruiser::BeginPlay()
+{
+	Super::BeginPlay();
+
+	PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, StripeColor);
+	RedMaterial = FTOArt::ApplyColor(LightRed, BaseMaterial, FLinearColor(1.f, 0.05f, 0.05f));
+	BlueMaterial = FTOArt::ApplyColor(LightBlue, BaseMaterial, FLinearColor(0.1f, 0.25f, 1.f));
+
+	if (HasAuthority())
+	{
+		NetState.Location = GetActorLocation();
+		NetState.Yaw = GetActorRotation().Yaw;
+	}
+}
+
+void AFTOCruiser::SetStripeColor(const FLinearColor& Color)
+{
+	StripeColor = Color;
+	OnRep_StripeColor();
+}
+
+void AFTOCruiser::OnRep_StripeColor()
+{
+	FTOArt::SetColor(PaintMaterial, StripeColor);
+}
+
+void AFTOCruiser::OnRep_Siren()
+{
+	// Cosmetic flashing happens in UpdateCosmetics.
+}
+
+bool AFTOCruiser::IsSimulatingLocally() const
+{
+	// The driver simulates their own car; the server simulates empty cars rolling to a stop.
+	return IsLocallyControlled() || (HasAuthority() && !IsPlayerControlled());
+}
+
+// ------------------------------------------------------------------------------------------
+// Entering / exiting
+// ------------------------------------------------------------------------------------------
+
+bool AFTOCruiser::CanInteract(const AFTOCharacter* Officer) const
+{
+	return Officer && !Driver;
+}
+
+FText AFTOCruiser::GetInteractPrompt(const AFTOCharacter* Officer) const
+{
+	return INVTEXT("Drive cruiser");
+}
+
+void AFTOCruiser::Interact(AFTOCharacter* Officer)
+{
+	check(HasAuthority());
+	AController* OfficerController = Officer ? Officer->GetController() : nullptr;
+	if (Driver || !OfficerController)
+	{
+		return;
+	}
+
+	Driver = Officer;
+	Officer->EnterVehicle(this);
+	OfficerController->Possess(this);
+	UE_LOG(LogFTO, Log, TEXT("%s is driving %s."), *GetNameSafe(OfficerController), *GetName());
+}
+
+void AFTOCruiser::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+	ThrottleInput = SteerInput = 0.f;
+	bHandbrake = false;
+}
+
+void AFTOCruiser::UnPossessed()
+{
+	Super::UnPossessed();
+	ThrottleInput = SteerInput = 0.f;
+	bHandbrake = false;
+}
+
+void AFTOCruiser::OnExit()
+{
+	if (HasAuthority())
+	{
+		ExitDriver();
+	}
+	else
+	{
+		ServerExit();
+	}
+}
+
+void AFTOCruiser::ServerExit_Implementation()
+{
+	ExitDriver();
+}
+
+void AFTOCruiser::ExitDriver()
+{
+	AController* DriverController = GetController();
+	AFTOCharacter* Officer = Driver;
+	if (!Officer || !DriverController)
+	{
+		return;
+	}
+
+	// Hop out of the driver's door (left side), or the passenger side if something's in the way.
+	const FVector Left = -GetActorRightVector();
+	FVector ExitLocation = GetActorLocation() + Left * 200.f + FVector(0.f, 0.f, 20.f);
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCruiserExit), false, this);
+	if (GetWorld()->SweepSingleByChannel(Hit, GetActorLocation(), ExitLocation, FQuat::Identity, ECC_Pawn, FCollisionShape::MakeCapsule(42.f, 90.f), Params))
+	{
+		ExitLocation = GetActorLocation() - Left * 200.f + FVector(0.f, 0.f, 20.f);
+	}
+
+	Driver = nullptr;
+	Officer->ExitVehicle(ExitLocation, GetActorRotation().Yaw);
+	DriverController->Possess(Officer);
+}
+
+// ------------------------------------------------------------------------------------------
+// Input
+// ------------------------------------------------------------------------------------------
+
+void AFTOCruiser::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(PlayerInputComponent);
+	AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController());
+	if (!EIC || !PC)
+	{
+		return;
+	}
+
+	// Same actions as on foot: move = throttle/steer, jump = handbrake, interact = exit, whistle = siren.
+	UFTOInputConfig* Input = PC->GetInputConfig();
+	EIC->BindAction(Input->Move, ETriggerEvent::Triggered, this, &AFTOCruiser::OnMove);
+	EIC->BindAction(Input->Move, ETriggerEvent::Completed, this, &AFTOCruiser::OnMoveReleased);
+	EIC->BindAction(Input->Jump, ETriggerEvent::Started, this, &AFTOCruiser::OnHandbrake);
+	EIC->BindAction(Input->Jump, ETriggerEvent::Completed, this, &AFTOCruiser::OnHandbrakeReleased);
+	EIC->BindAction(Input->Interact, ETriggerEvent::Started, this, &AFTOCruiser::OnExit);
+	EIC->BindAction(Input->Whistle, ETriggerEvent::Started, this, &AFTOCruiser::OnSiren);
+}
+
+void AFTOCruiser::OnMove(const FInputActionValue& Value)
+{
+	const FVector2D Axis = Value.Get<FVector2D>();
+	ThrottleInput = FMath::Clamp(Axis.Y, -1.f, 1.f);
+	SteerInput = FMath::Clamp(Axis.X, -1.f, 1.f);
+}
+
+void AFTOCruiser::OnMoveReleased(const FInputActionValue& Value)
+{
+	ThrottleInput = 0.f;
+	SteerInput = 0.f;
+}
+
+void AFTOCruiser::OnHandbrake(const FInputActionValue& Value)
+{
+	bHandbrake = true;
+}
+
+void AFTOCruiser::OnHandbrakeReleased(const FInputActionValue& Value)
+{
+	bHandbrake = false;
+}
+
+void AFTOCruiser::OnSiren()
+{
+	if (HasAuthority())
+	{
+		bSiren = !bSiren;
+	}
+	else
+	{
+		ServerSetSiren(!bSiren);
+	}
+}
+
+void AFTOCruiser::ServerSetSiren_Implementation(bool bOn)
+{
+	bSiren = bOn;
+}
+
+// ------------------------------------------------------------------------------------------
+// Simulation
+// ------------------------------------------------------------------------------------------
+
+void AFTOCruiser::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (IsSimulatingLocally())
+	{
+		Simulate(DeltaSeconds);
+
+		if (HasAuthority())
+		{
+			NetState.Location = GetActorLocation();
+			NetState.Yaw = GetActorRotation().Yaw;
+			NetState.Speed = ForwardSpeed;
+			NetState.Steer = SteerInput;
+		}
+		else
+		{
+			SendAccumulator += DeltaSeconds;
+			if (SendAccumulator >= NetSendInterval)
+			{
+				SendAccumulator = 0.f;
+				ServerMove(GetActorLocation(), GetActorRotation().Yaw, ForwardSpeed, LateralSpeed, SteerInput);
+			}
+		}
+	}
+	else if (!HasAuthority())
+	{
+		// Everyone else's car: glide towards the latest replicated state.
+		SetActorLocation(FMath::VInterpTo(GetActorLocation(), NetState.Location, DeltaSeconds, 14.f));
+		SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0.f, NetState.Yaw, 0.f), DeltaSeconds, 14.f));
+		ForwardSpeed = NetState.Speed;
+		SteerInput = NetState.Steer;
+	}
+
+	if (HasAuthority())
+	{
+		SirenScanAccumulator += DeltaSeconds;
+		if (bSiren && SirenScanAccumulator >= 0.25f)
+		{
+			SirenScanAccumulator = 0.f;
+			ServerSirenTick();
+		}
+	}
+
+	UpdateCosmetics(DeltaSeconds);
+}
+
+void AFTOCruiser::ServerMove_Implementation(FVector_NetQuantize10 Location, float Yaw, float Speed, float Lateral, float Steer)
+{
+	if (++RemoteMoveCount % 90 == 1)
+	{
+		UE_LOG(LogFTO, Log, TEXT("%s: remote driver at %s, %.0f km/h"), *GetName(), *FVector(Location).ToCompactString(), Speed * 0.036f);
+	}
+
+	SetActorLocationAndRotation(Location, FRotator(0.f, Yaw, 0.f));
+	ForwardSpeed = Speed;
+	LateralSpeed = Lateral;
+	SteerInput = Steer;
+
+	NetState.Location = Location;
+	NetState.Yaw = Yaw;
+	NetState.Speed = Speed;
+	NetState.Steer = Steer;
+}
+
+void AFTOCruiser::Simulate(float DeltaSeconds)
+{
+	const float Dt = FMath::Min(DeltaSeconds, 0.05f);
+	const FRotator OldRotation = GetActorRotation();
+	const FVector Fwd = OldRotation.Vector().GetSafeNormal2D();
+	const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
+
+	// World velocity from last frame, expressed in the car's frame.
+	FVector Velocity = Fwd * ForwardSpeed + Right * LateralSpeed;
+	float Forward = FVector::DotProduct(Velocity, Fwd);
+	float Lateral = FVector::DotProduct(Velocity, Right);
+
+	const float Throttle = (Driver || bAutopilot) ? ThrottleInput : 0.f;
+	const float TopSpeed = MaxSpeed * (bSiren ? 1.15f : 1.f); // "code 3"
+	if (Throttle > 0.f)
+	{
+		Forward += Acceleration * Throttle * Dt * (Forward < 0.f ? 2.5f : 1.f);
+	}
+	else if (Throttle < 0.f)
+	{
+		Forward += (Forward > 50.f ? BrakeDeceleration : Acceleration * 0.6f) * Throttle * Dt;
+	}
+	else
+	{
+		Forward = FMath::FInterpConstantTo(Forward, 0.f, Dt, CoastDeceleration);
+	}
+	if (bHandbrake)
+	{
+		Forward = FMath::FInterpConstantTo(Forward, 0.f, Dt, BrakeDeceleration * 0.35f);
+	}
+	Forward = FMath::Clamp(Forward, -MaxReverseSpeed, TopSpeed);
+
+	// Sideways slide dies out quickly unless the handbrake is on (drift!).
+	Lateral *= FMath::Exp(-(bHandbrake ? HandbrakeGrip : Grip) * Dt);
+
+	// Steering needs rolling speed, softens at top speed, and flips in reverse.
+	const float Steer = (Driver || bAutopilot) ? SteerInput : 0.f;
+	const float RollAlpha = FMath::Clamp(FMath::Abs(Forward) / 450.f, 0.f, 1.f);
+	const float HighSpeedDamp = 1.f - 0.45f * FMath::Clamp(FMath::Abs(Forward) / MaxSpeed, 0.f, 1.f);
+	float YawRate = Steer * MaxYawRate * RollAlpha * HighSpeedDamp * FMath::Sign(Forward);
+	if (bHandbrake)
+	{
+		YawRate *= 1.6f;
+	}
+
+	// Velocity keeps its world direction while the body turns: that difference is the slide.
+	Velocity = Fwd * Forward + Right * Lateral;
+	const FRotator NewRotation(0.f, OldRotation.Yaw + YawRate * Dt, 0.f);
+
+	FHitResult Hit;
+	AddActorWorldOffset(Velocity * Dt, true, &Hit);
+	if (Hit.bBlockingHit)
+	{
+		// Bounce off walls and other cars, losing most of the speed.
+		const FVector Normal = Hit.ImpactNormal.GetSafeNormal2D();
+		Velocity = (Velocity - 1.4f * FVector::DotProduct(Velocity, Normal) * Normal) * 0.5f;
+	}
+	SetActorRotation(NewRotation);
+
+	const FVector NewFwd = NewRotation.Vector();
+	const FVector NewRight = FVector::CrossProduct(FVector::UpVector, NewFwd);
+	ForwardSpeed = FVector::DotProduct(Velocity, NewFwd);
+	LateralSpeed = FVector::DotProduct(Velocity, NewRight);
+
+	FollowGround();
+}
+
+void AFTOCruiser::FollowGround()
+{
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCruiserGround), false, this);
+	const FVector Here = GetActorLocation();
+	if (GetWorld()->LineTraceSingleByObjectType(Hit, Here + FVector(0.f, 0.f, 150.f), Here - FVector(0.f, 0.f, 500.f), FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		// Pop smoothly up and down curbs.
+		const float TargetZ = Hit.ImpactPoint.Z + RideHeight;
+		const float NewZ = FMath::FInterpTo(Here.Z, TargetZ, GetWorld()->GetDeltaSeconds(), 18.f);
+		SetActorLocation(FVector(Here.X, Here.Y, NewZ));
+	}
+}
+
+void AFTOCruiser::UpdateCosmetics(float DeltaSeconds)
+{
+	WheelSpin = FMath::Fmod(WheelSpin + ForwardSpeed * DeltaSeconds * WheelDegreesPerCm, 360.f);
+	SteerVisual = FMath::FInterpTo(SteerVisual, SteerInput * 28.f, DeltaSeconds, 10.f);
+	for (int32 i = 0; i < Wheels.Num(); ++i)
+	{
+		Wheels[i]->SetRelativeRotation(FRotator(-WheelSpin, i < 2 ? SteerVisual : 0.f, 0.f));
+	}
+
+	// Wee-woo: alternate the lenses while the siren is on.
+	if (RedMaterial && BlueMaterial)
+	{
+		const bool bRedPhase = FMath::Fmod(GetWorld()->GetTimeSeconds() * 3.f, 2.f) < 1.f;
+		FTOArt::SetColor(RedMaterial, FLinearColor(1.f, 0.05f, 0.05f), bSiren && bRedPhase ? 12.f : 0.f);
+		FTOArt::SetColor(BlueMaterial, FLinearColor(0.1f, 0.25f, 1.f), bSiren && !bRedPhase ? 12.f : 0.f);
+	}
+}
+
+void AFTOCruiser::ServerSirenTick()
+{
+	// Offending cars ahead of a cruiser with its lights on pull over.
+	const FVector Here = GetActorLocation();
+	const FVector Fwd = GetActorForwardVector();
+	for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It; ++It)
+	{
+		AFTOTrafficCar* Car = *It;
+		const FVector ToCar = Car->GetActorLocation() - Here;
+		if (ToCar.SizeSquared2D() > FMath::Square(SirenReach))
+		{
+			continue;
+		}
+		if (FVector::DotProduct(ToCar.GetSafeNormal2D(), Fwd) > 0.7f)
+		{
+			Car->RequestPullOver();
+		}
+	}
+}

@@ -1,4 +1,5 @@
 #include "Crime/FTOIncident.h"
+#include "Core/FTOCharacter.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
@@ -72,6 +73,7 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, bWitnessed);
 	DOREPLIFETIME(AFTOIncident, StartTime);
 	DOREPLIFETIME(AFTOIncident, NeglectTime);
+	DOREPLIFETIME(AFTOIncident, bMobile);
 }
 
 void AFTOIncident::BeginPlay()
@@ -122,6 +124,25 @@ void AFTOIncident::ForceReport()
 		SetState(EFTOIncidentState::Reported);
 		OnReported.Broadcast(this);
 	}
+}
+
+void AFTOIncident::FollowActor(AActor* Target)
+{
+	check(HasAuthority());
+	if (!Target)
+	{
+		return;
+	}
+	// Attachment only replicates for actors that replicate movement.
+	SetReplicateMovement(true);
+	AttachToActor(Target, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+	bMobile = true;
+	OnRep_Mobile();
+}
+
+void AFTOIncident::OnRep_Mobile()
+{
+	Suspect->SetVisibility(!bMobile);
 }
 
 void AFTOIncident::Tick(float DeltaSeconds)
@@ -236,7 +257,16 @@ int32 AFTOIncident::CountOfficersOnScene() const
 	for (const APlayerState* PS : GS->PlayerArray)
 	{
 		const APawn* Pawn = PS ? PS->GetPawn() : nullptr;
-		if (Pawn && FVector::DistSquared2D(Pawn->GetActorLocation(), Here) <= FMath::Square(SceneRadius))
+		if (!Pawn)
+		{
+			continue;
+		}
+		// Scenes are handled on foot; chases can be won from behind the wheel.
+		if (!bMobile && !Pawn->IsA<AFTOCharacter>())
+		{
+			continue;
+		}
+		if (FVector::DistSquared2D(Pawn->GetActorLocation(), Here) <= FMath::Square(GetSceneRadius()))
 		{
 			++Count;
 		}

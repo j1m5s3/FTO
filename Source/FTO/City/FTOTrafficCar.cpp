@@ -5,6 +5,7 @@
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Crime/FTOCrimeDirector.h"
+#include "Crime/FTOIncident.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -135,10 +136,24 @@ void AFTOTrafficCar::OnRep_CarState()
 
 void AFTOTrafficCar::RefreshIndicator()
 {
-	const bool bShow = Violation != EFTOCarViolation::None && CarState != EFTOCarState::Fleeing;
-	Indicator->SetVisibility(bShow || CarState == EFTOCarState::Fleeing);
-	Indicator->SetText(CarState == EFTOCarState::Fleeing ? INVTEXT("!!!") : INVTEXT("!"));
-	Indicator->SetTextRenderColor(CarState == EFTOCarState::Fleeing ? FColor(255, 40, 40) : FColor(255, 200, 40));
+	switch (CarState)
+	{
+	case EFTOCarState::Fleeing:
+		Indicator->SetVisibility(true);
+		Indicator->SetText(INVTEXT("!!!"));
+		Indicator->SetTextRenderColor(FColor(255, 40, 40));
+		break;
+	case EFTOCarState::Busted:
+		Indicator->SetVisibility(true);
+		Indicator->SetText(INVTEXT("BUSTED"));
+		Indicator->SetTextRenderColor(FColor(60, 255, 90));
+		break;
+	default:
+		Indicator->SetVisibility(Violation != EFTOCarViolation::None);
+		Indicator->SetText(INVTEXT("!"));
+		Indicator->SetTextRenderColor(FColor(255, 200, 40));
+		break;
+	}
 }
 
 void AFTOTrafficCar::RollViolation()
@@ -291,6 +306,20 @@ void AFTOTrafficCar::Tick(float DeltaSeconds)
 		}
 	}
 
+	// Server: chases end when the incident does.
+	if (HasAuthority() && CarState == EFTOCarState::Fleeing && ChaseIncident)
+	{
+		if (ChaseIncident->GetState() == EFTOIncidentState::Resolved)
+		{
+			Bust();
+		}
+		else if (ChaseIncident->GetState() == EFTOIncidentState::Failed)
+		{
+			ChaseIncident = nullptr;
+			FleeUntil = FMath::Min(FleeUntil, GetWorld()->GetTimeSeconds() + 4.f); // got away
+		}
+	}
+
 	// Server: brake for officers, citizens and other cars. Fleeing cars don't care (much).
 	if (!HasAuthority() || (CarState != EFTOCarState::Driving && CarState != EFTOCarState::Fleeing))
 	{
@@ -356,15 +385,8 @@ void AFTOTrafficCar::Interact(AFTOCharacter* Officer)
 {
 	check(HasAuthority());
 
-	if (CarState == EFTOCarState::Driving && Violation != EFTOCarViolation::None)
+	if (RequestPullOver())
 	{
-		// Signal, pull over to the curb just ahead.
-		CarState = EFTOCarState::PullingOver;
-		bWaitingForClearRoad = false;
-		const FVector Right = FVector(-GetActorForwardVector().Y, GetActorForwardVector().X, 0.f);
-		const FVector Curb = GetActorLocation() + GetActorForwardVector() * 400.f + Right * (City ? City->GetRoadWidth() * 0.2f : 200.f);
-		MoveTo(Curb, 350.f);
-		RefreshIndicator();
 		return;
 	}
 
@@ -384,21 +406,43 @@ void AFTOTrafficCar::Interact(AFTOCharacter* Officer)
 	}
 }
 
+bool AFTOTrafficCar::RequestPullOver()
+{
+	check(HasAuthority());
+	if (CarState != EFTOCarState::Driving || Violation == EFTOCarViolation::None)
+	{
+		return false;
+	}
+
+	// Signal, pull over to the curb just ahead.
+	CarState = EFTOCarState::PullingOver;
+	bWaitingForClearRoad = false;
+	const FVector Right = FVector(-GetActorForwardVector().Y, GetActorForwardVector().X, 0.f);
+	const FVector Curb = GetActorLocation() + GetActorForwardVector() * 400.f + Right * (City ? City->GetRoadWidth() * 0.2f : 200.f);
+	MoveTo(Curb, 350.f);
+	RefreshIndicator();
+	return true;
+}
+
 void AFTOTrafficCar::FinishTicket()
 {
 	AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
 
 	if (Rng.FRand() < WantedChance)
 	{
-		// Plot twist: the driver is wanted. Floor it!
+		// Plot twist: the driver is wanted. Floor it! The chase incident rides along with us.
 		CarState = EFTOCarState::Fleeing;
-		FleeUntil = GetWorld()->GetTimeSeconds() + 20.f;
+		FleeUntil = GetWorld()->GetTimeSeconds() + 120.f;
 		Violation = EFTOCarViolation::None;
 		RefreshIndicator();
 
 		if (AFTOGameMode* GM = GetWorld()->GetAuthGameMode<AFTOGameMode>())
 		{
-			GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("CarChase"), GetActorLocation(), true);
+			ChaseIncident = GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("CarChase"), GetActorLocation(), true);
+			if (ChaseIncident)
+			{
+				ChaseIncident->FollowActor(this);
+			}
 		}
 		if (GS)
 		{
@@ -422,4 +466,13 @@ void AFTOTrafficCar::FinishTicket()
 
 	// Merge back into traffic.
 	MoveTo(PendingTarget, CruiseSpeed);
+}
+
+void AFTOTrafficCar::Bust()
+{
+	CarState = EFTOCarState::Busted;
+	ChaseIncident = nullptr;
+	Hold();
+	RefreshIndicator();
+	SetLifeSpan(10.f); // towed away
 }

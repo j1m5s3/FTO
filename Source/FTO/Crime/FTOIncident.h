@@ -56,6 +56,16 @@ public:
 	/** Server: a citizen tip or radio call puts this on the board right now. */
 	void ForceReport();
 
+	/** Server: make this a moving incident that rides along with Target (car chases). */
+	void FollowActor(AActor* Target);
+
+	/** Officers within this distance count as on scene (chases use a wider radius). */
+	UFUNCTION(BlueprintPure, Category="Incident")
+	float GetSceneRadius() const { return bMobile ? ChaseRadius : SceneRadius; }
+
+	UFUNCTION(BlueprintPure, Category="Incident")
+	bool IsMobile() const { return bMobile; }
+
 	// IFTOAnimatedActor: the suspect acts shifty, then puts their hands up when officers arrive.
 	virtual EFTOAnimAction GetAnimAction() const override;
 	virtual float GetAnimSpeed() const override { return 0.f; }
@@ -71,6 +81,10 @@ public:
 	/** Officers inside this radius count as on scene. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
 	float SceneRadius = 450.f;
+
+	/** On-scene radius while following a fleeing car; cruisers count too. */
+	UPROPERTY(EditDefaultsOnly, Category="Incident")
+	float ChaseRadius = 1100.f;
 
 	/** Officers within this radius with line of sight witness an unreported incident. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
@@ -111,6 +125,10 @@ protected:
 	UPROPERTY(Replicated) float StartTime = 0.f;
 	/** Time without an officer on scene, drives escalation. */
 	UPROPERTY(Replicated) float NeglectTime = 0.f;
+	/** Riding along with a moving target; the suspect is inside it, not standing here. */
+	UPROPERTY(ReplicatedUsing=OnRep_Mobile) bool bMobile = false;
+
+	UFUNCTION() void OnRep_Mobile();
 
 	// Server-only
 	bool bWillBeReported = false;

@@ -25,6 +25,16 @@ Or right-click `FTO.uproject` → *Generate Visual Studio project files* and bui
 | `FTOSpawnCrime BankHeist` | Spawn any crime template by id (see `FTOCrimeCatalog.cpp`) |
 | `FTOAddChaos 20` | Add (or with a negative number, remove) chaos |
 | `FTOSkipBriefing` | Start the shift immediately |
+| `FTOEndShift 1` | End the shift (1 = survived, 0 = overrun) |
+| `FTODrive` | Jump into the nearest free cruiser |
+
+## Controls
+| On foot | In a cruiser |
+|---|---|
+| WASD / left stick: move | W/S: drive and brake, A/D: steer |
+| Shift: sprint | Space: handbrake (drift) |
+| Space: jump | Q: lights and siren (pulls over offending cars ahead) |
+| E: interact (tickets, chat, get in) | E: get out |
 
 ## Smoke test
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`

@@ -39,6 +39,7 @@ protected:
 	int32 NextStep = 0;
 	float NextStepTime = 0.f;
 	FVector IncidentSpot = FVector::ZeroVector;
+	UPROPERTY(Transient) TObjectPtr<class AFTOCruiser> TestCruiser;
 	FVector WalkDirection = FVector::ForwardVector;
 	bool bWalkOfficer = false;
 };

@@ -566,3 +566,22 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 		}
 	}
 }
+
+TArray<FTransform> AFTOCityGenerator::GetPrecinctParkingSpots() const
+{
+	TArray<FTransform> Spots;
+	for (const FFTOCityBlock& Block : Blocks)
+	{
+		if (!Block.bPrecinct)
+		{
+			continue;
+		}
+		// Bays sit between the painted lines at +-200 and +-600 (see BuildPrecinct).
+		for (const float Y : { -600.f, -200.f, 200.f, 600.f })
+		{
+			const FVector Location = Block.Center + FVector(-Block.HalfSize * 0.5f, Y, CurbHeight + 4.f);
+			Spots.Emplace(FRotator(0.f, 180.f, 0.f), Location);
+		}
+	}
+	return Spots;
+}

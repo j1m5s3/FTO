@@ -19,6 +19,12 @@ public:
 	UFUNCTION(Client, Reliable)
 	void ClientToast(const FText& Message, FLinearColor Color);
 
+	/** Dev: jump into the nearest cruiser (also handy for testing clients driving). */
+	UFUNCTION(Exec) void FTODrive();
+
+	UFUNCTION(Server, Reliable)
+	void ServerEnterNearestCruiser();
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void SetupInputComponent() override;

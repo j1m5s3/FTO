@@ -38,6 +38,7 @@ protected:
 	void DrawBriefing(const AFTOGameState* GS);
 	void DrawShiftReport(const AFTOGameState* GS);
 	void DrawInteractPrompt();
+	void DrawCruiserPanel();
 	void DrawToasts();
 
 	/** Projects a world point, clamping to the screen edge when off-screen. Returns true if on-screen. */

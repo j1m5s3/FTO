@@ -69,6 +69,9 @@ public:
 	float GetCurbHeight() const;
 	const TArray<FFTOCityBlock>& GetBlocks() const { return Blocks; }
 
+	/** Four parking bays in the precinct lot, facing the street. */
+	TArray<FTransform> GetPrecinctParkingSpots() const;
+
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksY = 8;
