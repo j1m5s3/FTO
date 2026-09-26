@@ -42,6 +42,7 @@ protected:
 	void DrawShiftReport(const AFTOGameState* GS);
 	void DrawInteractPrompt();
 	void DrawCruiserPanel();
+	void DrawEscortPanel();
 
 	/** Local stingers: radio chatter, chimes, alarms, shift fanfares. */
 	void UpdateAudioCues(const AFTOGameState* GS);

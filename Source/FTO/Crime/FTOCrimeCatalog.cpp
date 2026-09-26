@@ -17,6 +17,7 @@ namespace
 		FTemplateBuilder& Report(float Chance, float MinDelay, float MaxDelay) { Tpl.ReportChance = Chance; Tpl.ReportDelay = FVector2D(MinDelay, MaxDelay); return *this; }
 		FTemplateBuilder& Escalate(float After, FName To = NAME_None) { Tpl.TimeToEscalate = After; Tpl.EscalatesTo = To; return *this; }
 		FTemplateBuilder& Spawn(float Weight, float MinChaos = 0.f, bool bUnique = false) { Tpl.Weight = Weight; Tpl.MinChaos = MinChaos; Tpl.bUnique = bUnique; return *this; }
+		FTemplateBuilder& NoArrest() { Tpl.bArrest = false; return *this; }
 	};
 
 	FTemplateBuilder Add(TArray<FFTOCrimeTemplate>& Out, FName Id, const TCHAR* Title, EFTOCrimeTier Tier)
@@ -44,19 +45,19 @@ void UFTOCrimeCatalog::PopulateDefaults()
 	// ---- Petty: small day-to-day calls ------------------------------------------------
 	Add(Templates, "CatInTree", TEXT("Cat Stuck in Tree"), E::Petty)
 		.Flavor({ TEXT("Caller says the cat is 'judging everyone'."), TEXT("It's the same cat as yesterday.") })
-		.Chaos(0.03f, 2.f, 1.f).Work(3.f, 1).Report(1.f, 2.f, 6.f).Escalate(90.f).Spawn(1.2f);
+		.Chaos(0.03f, 2.f, 1.f).Work(3.f, 1).Report(1.f, 2.f, 6.f).Escalate(90.f).Spawn(1.2f).NoArrest();
 
 	Add(Templates, "LostTourist", TEXT("Lost Tourist"), E::Petty)
 		.Flavor({ TEXT("Tourist is holding the map upside down."), TEXT("They're looking for 'the famous statue'. There is no statue.") })
-		.Chaos(0.02f, 1.5f, 1.f).Work(2.f, 1).Report(0.3f, 1.f, 3.f).Escalate(60.f).Spawn(1.f);
+		.Chaos(0.02f, 1.5f, 1.f).Work(2.f, 1).Report(0.3f, 1.f, 3.f).Escalate(60.f).Spawn(1.f).NoArrest();
 
 	Add(Templates, "NoiseComplaint", TEXT("Noise Complaint"), E::Petty)
 		.Flavor({ TEXT("Neighbour has been practising the bagpipes since 6am."), TEXT("Karaoke night got out of hand.") })
-		.Chaos(0.04f, 2.f, 2.f).Work(3.f, 1).Report(1.f, 3.f, 8.f).Escalate(75.f, "BarFight").Spawn(1.2f);
+		.Chaos(0.04f, 2.f, 2.f).Work(3.f, 1).Report(1.f, 3.f, 8.f).Escalate(75.f, "BarFight").Spawn(1.2f).NoArrest();
 
 	Add(Templates, "Jaywalking", TEXT("Jaywalking"), E::Petty)
 		.Flavor({ TEXT("Pedestrian doing cartwheels across the intersection.") })
-		.Chaos(0.03f, 1.5f, 1.f).Work(2.f, 1).Report(0.f, 0.f, 0.f).Escalate(30.f).Spawn(1.f);
+		.Chaos(0.03f, 1.5f, 1.f).Work(2.f, 1).Report(0.f, 0.f, 0.f).Escalate(30.f).Spawn(1.f).NoArrest();
 
 	Add(Templates, "Graffiti", TEXT("Graffiti in Progress"), E::Petty)
 		.Flavor({ TEXT("Tagger is spelling their own name wrong."), TEXT("It's actually quite good. Still illegal.") })
@@ -68,7 +69,7 @@ void UFTOCrimeCatalog::PopulateDefaults()
 
 	Add(Templates, "IllegalParking", TEXT("Illegal Parking"), E::Petty)
 		.Flavor({ TEXT("Car parked on the roof of another car."), TEXT("Food truck blocking a fire hydrant again.") })
-		.Chaos(0.03f, 1.5f, 1.f).Work(2.f, 1).Report(0.6f, 3.f, 10.f).Escalate(90.f).Spawn(0.8f);
+		.Chaos(0.03f, 1.5f, 1.f).Work(2.f, 1).Report(0.6f, 3.f, 10.f).Escalate(90.f).Spawn(0.8f).NoArrest();
 
 	// ---- Minor: the daily grind --------------------------------------------------------
 	Add(Templates, "DomesticDispute", TEXT("Domestic Dispute"), E::Minor)
@@ -85,7 +86,7 @@ void UFTOCrimeCatalog::PopulateDefaults()
 
 	Add(Templates, "Speeding", TEXT("Reckless Driver"), E::Minor)
 		.Flavor({ TEXT("Driver doing donuts in the mall car park."), TEXT("Grandma in a sports car. Again.") })
-		.Chaos(0.10f, 4.f, 3.f).Work(3.f, 1).Report(0.2f, 1.f, 3.f).Escalate(40.f, "CarChase").Spawn(1.f);
+		.Chaos(0.10f, 4.f, 3.f).Work(3.f, 1).Report(0.2f, 1.f, 3.f).Escalate(40.f, "CarChase").Spawn(1.f).NoArrest();
 
 	Add(Templates, "PettyTheft", TEXT("Bike Theft"), E::Minor)
 		.Flavor({ TEXT("Suspect is riding away very, very slowly.") })
@@ -159,6 +160,7 @@ FFTOIncidentInfo UFTOCrimeCatalog::RollIncident(const FFTOCrimeTemplate& Templat
 	Info.FailPenalty = Template.FailPenalty;
 	Info.TimeToEscalate = Template.TimeToEscalate;
 	Info.EscalatesTo = Template.EscalatesTo;
+	Info.bArrest = Template.bArrest;
 
 	FString Description = Template.Flavor.Num() > 0
 		? Template.Flavor[Rng.RandRange(0, Template.Flavor.Num() - 1)].ToString()

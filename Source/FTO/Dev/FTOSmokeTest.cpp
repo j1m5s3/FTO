@@ -200,6 +200,54 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddShot(TEXT("02_on_duty"), 1.f);
 
+	// Arrest: across town, catch a shoplifter, then bring them home.
+	AddStep(TEXT("arrest"), 4.5f, [this]()
+	{
+		AFTOGameMode* GM = GetAuthGameMode();
+		AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn());
+		AFTOCityGenerator* City = GetCity();
+		if (!GM || !Officer || !City)
+		{
+			return;
+		}
+		const FFTOCityBlock* Far = nullptr;
+		for (const FFTOCityBlock& Block : City->GetBlocks())
+		{
+			if (Block.District == EFTODistrict::Downtown && !Block.bPrecinct && !Block.bBank &&
+				(!Far || FVector::DistSquared(Block.Center, City->GetPrecinctLocation()) > FVector::DistSquared(Far->Center, City->GetPrecinctLocation())))
+			{
+				Far = &Block;
+			}
+		}
+		if (Far)
+		{
+			const FVector Spot = City->GetSidewalkCorner(Far->X, Far->Y, 0) + FVector(0.f, 0.f, 100.f);
+			Officer->TeleportTo(Spot, FRotator(0.f, 45.f, 0.f));
+			GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("Shoplifting"), Spot + FVector(150.f, 0.f, -90.f), true);
+		}
+	});
+	AddStep(TEXT("escort"), 1.5f, [this]()
+	{
+		// Walk a few steps so the cuffed suspect trots after us.
+		if (APawn* Officer = GetPawn())
+		{
+			WalkDirection = Officer->GetActorForwardVector();
+			bWalkOfficer = true;
+		}
+	});
+	AddStep(TEXT("stop"), 0.6f, [this]() { bWalkOfficer = false; });
+	AddShot(TEXT("02b_arrest"), 0.2f);
+	AddStep(TEXT("go home"), 1.5f, [this]()
+	{
+		AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn());
+		AFTOCityGenerator* City = GetCity();
+		if (Officer && City)
+		{
+			Officer->TeleportTo(City->GetPrecinctLocation() + FVector(0.f, 0.f, 100.f), FRotator(0.f, 180.f, 0.f));
+		}
+	});
+	AddShot(TEXT("02c_booked"), 1.f);
+
 	// City views.
 	AddStep(TEXT("aerial"), 3.f, [this]()
 	{

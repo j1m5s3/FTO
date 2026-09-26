@@ -50,6 +50,7 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, IncidentsFailed);
 	DOREPLIFETIME(AFTOGameState, IncidentsWitnessed);
 	DOREPLIFETIME(AFTOGameState, TrafficStops);
+	DOREPLIFETIME(AFTOGameState, SuspectsBooked);
 	DOREPLIFETIME(AFTOGameState, PeakChaos);
 	DOREPLIFETIME(AFTOGameState, ShiftSeed);
 }
