@@ -12,6 +12,15 @@
 ```
 Or right-click `FTO.uproject` → *Generate Visual Studio project files* and build from the IDE.
 
+## Playing with friends
+1. Launch the game. It opens on the menu (Esc toggles it at any time).
+2. The host clicks **Host an online game**. The menu then shows the host's IP.
+3. Friends type that IP into **Join** (port 7777 is added automatically).
+4. Everyone gathers in the precinct lobby, and the host clicks **Start shift**. After the report card, **New shift** rolls a fresh city and brings everyone along.
+
+On the same network this just works. Over the internet, either forward UDP port 7777 on the host's router or use a
+free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invites need a Steam app ID and are on the roadmap.)
+
 ## Play
 - Open `FTO.uproject` and press Play, or run standalone:
   `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900`
@@ -27,6 +36,8 @@ Or right-click `FTO.uproject` → *Generate Visual Studio project files* and bui
 | `FTOSkipBriefing` | Start the shift immediately |
 | `FTOEndShift 1` | End the shift (1 = survived, 0 = overrun) |
 | `FTODrive` | Jump into the nearest free cruiser |
+
+Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 
 ## Controls
 | On foot | In a cruiser |

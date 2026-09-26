@@ -29,6 +29,7 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> Sprint;
 	UPROPERTY() TObjectPtr<UInputAction> Interact;
 	UPROPERTY() TObjectPtr<UInputAction> Whistle;
+	UPROPERTY() TObjectPtr<UInputAction> Menu;
 
 private:
 	UInputAction* MakeAction(FName Name, int32 ValueType);

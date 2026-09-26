@@ -33,6 +33,12 @@ public:
 	int32 MaxOfficers = 4;
 
 	// ---- Debug console commands (host only) ----
+	/** Lobby -> briefing: start the crime director. */
+	void StartShift();
+
+	/** Reload the city with a new seed (everyone travels along). */
+	void NewShift();
+
 	UFUNCTION(Exec) void FTOSpawnCrime(FName TemplateId);
 	UFUNCTION(Exec) void FTOAddChaos(float Amount);
 	UFUNCTION(Exec) void FTOSkipBriefing();

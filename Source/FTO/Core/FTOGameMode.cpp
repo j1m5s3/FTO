@@ -55,6 +55,11 @@ void AFTOGameMode::StartPlay()
 {
 	Super::StartPlay();
 
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+	{
+		GS->ShiftSeed = ShiftSeed;
+	}
+
 	if (CityGenerator)
 	{
 		if (AFTOAmbientPopulation* Population = GetWorld()->SpawnActor<AFTOAmbientPopulation>(AFTOAmbientPopulation::StaticClass(), FTransform::Identity))
@@ -80,7 +85,28 @@ void AFTOGameMode::StartPlay()
 		}
 	}
 
-	CrimeDirector->BeginShift(ShiftSeed);
+	// Officers gather in the lobby until the host starts the shift (-FTOQuickStart skips it).
+	if (FParse::Param(FCommandLine::Get(), TEXT("FTOQuickStart")))
+	{
+		StartShift();
+	}
+}
+
+void AFTOGameMode::StartShift()
+{
+	const AFTOGameState* GS = GetGameState<AFTOGameState>();
+	if (GS && GS->GetShiftPhase() == EFTOShiftPhase::Lobby)
+	{
+		CrimeDirector->BeginShift(ShiftSeed);
+	}
+}
+
+void AFTOGameMode::NewShift()
+{
+	const FString Map = UWorld::RemovePIEPrefix(GetWorld()->GetOutermost()->GetName());
+	const bool bListen = GetNetMode() == NM_ListenServer;
+	const int32 NextSeed = FMath::RandRange(1, MAX_int32 - 1);
+	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?Seed=%d%s"), *Map, NextSeed, bListen ? TEXT("?listen") : TEXT("")), true);
 }
 
 void AFTOGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
@@ -171,6 +197,7 @@ void AFTOGameMode::FTOSkipBriefing()
 {
 	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
 	{
+		StartShift();
 		if (GS->GetShiftPhase() == EFTOShiftPhase::Briefing)
 		{
 			const float Now = GetWorld()->GetTimeSeconds();

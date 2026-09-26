@@ -63,6 +63,13 @@ void AFTOHUD::DrawHUD()
 
 	switch (GS->GetShiftPhase())
 	{
+	case EFTOShiftPhase::Lobby:
+		DrawTeammateMarkers(GS);
+		DrawLobby(GS);
+		DrawInteractPrompt();
+		DrawCruiserPanel();
+		break;
+
 	case EFTOShiftPhase::Briefing:
 		DrawChaosMeter(GS);
 		DrawBriefing(GS);
@@ -506,4 +513,32 @@ void AFTOHUD::DrawCruiserPanel()
 
 	DrawCenteredText(TEXT("W/S drive  |  A/D steer  |  Space handbrake  |  Q siren  |  E get out"),
 		CX, Y + 55.f * S, FLinearColor(0.75f, 0.75f, 0.75f), GEngine->GetSmallFont(), S * 1.1f);
+}
+
+void AFTOHUD::DrawLobby(const AFTOGameState* GS)
+{
+	const float S = UIScale();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float Y = 24.f * S;
+	const bool bIsHost = GetNetMode() != NM_Client;
+
+	const int32 Officers = GS->PlayerArray.Num();
+	const float PanelH = (110.f + 26.f * Officers) * S;
+	DrawPanel(CX - 330.f * S, Y - 8.f * S, 660.f * S, PanelH);
+	DrawCenteredText(TEXT("PRECINCT LOBBY"), CX, Y, FLinearColor(0.6f, 0.8f, 1.f), GEngine->GetLargeFont(), S * 1.2f);
+	DrawCenteredText(bIsHost
+		? TEXT("Press Esc and choose Start shift when everyone's here")
+		: TEXT("Waiting for the host to start the shift"),
+		CX, Y + 40.f * S, FLinearColor(1.f, 0.85f, 0.35f), GEngine->GetMediumFont(), S);
+	DrawCenteredText(TEXT("Stretch your legs, or grab a cruiser (E)"), CX, Y + 66.f * S, FLinearColor(0.75f, 0.75f, 0.75f), GEngine->GetSmallFont(), S * 1.1f);
+
+	float RowY = Y + 92.f * S;
+	for (const APlayerState* PS : GS->PlayerArray)
+	{
+		const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
+		const FLinearColor Color = Officer ? Officer->GetOfficerColor() : FLinearColor::White;
+		DrawRect(Color, CX - 120.f * S, RowY + 4.f * S, 14.f * S, 14.f * S);
+		DrawText(PS ? PS->GetPlayerName() : FString(), FLinearColor::White, CX - 96.f * S, RowY, GEngine->GetMediumFont(), S);
+		RowY += 26.f * S;
+	}
 }

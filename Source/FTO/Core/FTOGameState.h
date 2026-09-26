@@ -9,6 +9,7 @@ class AFTOIncident;
 UENUM(BlueprintType)
 enum class EFTOShiftPhase : uint8
 {
+	Lobby,		// officers gather at the precinct until the host starts the shift
 	Briefing,	// short countdown before crimes start
 	OnDuty,
 	Survived,	// made it to the end of the shift
@@ -67,7 +68,7 @@ public:
 protected:
 	UPROPERTY(Replicated) float Chaos = 0.f;
 
-	UPROPERTY(ReplicatedUsing=OnRep_ShiftPhase) EFTOShiftPhase ShiftPhase = EFTOShiftPhase::Briefing;
+	UPROPERTY(ReplicatedUsing=OnRep_ShiftPhase) EFTOShiftPhase ShiftPhase = EFTOShiftPhase::Lobby;
 	UPROPERTY(Replicated) float BriefingEndTime = 0.f;
 	UPROPERTY(Replicated) float ShiftEndTime = 0.f;
 
