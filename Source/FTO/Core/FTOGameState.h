@@ -16,7 +16,17 @@ enum class EFTOShiftPhase : uint8
 	Briefing,	// short countdown before crimes start
 	OnDuty,
 	Survived,	// made it to the end of the shift
-	Overrun		// chaos hit 100
+	Overrun,	// chaos hit 100
+	OvertimeVote	// the clock ran out: the squad votes to keep going (overtime) or clock off
+};
+
+/** An officer's say when the shift clock runs out. */
+UENUM(BlueprintType)
+enum class EFTOShiftVote : uint8
+{
+	None,
+	Overtime,
+	ClockOff
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFTOShiftPhaseChanged, EFTOShiftPhase, NewPhase);
@@ -101,6 +111,16 @@ public:
 	/** Server only. */
 	void SetShiftTimes(float InBriefingEnd, float InShiftEnd);
 
+	// ---- End of shift: overtime or clock off ----
+	/** Seconds left to vote (OvertimeVote only). */
+	float GetVoteTimeRemaining() const;
+	/** How many times the squad has gone into overtime this shift. */
+	int32 GetOvertimes() const { return Overtimes; }
+	/** Server: the clock's run out: everyone has until Now + Seconds to vote. */
+	void BeginOvertimeVote(float Seconds);
+	/** Server: the squad voted to keep going: Seconds more on the clock, chaos as it was. */
+	void StartOvertime(float Seconds);
+
 	UPROPERTY(BlueprintAssignable, Category="FTO|Shift")
 	FFTOShiftPhaseChanged OnShiftPhaseChanged;
 
@@ -129,6 +149,8 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_ShiftPhase) EFTOShiftPhase ShiftPhase = EFTOShiftPhase::Lobby;
 	UPROPERTY(Replicated) float BriefingEndTime = 0.f;
 	UPROPERTY(Replicated) float ShiftEndTime = 0.f;
+	UPROPERTY(Replicated) float VoteEndTime = 0.f;
+	UPROPERTY(Replicated) int32 Overtimes = 0;
 
 	UPROPERTY(Replicated) TArray<TObjectPtr<AFTOIncident>> Incidents;
 

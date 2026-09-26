@@ -16,6 +16,7 @@ void AFTOPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AFTOPlayerState, bOnRadio);
 	DOREPLIFETIME(AFTOPlayerState, Callout);
 	DOREPLIFETIME(AFTOPlayerState, Stats);
+	DOREPLIFETIME(AFTOPlayerState, ShiftVote);
 	DOREPLIFETIME(AFTOPlayerState, Combo);
 	DOREPLIFETIME(AFTOPlayerState, ComboTime);
 }
@@ -249,4 +250,11 @@ void AFTOPlayerState::MulticastScorePopup_Implementation(int32 Points, EFTOScore
 	{
 		HUD->AddScorePopup(this, Points, Event, Where, InCombo);
 	}
+}
+
+void AFTOPlayerState::SetShiftVote(EFTOShiftVote Vote)
+{
+	check(HasAuthority());
+	ShiftVote = Vote;
+	ForceNetUpdate();
 }

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "Core/FTOGameState.h"
 #include "Radio/FTORadio.h"
 #include "FTOPlayerController.generated.h"
 
@@ -71,6 +72,11 @@ public:
 	EFTOCallout GetWheelChoice() const;
 	/** Where on the wheel the stick or mouse points (unit circle). */
 	FVector2D GetWheelAim() const { return WheelAim; }
+
+	/** End of shift: vote to go into overtime or clock off (Y / N). Also a console command: FTOVote Overtime|ClockOff. */
+	UFUNCTION(Exec) void FTOVote(const FString& Name);
+	UFUNCTION(Server, Reliable)
+	void ServerShiftVote(EFTOShiftVote Vote);
 
 	/** Local: the shift's over: watch the squad line up outside the precinct (and stand still for the photo). */
 	void ShowDebrief();

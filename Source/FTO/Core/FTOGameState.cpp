@@ -71,6 +71,8 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, ShiftPhase);
 	DOREPLIFETIME(AFTOGameState, BriefingEndTime);
 	DOREPLIFETIME(AFTOGameState, ShiftEndTime);
+	DOREPLIFETIME(AFTOGameState, VoteEndTime);
+	DOREPLIFETIME(AFTOGameState, Overtimes);
 	DOREPLIFETIME(AFTOGameState, Incidents);
 	DOREPLIFETIME(AFTOGameState, IncidentsResolved);
 	DOREPLIFETIME(AFTOGameState, IncidentsFailed);
@@ -91,7 +93,7 @@ void AFTOGameState::AddChaos(float Delta)
 
 float AFTOGameState::GetShiftTimeRemaining() const
 {
-	if (ShiftPhase == EFTOShiftPhase::Survived || ShiftPhase == EFTOShiftPhase::Overrun)
+	if (ShiftPhase == EFTOShiftPhase::Survived || ShiftPhase == EFTOShiftPhase::Overrun || ShiftPhase == EFTOShiftPhase::OvertimeVote)
 	{
 		return 0.f;
 	}
@@ -132,4 +134,24 @@ void AFTOGameState::UnregisterIncident(AFTOIncident* Incident)
 void AFTOGameState::OnRep_ShiftPhase()
 {
 	OnShiftPhaseChanged.Broadcast(ShiftPhase);
+}
+
+float AFTOGameState::GetVoteTimeRemaining() const
+{
+	return ShiftPhase == EFTOShiftPhase::OvertimeVote ? FMath::Max(0.f, VoteEndTime - GetServerWorldTimeSeconds()) : 0.f;
+}
+
+void AFTOGameState::BeginOvertimeVote(float Seconds)
+{
+	check(HasAuthority());
+	VoteEndTime = GetServerWorldTimeSeconds() + Seconds;
+	SetShiftPhase(EFTOShiftPhase::OvertimeVote);
+}
+
+void AFTOGameState::StartOvertime(float Seconds)
+{
+	check(HasAuthority());
+	++Overtimes;
+	ShiftEndTime = GetServerWorldTimeSeconds() + Seconds;
+	SetShiftPhase(EFTOShiftPhase::OnDuty);
 }

@@ -99,6 +99,14 @@ void AFTOHUD::DrawHUD()
 		DrawScoreTicker();
 		break;
 
+	case EFTOShiftPhase::OvertimeVote:
+		DrawIncidentMarkers(GS);
+		DrawTeammateMarkers(GS);
+		DrawChaosMeter(GS);
+		DrawScoreTicker();
+		DrawOvertimeVote(GS);
+		break;
+
 	default:
 		DrawShiftReport(GS);
 		break;
@@ -165,7 +173,10 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 {
 	const float S = UIScale();
 	UFont* Font = GEngine->GetLargeFont();
-	const FString Clock = FString::Printf(TEXT("SHIFT  %s"), *FormatClock(GS->GetShiftTimeRemaining()));
+	// Into overtime, the clock says so.
+	const FString Clock = GS->GetOvertimes() > 0
+		? FString::Printf(TEXT("OVERTIME%s  %s"), GS->GetOvertimes() > 1 ? *FString::Printf(TEXT(" x%d"), GS->GetOvertimes()) : TEXT(""), *FormatClock(GS->GetShiftTimeRemaining()))
+		: FString::Printf(TEXT("SHIFT  %s"), *FormatClock(GS->GetShiftTimeRemaining()));
 
 	float W = 0.f, H = 0.f;
 	GetTextSize(Clock, W, H, Font, S);
@@ -730,6 +741,8 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 		case EFTOShiftPhase::Briefing: Play(Sounds.Bugle, 0.8f); break;
 		case EFTOShiftPhase::Survived: Play(Sounds.Fanfare, 0.8f); break;
 		case EFTOShiftPhase::Overrun:  Play(Sounds.Womp, 0.8f); break;
+		case EFTOShiftPhase::OvertimeVote: Play(Sounds.Alarm, 0.6f); break;
+		case EFTOShiftPhase::OnDuty:   if (LastPhase == EFTOShiftPhase::OvertimeVote) { Play(Sounds.Bugle, 0.8f); } break;
 		default: break;
 		}
 	}

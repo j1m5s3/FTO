@@ -53,6 +53,17 @@ public:
 	UPROPERTY(EditAnywhere, Category="Director|Shift")
 	float ShiftLengthSeconds = 20.f * 60.f;
 
+	/** When the clock runs out the squad has this long to vote for overtime or to clock off... */
+	UPROPERTY(EditAnywhere, Category="Director|Shift")
+	float OvertimeVoteSeconds = 20.f;
+
+	/** ...and overtime puts this much back on the clock. */
+	UPROPERTY(EditAnywhere, Category="Director|Shift")
+	float OvertimeSeconds = 10.f * 60.f;
+
+	/** Server: count the votes now (everyone's voted, or time's up): overtime or clock off. */
+	void ResolveOvertimeVote();
+
 	/** Seconds between new incidents at 0 chaos and at 100 chaos. */
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
 	FVector2D SpawnIntervalRange = FVector2D(22.f, 7.f);
@@ -108,6 +119,7 @@ protected:
 	void HandleIncidentDestroyed(AActor* DestroyedActor);
 
 	void TickOnDuty(float DeltaTime);
+	void TickOvertimeVote();
 
 	UPROPERTY(Transient)
 	TObjectPtr<UFTOCrimeCatalog> Catalog;
