@@ -250,3 +250,63 @@ void AFTOHUD::DrawScoreboard(const AFTOGameState* GS)
 		GS->IncidentsResolved, GS->IncidentsWitnessed, GS->TrafficStops, GS->SuspectsBooked, GS->IncidentsFailed, GS->CiviliansBowledOver, FMath::RoundToInt(GS->PeakChaos));
 	DrawCenteredText(Footer, CX, Top + H - 32.f * S, FLinearColor(0.75f, 0.75f, 0.75f), Small, S * 1.1f);
 }
+
+void AFTOHUD::DrawOvertimeVote(const AFTOGameState* GS)
+{
+	const float S = UIScale();
+	const float CX = Canvas->ClipX * 0.5f;
+	const float Top = Canvas->ClipY * 0.2f;
+	const float W = 760.f * S;
+	const float H = 300.f * S;
+	UFont* Large = GEngine->GetLargeFont();
+	UFont* Medium = GEngine->GetMediumFont();
+	UFont* Small = GEngine->GetSmallFont();
+	const APlayerController* PC = GetOwningPlayerController();
+	const float Time = GetWorld()->GetTimeSeconds();
+
+	DrawPanel(CX - W * 0.5f, Top, W, H, FLinearColor(0.f, 0.f, 0.f, 0.78f));
+	const float Flash = 0.75f + 0.25f * FMath::Sin(Time * 6.f);
+	DrawCenteredText(TEXT("END OF SHIFT!"), CX, Top + 12.f * S, FLinearColor(1.f, 0.8f * Flash, 0.2f), Large, S * 2.f);
+	DrawCenteredText(TEXT("The city's still standing. Keep going?"), CX, Top + 66.f * S, FLinearColor::White, Medium, S * 1.2f);
+
+	// The time left to decide.
+	const float Left = GS->GetVoteTimeRemaining();
+	const float BarW = W - 80.f * S;
+	DrawRect(FLinearColor(0.15f, 0.15f, 0.15f, 0.9f), CX - BarW * 0.5f, Top + 104.f * S, BarW, 8.f * S);
+	DrawRect(FLinearColor(1.f, 0.75f, 0.2f), CX - BarW * 0.5f, Top + 104.f * S, BarW * FMath::Clamp(Left / FMath::Max(1.f, GS->GetVoteDuration()), 0.f, 1.f), 8.f * S);
+
+	// The two choices, ours lit up.
+	const AFTOPlayerState* Me = PC ? PC->GetPlayerState<AFTOPlayerState>() : nullptr;
+	const EFTOShiftVote Mine = Me ? Me->GetShiftVote() : EFTOShiftVote::None;
+	const int32 Offer = FMath::RoundToInt(GS->GetOvertimeOffer());
+	const FString OvertimeText = FString::Printf(TEXT("[Y] OVERTIME  +%d:%02d"), Offer / 60, Offer % 60);
+	struct FChoice { EFTOShiftVote Vote; const TCHAR* Text; FLinearColor Color; float X; };
+	const FChoice Choices[] =
+	{
+		{ EFTOShiftVote::Overtime, *OvertimeText, FLinearColor(1.f, 0.7f, 0.2f), CX - W * 0.25f },
+		{ EFTOShiftVote::ClockOff, TEXT("[N] CLOCK OFF"), FLinearColor(0.4f, 1.f, 0.5f), CX + W * 0.25f },
+	};
+	for (const FChoice& Choice : Choices)
+	{
+		const bool bPicked = Mine == Choice.Vote;
+		float TW = 0.f, TH = 0.f;
+		GetTextSize(Choice.Text, TW, TH, Medium, S * 1.3f);
+		DrawPanel(Choice.X - TW * 0.5f - 16.f * S, Top + 128.f * S, TW + 32.f * S, TH + 16.f * S,
+			bPicked ? FLinearColor(Choice.Color.R * 0.5f, Choice.Color.G * 0.5f, Choice.Color.B * 0.5f, 0.95f) : FLinearColor(1.f, 1.f, 1.f, 0.06f));
+		DrawCenteredText(Choice.Text, Choice.X, Top + 136.f * S, bPicked ? FLinearColor::White : Choice.Color, Medium, S * 1.3f);
+	}
+
+	// Everyone's say so far.
+	TArray<FString> Says;
+	for (const APlayerState* PS : GS->PlayerArray)
+	{
+		if (const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS))
+		{
+			const TCHAR* Say = Officer->GetShiftVote() == EFTOShiftVote::Overtime ? TEXT("overtime") : (Officer->GetShiftVote() == EFTOShiftVote::ClockOff ? TEXT("clock off") : TEXT("..."));
+			Says.Add(FString::Printf(TEXT("%s: %s"), *Officer->GetCallsign(), Say));
+		}
+	}
+	DrawCenteredText(FString::Join(Says, TEXT("    ")), CX, Top + 200.f * S, FLinearColor(0.85f, 0.85f, 0.85f), Medium, S * 1.1f);
+	DrawCenteredText(FString::Printf(TEXT("Most votes wins; the host breaks a tie (and decides if nobody votes).  %d s"), FMath::CeilToInt(Left)),
+		CX, Top + 250.f * S, FLinearColor(0.65f, 0.65f, 0.65f), Small, S * 1.1f);
+}

@@ -1,5 +1,6 @@
 #include "Crime/FTOIncident.h"
 #include "Crime/FTOPerp.h"
+#include "Core/FTOGameState.h"
 #include "Core/FTOCharacter.h"
 #include "City/FTOCityGenerator.h"
 #include "City/FTOTrafficCar.h"
@@ -318,6 +319,11 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 {
 	// Subdued: nothing to do but wait for the cuffs.
 	if (!IsActive() || bSubdued)
+	{
+		return;
+	}
+	// The shift clock's run out and the squad's voting: the city holds its breath (nothing escalates or goes cold).
+	if (const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>(); GS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote)
 	{
 		return;
 	}

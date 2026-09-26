@@ -421,9 +421,31 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddShot(TEXT("05_incident"), 2.f);
 
-	// Win the shift: the squad lines up outside the precinct and dances while the scoreboard counts up (the arrest
-	// and the booking above should have scored).
-	AddStep(TEXT("end shift"), 4.4f, [this]()
+	// The clock runs out: the squad votes for overtime (back on duty with more time on the clock)...
+	AddStep(TEXT("clock runs out"), 1.2f, [this]()
+	{
+		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOShiftTimeLeft(0.f); }
+	});
+	AddShot(TEXT("05b_overtime_vote"), 0.3f);
+	AddStep(TEXT("vote for overtime"), 1.f, [this]()
+	{
+		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: clock ran out: %s."), GS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote ? TEXT("the squad's voting") : TEXT("NO VOTE"));
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->FTOVote(TEXT("Overtime")); }
+		// Don't wait on anyone else (a partner who says nothing leaves it to the host).
+		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->GetCrimeDirector()->ResolveOvertimeVote(); }
+	});
+	AddStep(TEXT("overtime"), 0.5f, [this]()
+	{
+		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: overtime vote: %s (overtime %d, %.0f s on the clock)."), GS && GS->GetShiftPhase() == EFTOShiftPhase::OnDuty ? TEXT("back on duty") : TEXT("NOT BACK ON DUTY"),
+			GS ? GS->GetOvertimes() : -1, GS ? GS->GetShiftTimeRemaining() : -1.f);
+	});
+	AddShot(TEXT("05c_overtime"), 0.5f);
+
+	// ...then runs out again and they clock off: the squad lines up outside the precinct and dances while the scoreboard
+	// counts up (the arrest and the booking above should have scored).
+	AddStep(TEXT("end shift"), 1.2f, [this]()
 	{
 		if (const AFTOPlayerState* PS = GetPC() ? GetPC()->GetPlayerState<AFTOPlayerState>() : nullptr)
 		{
@@ -431,7 +453,12 @@ void AFTOSmokeTest::BuildSteps()
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: score before the whistle: %d (%d arrests, %d booked, %d caught in the act, best combo x%s)."), Stats.Score, Stats.Arrests,
 				Stats.Booked, Stats.CaughtInAct, *FString::SanitizeFloat(FTOScoring::ComboMultiplier(Stats.BestCombo)));
 		}
-		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOEndShift(true); }
+		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOShiftTimeLeft(0.f); }
+	});
+	AddStep(TEXT("clock off"), 4.4f, [this]()
+	{
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->FTOVote(TEXT("ClockOff")); }
+		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->GetCrimeDirector()->ResolveOvertimeVote(); }
 	});
 	AddShot(TEXT("06_shift_report"), 0.5f);
 	AddStep(TEXT("after the debrief"), 0.3f, [this]()
@@ -693,7 +720,7 @@ void AFTOSmokeTest::BuildSteps()
 		AFTOGameMode* GM = GetAuthGameMode();
 		if (GM)
 		{
-			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>()) { GS->SetShiftPhase(EFTOShiftPhase::OnDuty); }
+			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>()) { GS->SetShiftPhase(EFTOShiftPhase::OnDuty); if (AFTOGameMode* Mode = GetAuthGameMode()) { Mode->FTOShiftTimeLeft(600.f); } }
 			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
 			AFTOCityGenerator* City = GetCity();
 			AFTOCruiser* Nearest = nullptr;
@@ -842,7 +869,7 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 			{
-				GS->SetShiftPhase(EFTOShiftPhase::OnDuty);
+				GS->SetShiftPhase(EFTOShiftPhase::OnDuty); if (AFTOGameMode* Mode = GetAuthGameMode()) { Mode->FTOShiftTimeLeft(600.f); }
 				ChaosBefore = GS->GetChaos();
 			}
 			const FVector Car = TestCruiser->GetActorLocation();
@@ -1134,7 +1161,7 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 			{
-				GS->SetShiftPhase(EFTOShiftPhase::OnDuty);
+				GS->SetShiftPhase(EFTOShiftPhase::OnDuty); if (AFTOGameMode* Mode = GetAuthGameMode()) { Mode->FTOShiftTimeLeft(600.f); }
 			}
 			// Down the hold-up's street again, a brawler two steps ahead.
 			const FVector Start = City->GetIntersection(1, 1);

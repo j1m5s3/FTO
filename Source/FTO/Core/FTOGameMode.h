@@ -44,6 +44,8 @@ public:
 	UFUNCTION(Exec) void FTOAddChaos(float Amount);
 	UFUNCTION(Exec) void FTOSkipBriefing();
 	UFUNCTION(Exec) void FTOEndShift(bool bSurvived = true);
+	/** Put this many seconds on the shift clock (0 runs it out: the overtime vote). */
+	UFUNCTION(Exec) void FTOShiftTimeLeft(float Seconds);
 	UFUNCTION(Exec) void FTOKnockdown(float Radius = 1500.f);
 	UFUNCTION(Exec) void FTOAnimGallery();
 

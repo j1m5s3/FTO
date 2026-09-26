@@ -133,4 +133,12 @@ void UFTOInputConfig::Build()
 		Callouts.Add(MakeAction(*FString::Printf(TEXT("IA_Callout%d"), i + 1), (int32)EInputActionValueType::Boolean));
 		WheelContext->MapKey(Callouts[i], CalloutKeys[i]);
 	}
+
+	// End of shift
+	VoteOvertime = MakeAction(TEXT("IA_VoteOvertime"), (int32)EInputActionValueType::Boolean);
+	VoteClockOff = MakeAction(TEXT("IA_VoteClockOff"), (int32)EInputActionValueType::Boolean);
+	DefaultContext->MapKey(VoteOvertime, EKeys::Y);
+	DefaultContext->MapKey(VoteOvertime, EKeys::Gamepad_LeftShoulder);
+	DefaultContext->MapKey(VoteClockOff, EKeys::N);
+	DefaultContext->MapKey(VoteClockOff, EKeys::Gamepad_Special_Left);
 }

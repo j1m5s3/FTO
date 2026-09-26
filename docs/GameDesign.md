@@ -137,7 +137,11 @@ Done:
   shift the squad lines up outside the precinct, dancing (or slumping), while a scoreboard counts up, ranks them,
   hands out awards (Top Cop, Traffic Warden, Bull in a China Shop...) and grades the shift S to F.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (destruction, shift extension, Steam invites),
+- Shift extension. When the 20-minute clock runs out the city holds still while the squad votes: ten minutes of
+  overtime (chaos and all), or clock off to the scoreboard. Most votes win; the host breaks ties and speaks for anyone
+  who stays quiet.
+
+Next: see [Phase 2 plan](Phase2Plan.md) (destruction, Steam invites),
 tracked in [TODO](TODO.md).
 
 Later ideas:

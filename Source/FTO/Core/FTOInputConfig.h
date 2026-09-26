@@ -55,6 +55,9 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> RadioAim;
 	UPROPERTY() TObjectPtr<UInputAction> RadioAimStick;
 	UPROPERTY() TArray<TObjectPtr<UInputAction>> Callouts;
+	/** End of shift: vote for overtime (Y, left bumper) or to clock off (N, view button). */
+	UPROPERTY() TObjectPtr<UInputAction> VoteOvertime;
+	UPROPERTY() TObjectPtr<UInputAction> VoteClockOff;
 
 private:
 	UInputAction* MakeAction(FName Name, int32 ValueType);

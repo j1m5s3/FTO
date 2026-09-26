@@ -60,6 +60,8 @@ protected:
 	void DrawScorePopups();
 	void DrawScoreTicker();
 	void DrawScoreboard(const AFTOGameState* GS);
+	/** The clock's run out: overtime or clock off? Everyone's vote, and the time left to decide. */
+	void DrawOvertimeVote(const AFTOGameState* GS);
 
 	struct FScorePopup
 	{

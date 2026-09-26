@@ -83,6 +83,8 @@ void AFTOPlayerController::SetupInputComponent()
 		{
 			EIC->BindAction(Config->Callouts[i], ETriggerEvent::Started, this, &AFTOPlayerController::CalloutPicked, i);
 		}
+		EIC->BindAction(Config->VoteOvertime, ETriggerEvent::Started, this, &AFTOPlayerController::VotePressed, EFTOShiftVote::Overtime);
+		EIC->BindAction(Config->VoteClockOff, ETriggerEvent::Started, this, &AFTOPlayerController::VotePressed, EFTOShiftVote::ClockOff);
 	}
 }
 
@@ -469,4 +471,32 @@ void AFTOPlayerController::EndDebrief()
 	DebriefCamera = nullptr;
 	ResetIgnoreInputFlags();
 	SetViewTargetWithBlend(GetPawn(), 0.5f);
+}
+void AFTOPlayerController::FTOVote(const FString& Name)
+{
+	const int64 Value = StaticEnum<EFTOShiftVote>()->GetValueByNameString(Name);
+	if (Value != INDEX_NONE)
+	{
+		ServerShiftVote(static_cast<EFTOShiftVote>(Value));
+	}
+}
+
+void AFTOPlayerController::ServerShiftVote_Implementation(EFTOShiftVote Vote)
+{
+	// Only while the squad's deciding (the keys do nothing the rest of the time).
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>();
+	if (GS && PS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote && (Vote == EFTOShiftVote::Overtime || Vote == EFTOShiftVote::ClockOff))
+	{
+		PS->SetShiftVote(Vote);
+	}
+}
+void AFTOPlayerController::VotePressed(EFTOShiftVote Vote)
+{
+	// Y and N only mean something while the squad's deciding.
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	if (GS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote)
+	{
+		ServerShiftVote(Vote);
+	}
 }

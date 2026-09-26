@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerState.h"
+#include "Core/FTOGameState.h"
 #include "Radio/FTORadio.h"
 #include "Scoring/FTOScoring.h"
 #include "FTOPlayerState.generated.h"
@@ -61,6 +62,12 @@ public:
 	/** Server time the combo last grew (it lapses FTOScoring::ComboWindow later). */
 	float GetComboTime() const { return ComboTime; }
 
+	// ---- End of shift ----
+	/** Overtime or clock off, while the squad votes (None until they say). */
+	EFTOShiftVote GetShiftVote() const { return ShiftVote; }
+	/** Server. */
+	void SetShiftVote(EFTOShiftVote Vote);
+
 	/** Every machine: the "+250 ARREST! x2" popup (reliable: an arrest and its bonuses land in the same frame). */
 	UFUNCTION(NetMulticast, Reliable)
 	void MulticastScorePopup(int32 Points, EFTOScore Event, FVector_NetQuantize Where, uint8 InCombo);
@@ -91,6 +98,7 @@ protected:
 	UPROPERTY(Transient) TObjectPtr<UVOIPTalker> VoiceTalker;
 	float LastCalloutTime = -100.f;
 
+	UPROPERTY(Replicated) EFTOShiftVote ShiftVote = EFTOShiftVote::None;
 	UPROPERTY(Replicated) FFTOOfficerStats Stats;
 	UPROPERTY(Replicated) uint8 Combo = 1;
 	/** Server time of the last award that built the combo. */

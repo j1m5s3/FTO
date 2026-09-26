@@ -6,6 +6,8 @@
 #include "Crime/FTOArrestee.h"
 #include "Crime/FTOPerp.h"
 #include "Core/FTOCharacter.h"
+#include "Core/FTOPlayerController.h"
+#include "Core/FTOPlayerState.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "NavigationSystem.h"
@@ -123,6 +125,10 @@ void UFTOCrimeDirector::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 		TickOnDuty(DeltaTime);
 		break;
 
+	case EFTOShiftPhase::OvertimeVote:
+		TickOvertimeVote();
+		break;
+
 	default:
 		break;
 	}
@@ -153,8 +159,16 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 	}
 	if (GS->GetShiftTimeRemaining() <= 0.f)
 	{
-		GS->SetShiftPhase(EFTOShiftPhase::Survived);
-		UE_LOG(LogFTO, Log, TEXT("Shift survived! Resolved %d, failed %d."), GS->IncidentsResolved, GS->IncidentsFailed);
+		// Made it! The city holds its breath while the squad decides: overtime, or clock off.
+		for (APlayerState* PS : GS->PlayerArray)
+		{
+			if (AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS))
+			{
+				Officer->SetShiftVote(EFTOShiftVote::None);
+			}
+		}
+		GS->BeginOvertimeVote(OvertimeVoteSeconds, OvertimeSeconds);
+		UE_LOG(LogFTO, Log, TEXT("Shift clock ran out (resolved %d, failed %d): overtime vote."), GS->IncidentsResolved, GS->IncidentsFailed);
 		return;
 	}
 
@@ -478,4 +492,91 @@ AFTOIncident* UFTOCrimeDirector::SpawnIncidentAt(FName TemplateId, const FTransf
 {
 	const FFTOCrimeTemplate* Template = Catalog ? Catalog->FindTemplate(TemplateId) : nullptr;
 	return Template ? SpawnFromTemplate(*Template, Where, BuildingIndex, bForceReported) : nullptr;
+}
+
+void UFTOCrimeDirector::TickOvertimeVote()
+{
+	// The city's paused, but anything still going on (a struggle, a booking) can tip it over.
+	AFTOGameState* GS = GetFTOGameState();
+	if (GS->GetChaos() >= AFTOGameState::MaxChaos)
+	{
+		GS->SetShiftPhase(EFTOShiftPhase::Overrun);
+		return;
+	}
+	// Over as soon as every officer has had their say, or the time's up.
+	int32 Officers = 0;
+	int32 Voted = 0;
+	for (const APlayerState* PS : GS->PlayerArray)
+	{
+		if (const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS); Officer && !Officer->IsSpectator())
+		{
+			++Officers;
+			Voted += Officer->GetShiftVote() != EFTOShiftVote::None ? 1 : 0;
+		}
+	}
+	if ((Officers > 0 && Voted == Officers) || GS->GetVoteTimeRemaining() <= 0.f)
+	{
+		ResolveOvertimeVote();
+	}
+}
+
+void UFTOCrimeDirector::ResolveOvertimeVote()
+{
+	AFTOGameState* GS = GetFTOGameState();
+	if (!GS || GS->GetShiftPhase() != EFTOShiftPhase::OvertimeVote)
+	{
+		return;
+	}
+	// Most votes wins. The host speaks for anyone who said nothing and settles a tie (clocking off if the host said
+	// nothing either).
+	int32 Keep = 0;
+	int32 Off = 0;
+	int32 Silent = 0;
+	EFTOShiftVote HostVote = EFTOShiftVote::None;
+	for (APlayerState* PS : GS->PlayerArray)
+	{
+		const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
+		if (!Officer || Officer->IsSpectator())
+		{
+			continue;
+		}
+		Keep += Officer->GetShiftVote() == EFTOShiftVote::Overtime ? 1 : 0;
+		Off += Officer->GetShiftVote() == EFTOShiftVote::ClockOff ? 1 : 0;
+		Silent += Officer->GetShiftVote() == EFTOShiftVote::None ? 1 : 0;
+		if (const APlayerController* PC = Officer->GetPlayerController(); PC && PC->IsLocalController())
+		{
+			HostVote = Officer->GetShiftVote();
+		}
+	}
+	if (HostVote == EFTOShiftVote::Overtime)
+	{
+		Keep += Silent;
+	}
+	else if (HostVote == EFTOShiftVote::ClockOff)
+	{
+		Off += Silent;
+	}
+	const bool bOvertime = Keep != Off ? Keep > Off : HostVote == EFTOShiftVote::Overtime;
+
+	FText Message;
+	if (bOvertime)
+	{
+		GS->StartOvertime(OvertimeSeconds);
+		NextSpawnTime = GetWorld()->GetTimeSeconds() + 3.f;
+		Message = FText::Format(INVTEXT("OVERTIME! Another {0} minutes on the clock."), FText::AsNumber(FMath::RoundToInt(OvertimeSeconds / 60.f)));
+	}
+	else
+	{
+		GS->SetShiftPhase(EFTOShiftPhase::Survived);
+		Message = INVTEXT("Clocking off. Good shift, officers!");
+	}
+	UE_LOG(LogFTO, Log, TEXT("Overtime vote: %d for, %d against, host %s: %s."), Keep, Off, *StaticEnum<EFTOShiftVote>()->GetNameStringByValue(int64(HostVote)),
+		bOvertime ? TEXT("overtime") : TEXT("clocking off"));
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(It->Get()))
+		{
+			PC->ClientToast(Message, bOvertime ? FLinearColor(1.f, 0.75f, 0.2f) : FLinearColor(0.4f, 1.f, 0.5f));
+		}
+	}
 }

@@ -16,6 +16,7 @@ void AFTOPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 	DOREPLIFETIME(AFTOPlayerState, bOnRadio);
 	DOREPLIFETIME(AFTOPlayerState, Callout);
 	DOREPLIFETIME(AFTOPlayerState, Stats);
+	DOREPLIFETIME(AFTOPlayerState, ShiftVote);
 	DOREPLIFETIME(AFTOPlayerState, Combo);
 	DOREPLIFETIME(AFTOPlayerState, ComboTime);
 }
@@ -192,9 +193,9 @@ int32 AFTOPlayerState::GetCombo() const
 int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector& Where)
 {
 	check(HasAuthority());
-	// Only the shift itself counts (not the lobby, and not after the whistle).
+	// Only the shift itself counts (not the lobby, and not after the whistle; an arrest finished during the vote does).
 	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
-	if (!GS || GS->GetShiftPhase() != EFTOShiftPhase::OnDuty || BasePoints == 0)
+	if (!GS || (GS->GetShiftPhase() != EFTOShiftPhase::OnDuty && GS->GetShiftPhase() != EFTOShiftPhase::OvertimeVote) || BasePoints == 0)
 	{
 		return 0;
 	}
@@ -249,4 +250,11 @@ void AFTOPlayerState::MulticastScorePopup_Implementation(int32 Points, EFTOScore
 	{
 		HUD->AddScorePopup(this, Points, Event, Where, InCombo);
 	}
+}
+
+void AFTOPlayerState::SetShiftVote(EFTOShiftVote Vote)
+{
+	check(HasAuthority());
+	ShiftVote = Vote;
+	ForceNetUpdate();
 }

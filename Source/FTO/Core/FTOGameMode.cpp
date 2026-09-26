@@ -367,3 +367,11 @@ void AFTOGameMode::GatherForDebrief()
 		}
 	}
 }
+void AFTOGameMode::FTOShiftTimeLeft(float Seconds)
+{
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>(); GS && GS->GetShiftPhase() == EFTOShiftPhase::OnDuty)
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		GS->SetShiftTimes(Now, Now + FMath::Max(0.f, Seconds));
+	}
+}
