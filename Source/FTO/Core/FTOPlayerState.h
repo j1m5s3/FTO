@@ -35,8 +35,9 @@ public:
 	/** Server: this officer's holding push-to-talk (everyone else hears the squelch and sees them on air). */
 	void SetOnRadio(bool bOn);
 	bool IsOnRadio() const { return bOnRadio; }
-	/** Server: a quick callout. False while the last one's still cooling down. */
-	bool MakeCallout(EFTOCallout Callout);
+	/** Server: a quick callout. False while the last one's still cooling down. bAutomatic (the radio calling in
+	 *  that we're down) is about us and skips the cooldown. */
+	bool MakeCallout(EFTOCallout Callout, bool bAutomatic = false);
 	/** This officer's latest callout (its ping lasts FTORadio::PingSeconds). */
 	const FFTOCalloutPing& GetCallout() const { return Callout; }
 	/** Seconds since that callout (by the server clock), or a large number if there's never been one. */

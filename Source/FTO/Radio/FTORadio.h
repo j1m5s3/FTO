@@ -63,6 +63,6 @@ namespace FTORadio
 	FTO_API USoundBase* SquelchClose();
 	FTO_API USoundBase* CalloutChirp();
 
-	/** Server: where a callout from Caller should point (and what to follow). */
-	FTO_API FFTOCalloutPing ResolvePing(const APlayerState* Caller, EFTOCallout Callout);
+	/** Server: where a callout from Caller should point (and what to follow). bAboutCaller pins it on the caller. */
+	FTO_API FFTOCalloutPing ResolvePing(const APlayerState* Caller, EFTOCallout Callout, bool bAboutCaller = false);
 }

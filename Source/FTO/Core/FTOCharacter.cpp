@@ -1172,7 +1172,7 @@ bool AFTOCharacter::GoDown(const FVector& Launch, float Seconds)
 	// The radio calls it in for them (the ping follows them until they're up).
 	if (AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>())
 	{
-		PS->MakeCallout(EFTOCallout::OfficerDown);
+		PS->MakeCallout(EFTOCallout::OfficerDown, true);
 	}
 	return true;
 }

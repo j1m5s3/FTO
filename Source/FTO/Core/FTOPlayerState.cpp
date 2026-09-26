@@ -103,6 +103,12 @@ void AFTOPlayerState::SetOnRadio(bool bOn)
 
 void AFTOPlayerState::OnRep_OnRadio()
 {
+	// Our talker can be knocked off the engine's list (a rejoin under the same ID before the old one is collected):
+	// put it back before they speak.
+	if (VoiceTalker && GetUniqueId().IsValid() && UVOIPStatics::GetVOIPTalkerForPlayer(GetUniqueId()) != VoiceTalker)
+	{
+		VoiceTalker->RegisterWithPlayerState(this);
+	}
 	PlaySquelch();
 }
 
@@ -115,17 +121,18 @@ void AFTOPlayerState::PlaySquelch() const
 	UGameplayStatics::PlaySound2D(this, bOnRadio ? FTORadio::SquelchOpen() : FTORadio::SquelchClose(), 0.7f);
 }
 
-bool AFTOPlayerState::MakeCallout(EFTOCallout NewCallout)
+bool AFTOPlayerState::MakeCallout(EFTOCallout NewCallout, bool bAutomatic)
 {
 	check(HasAuthority());
+	// The radio calling it in for us (we've gone down) isn't held up by the cooldown, and is about us.
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (NewCallout == EFTOCallout::None || Now - LastCalloutTime < FTORadio::CalloutCooldown)
+	if (NewCallout == EFTOCallout::None || NewCallout > EFTOCallout::Copy || (!bAutomatic && Now - LastCalloutTime < FTORadio::CalloutCooldown))
 	{
 		return false;
 	}
 	LastCalloutTime = Now;
 	const uint8 Serial = Callout.Serial + 1;
-	Callout = FTORadio::ResolvePing(this, NewCallout);
+	Callout = FTORadio::ResolvePing(this, NewCallout, bAutomatic);
 	Callout.Serial = Serial;
 	ForceNetUpdate();
 	OnRep_Callout(); // the listen server's own screen

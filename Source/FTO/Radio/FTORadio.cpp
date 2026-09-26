@@ -130,21 +130,25 @@ USoundBase* FTORadio::CalloutChirp()
 	return LoadSound(Sound, TEXT("SW_Callout"));
 }
 
-FFTOCalloutPing FTORadio::ResolvePing(const APlayerState* Caller, EFTOCallout Callout)
+FFTOCalloutPing FTORadio::ResolvePing(const APlayerState* Caller, EFTOCallout Callout, bool bAboutCaller)
 {
 	FFTOCalloutPing Ping;
 	Ping.Callout = Callout;
-	APawn* Pawn = Caller ? Caller->GetPawn() : nullptr;
 	UWorld* World = Caller ? Caller->GetWorld() : nullptr;
+	if (const AGameStateBase* GS = World ? World->GetGameState() : nullptr)
+	{
+		Ping.ServerTime = GS->GetServerWorldTimeSeconds();
+	}
+	APawn* Pawn = Caller ? Caller->GetPawn() : nullptr;
 	if (!Pawn || !World)
 	{
-		return Ping;
+		return Ping; // announced, with nowhere to point
 	}
 	Ping.Location = Pawn->GetActorLocation();
 	Ping.Follow = Pawn;
-	if (const AGameStateBase* GS = World->GetGameState())
+	if (bAboutCaller)
 	{
-		Ping.ServerTime = GS->GetServerWorldTimeSeconds();
+		return Ping;
 	}
 
 	// Who they mean: the nearest one within reach.
@@ -190,6 +194,10 @@ FFTOCalloutPing FTORadio::ResolvePing(const APlayerState* Caller, EFTOCallout Ca
 	{
 		Ping.Follow = Best;
 		Ping.Location = Best->GetActorLocation();
+	}
+	else if (Callout == EFTOCallout::OfficerDown)
+	{
+		Ping.Follow = nullptr; // nobody down in sight: mark where the caller is (they're still on their feet)
 	}
 	return Ping;
 }

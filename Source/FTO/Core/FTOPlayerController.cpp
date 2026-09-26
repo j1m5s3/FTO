@@ -176,8 +176,10 @@ void AFTOPlayerController::CalloutPicked(int32 Index)
 	static const EFTOCallout ByKey[] = { EFTOCallout::Backup, EFTOCallout::Fleeing, EFTOCallout::OfficerDown, EFTOCallout::Copy };
 	if (bWheelOpen && Index >= 0 && Index < UE_ARRAY_COUNT(ByKey))
 	{
-		WheelAim = FVector2D::ZeroVector; // sent: letting go of T now calls nothing more
 		SendCallout(ByKey[Index]);
+		// Sent: the wheel closes (pointing at nothing, so that sends nothing more; letting go of T then does nothing).
+		WheelAim = FVector2D::ZeroVector;
+		WheelClosed();
 	}
 }
 
