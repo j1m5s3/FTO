@@ -2,6 +2,7 @@
 #include "Crime/FTOPerp.h"
 #include "Core/FTOCharacter.h"
 #include "City/FTOCityGenerator.h"
+#include "City/FTOTrafficCar.h"
 #include "EngineUtils.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -63,6 +64,7 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, BuildingIndex);
 	DOREPLIFETIME(AFTOIncident, Perp);
 	DOREPLIFETIME(AFTOIncident, bSubdued);
+	DOREPLIFETIME(AFTOIncident, bFootChase);
 }
 
 void AFTOIncident::SetBuilding(int32 Index)
@@ -85,7 +87,6 @@ void AFTOIncident::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		Perp->Destroy();
 	}
-	GetWorldTimerManager().ClearTimer(SubdueTimer);
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -176,13 +177,17 @@ void AFTOIncident::FollowActor(AActor* Target)
 void AFTOIncident::Subdue(AController* ByPolice)
 {
 	check(HasAuthority());
+	if (ByPolice)
+	{
+		SubduedBy = ByPolice;
+	}
 	if (!IsActive() || bSubdued)
 	{
 		return;
 	}
-	// Caught red-handed counts as witnessed (and as reported, if nobody had called it in yet).
+	// Caught red-handed counts as witnessed (and as reported, if nobody had called it in yet). Handled once the
+	// cuffs are on (CompleteArrest).
 	bSubdued = true;
-	SubduedBy = ByPolice;
 	if (State == EFTOIncidentState::Unreported)
 	{
 		bWitnessed = true;
@@ -190,7 +195,89 @@ void AFTOIncident::Subdue(AController* ByPolice)
 	}
 	Progress = 1.f;
 	SetState(EFTOIncidentState::Responding);
-	GetWorldTimerManager().SetTimer(SubdueTimer, this, &AFTOIncident::Resolve, SubdueSeconds, false);
+	RefreshVisuals();
+}
+
+void AFTOIncident::CompleteArrest(AFTOCharacter* Officer)
+{
+	check(HasAuthority());
+	if (!IsActive())
+	{
+		return;
+	}
+	ArrestingOfficer = Officer;
+	bSubdued = true;
+	Resolve();
+}
+
+void AFTOIncident::StartFootChase()
+{
+	check(HasAuthority());
+	if (!IsValid(Perp) || bFootChase || !IsActive())
+	{
+		return;
+	}
+	// The call's out of the building now (the people inside can relax), and the marker runs with the suspect.
+	bFootChase = true;
+	BuildingIndex = INDEX_NONE;
+	SetReplicateMovement(true); // attachment only replicates for actors that replicate movement
+	AttachToActor(Perp, FAttachmentTransformRules::KeepWorldTransform);
+	SetActorRelativeLocation(FVector(0.f, 0.f, -AFTOPedestrian::HalfHeight));
+	RefreshVisuals();
+}
+
+void AFTOIncident::PerpGotAway()
+{
+	check(HasAuthority());
+	if (!IsActive())
+	{
+		return;
+	}
+	// Gone: the call goes cold (and doesn't turn into anything worse right here).
+	Info.EscalatesTo = NAME_None;
+	SetState(EFTOIncidentState::Failed);
+	OnFailed.Broadcast(this);
+	SetLifeSpan(CleanupDelay);
+}
+
+void AFTOIncident::TalkedDown()
+{
+	if (!IsValid(Perp) && bMobile)
+	{
+		BringOutTheDriver();
+	}
+	if (!IsValid(Perp))
+	{
+		Resolve(); // nobody to cuff after all
+		return;
+	}
+	Perp->ToastOfficersNear(INVTEXT("They've given up: cuff them (E)!"), FLinearColor(0.6f, 0.85f, 1.f), GetSceneRadius() * 2.f);
+	Perp->GiveUp(nullptr);
+}
+
+void AFTOIncident::BringOutTheDriver()
+{
+	AFTOTrafficCar* Car = Cast<AFTOTrafficCar>(GetAttachParentActor());
+	if (!Car)
+	{
+		return;
+	}
+	// Pulled over for good: the driver climbs out of their door and the scene is right there beside the car.
+	const FVector Door = Car->GetDriverDoorLocation();
+	const float Yaw = (Door - Car->GetActorLocation()).GetSafeNormal2D().Rotation().Yaw;
+	Car->DriverSurrenders();
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	SetActorLocationAndRotation(Door, FRotator(0.f, Yaw, 0.f));
+	bMobile = false;
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	Perp = GetWorld()->SpawnActor<AFTOPerp>(AFTOPerp::StaticClass(), Door + FVector(0.f, 0.f, AFTOPedestrian::HalfHeight), FRotator(0.f, Yaw, 0.f), Params);
+	if (Perp)
+	{
+		Perp->Setup(this, true, false, GetTypeHash(Door));
+	}
+	RefreshVisuals();
 }
 
 void AFTOIncident::Resolve()
@@ -260,7 +347,28 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 		}
 	}
 
+	// A perp on the run: the chase is on while an officer's close behind (and nobody's talked down meanwhile).
+	if (bFootChase)
+	{
+		int32 Chasing = 0;
+		for (const APlayerState* PS : GetWorld()->GetGameState()->PlayerArray)
+		{
+			const APawn* Pawn = PS ? PS->GetPawn() : nullptr;
+			Chasing += Pawn && FVector::DistSquared2D(Pawn->GetActorLocation(), GetActorLocation()) <= FMath::Square(FootChaseRadius) ? 1 : 0;
+		}
+		OfficersOnScene = Chasing;
+		SetState(Chasing > 0 ? EFTOIncidentState::Responding : EFTOIncidentState::Reported);
+		return;
+	}
+
 	OfficersOnScene = CountOfficersOnScene();
+
+	// Wrestling an officer, or being cuffed: the scene waits on how that goes.
+	if (IsValid(Perp) && Perp->IsInArrest())
+	{
+		SetState(EFTOIncidentState::Responding);
+		return;
+	}
 
 	if (OfficersOnScene > 0)
 	{
@@ -282,7 +390,15 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 
 		if (Progress >= 1.f)
 		{
-			Resolve();
+			// Calls are handled; crooks give up and wait for the cuffs.
+			if (Info.bArrest)
+			{
+				TalkedDown();
+			}
+			else
+			{
+				Resolve();
+			}
 		}
 	}
 	else
@@ -443,6 +559,10 @@ void AFTOIncident::RefreshVisuals()
 		if (bSubdued)
 		{
 			LabelText = FText::Format(INVTEXT("{0}\nSUBDUED"), Info.Title);
+		}
+		else if (bFootChase)
+		{
+			LabelText = FText::Format(INVTEXT("{0}\nON THE RUN!"), Info.Title);
 		}
 		break;
 	}

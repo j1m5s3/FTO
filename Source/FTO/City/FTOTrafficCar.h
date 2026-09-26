@@ -63,6 +63,14 @@ public:
 	/** Server: pull over if we have a violation (officer on foot or a siren behind us). */
 	bool RequestPullOver();
 
+	/** Server: floor it with the police after us (a wanted driver at a traffic stop), a chase incident riding along. */
+	void MakeGetaway();
+	/** Server: the chase is over: stopped, and the driver climbs out with their hands up (the incident's perp now). */
+	void DriverSurrenders();
+	/** On the road just outside the driver's door. */
+	FVector GetDriverDoorLocation() const;
+	AFTOIncident* GetChaseIncident() const { return ChaseIncident; }
+
 	// IFTOInteractable
 	virtual bool CanInteract(const AFTOCharacter* Officer) const override;
 	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
@@ -120,6 +128,8 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Look) int32 LookSeed = 0;
 	UPROPERTY(ReplicatedUsing=OnRep_CarState) EFTOCarState CarState = EFTOCarState::Driving;
 	UPROPERTY(ReplicatedUsing=OnRep_CarState) EFTOCarViolation Violation = EFTOCarViolation::None;
+	/** Busted at the end of a chase, the driver's out on the road (their seat's empty). */
+	UPROPERTY(ReplicatedUsing=OnRep_CarState) bool bDriverOut = false;
 
 	FRandomStream Rng;
 	FIntPoint Node = FIntPoint::ZeroValue;		// intersection we're heading to

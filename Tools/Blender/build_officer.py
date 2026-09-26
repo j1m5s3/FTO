@@ -1,7 +1,9 @@
 """
 Builds the FTO officer: a chunky, big-headed cartoon cop with a simple rig and looping clips.
 
-  blender -b --factory-startup -P Tools/Blender/build_officer.py -- --out Art/Source/Characters/Officer [--preview <dir>]
+  blender -b --factory-startup -P Tools/Blender/build_officer.py -- --out Art/Source/Characters/Officer [--preview <dir>] [--clips A,B]
+
+--clips re-exports (and previews) only the named clips, e.g. after adding one.
 
 Outputs (in --out):
   SK_Officer.fbx            skeletal mesh + skeleton, rest pose
@@ -365,17 +367,32 @@ def cuffed(t):
     return pose
 
 
+def hands_behind(t):
+    # Cuffed on the way to the cells: wrists together behind the back, head hung. Only the upper body is used (the
+    # game lays it over walking, like the aim poses), so the legs are left alone.
+    return {
+        "spine": {"rot": (6, 0, 1.5 * s(t))},
+        "head": {"rot": (12 + 3 * s(t), 8 * s(t), 0)},
+        "upperarm_l": {"rot": (40, 0, 18)},
+        "upperarm_r": {"rot": (40, 0, -18)},
+        "lowerarm_l": {"rot": (-60, 0, 0)},
+        "lowerarm_r": {"rot": (-60, 0, 0)},
+    }
+
+
 def cuffing(t):
+    # Crouched behind a kneeling suspect, hands down at their wrists (about 0.65 m up, 0.55 m ahead of the feet;
+    # the game stands the officer that far behind them, see AFTOPerp::CuffDistance).
     fiddle = s(t, 2)
     return {
-        "pelvis": {"loc": (0, -0.12, 0)},
-        "thigh_l": {"rot": (-35, 0, 0)},
-        "thigh_r": {"rot": (-35, 0, 0)},
-        "calf_l": {"rot": (55, 0, 0)},
-        "calf_r": {"rot": (55, 0, 0)},
-        "foot_l": {"rot": (-15, 0, 0)},
-        "foot_r": {"rot": (-15, 0, 0)},
-        "spine": {"rot": (35, 0, 0)},
+        "pelvis": {"loc": (0, -0.19, 0)},
+        "thigh_l": {"rot": (-50, 0, 0)},
+        "thigh_r": {"rot": (-50, 0, 0)},
+        "calf_l": {"rot": (80, 0, 0)},
+        "calf_r": {"rot": (80, 0, 0)},
+        "foot_l": {"rot": (-28, 0, 0)},
+        "foot_r": {"rot": (-28, 0, 0)},
+        "spine": {"rot": (40, 0, 0)},
         "head": {"rot": (20, 0, 0)},
         "upperarm_l": {"rot": (-55 + 5 * fiddle, 0, 10)},
         "upperarm_r": {"rot": (-55 - 5 * fiddle, 0, -10)},
@@ -558,6 +575,7 @@ CLIPS = [
     ("Ride", 90, ride),
     ("SitCuffed", 60, sit_cuffed),
     ("SitHandsUp", 30, sit_hands_up),
+    ("HandsBehind", 60, hands_behind),
 ]
 
 
@@ -571,14 +589,19 @@ def main():
     body = fb.build_mesh_object("SK_Officer", officer_parts(), BONE_NAMES)
     fb.bind(body, arm)
 
-    fb.export_fbx(os.path.join(out_dir, "SK_Officer.fbx"), [arm, body], with_animation=False)
+    # --clips A,B exports (and previews) just those clips, leaving the mesh and the other clips' files alone. The
+    # .blend always gets every clip.
+    only = set(args["clips"].split(",")) if isinstance(args.get("clips"), str) else None
+    if not only:
+        fb.export_fbx(os.path.join(out_dir, "SK_Officer.fbx"), [arm, body], with_animation=False)
 
     actions = []
     for name, frames, pose_at in CLIPS:
         action = fb.bake_clip(arm, f"A_Officer_{name}", frames, pose_at)
         action.use_fake_user = True
         actions.append((name, frames, action))
-        fb.export_fbx(os.path.join(out_dir, f"A_Officer_{name}.fbx"), [arm, body], with_animation=True)
+        if not only or name in only:
+            fb.export_fbx(os.path.join(out_dir, f"A_Officer_{name}.fbx"), [arm, body], with_animation=True)
 
     if preview_dir:
         preview_dir = os.path.abspath(preview_dir)
@@ -587,7 +610,6 @@ def main():
         fb.reset_pose(arm)
         fb.render_view(os.path.join(preview_dir, "officer_front.png"), cam, (0, -6, 1.0), (0, 0, 0.95), 2.3)
         fb.render_view(os.path.join(preview_dir, "officer_side.png"), cam, (6, 0, 1.0), (0, 0, 0.95), 2.3)
-        only = set(args["clips"].split(",")) if isinstance(args.get("clips"), str) else None
         for name, frames, action in actions:
             if only and name not in only:
                 continue

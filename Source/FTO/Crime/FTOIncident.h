@@ -14,14 +14,16 @@ class AController;
 class AFTOIncident;
 class AFTOCityGenerator;
 class AFTOPerp;
+class AFTOCharacter;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FFTOIncidentEvent, AFTOIncident*);
 
 /**
  * A live incident somewhere in the city, with its perp (AFTOPerp) standing at the heart of it.
  * Server-authoritative: the server ticks timers, counts officers on scene and resolves/escalates. Clients only
- * render the replicated state. Officers handle it by being on scene long enough, or by putting the perp on the
- * floor (subduing them), which handles it on the spot.
+ * render the replicated state. Officers handle a call by being on scene long enough. A crime ends in an arrest:
+ * the perp gives up once talked down (or run to ground, or put on the floor) and the call's handled when the
+ * cuffs are on (AFTOPerp does the arresting, including suspects who fight or run).
  */
 UCLASS()
 class FTO_API AFTOIncident : public AActor
@@ -64,11 +66,30 @@ public:
 	/** Server: make this a moving incident that rides along with Target (car chases; the perp's in the car). */
 	void FollowActor(AActor* Target);
 
-	/** Server: the perp's been put on the floor by ByPolice: handled, once they're cuffed a moment from now. */
+	/**
+	 * Server: the perp's given up (talked down, run to ground, or put on the floor by ByPolice): no more chaos from
+	 * this one, it's handled once they're cuffed.
+	 */
 	void Subdue(AController* ByPolice);
 	bool IsSubdued() const { return bSubdued; }
 	/** Whoever subdued the perp, if anyone (server). */
 	AController* GetSubduedBy() const { return SubduedBy.Get(); }
+
+	/** Server: the cuffs are on (Officer did it): handled. */
+	void CompleteArrest(AFTOCharacter* Officer);
+	/** Whoever cuffed the perp (server). */
+	AFTOCharacter* GetArrestingOfficer() const { return ArrestingOfficer.Get(); }
+
+	/** Server: the perp's legged it on foot: the marker goes with them, and there's no talking anyone down meanwhile. */
+	void StartFootChase();
+	bool IsFootChase() const { return bFootChase; }
+
+	/** Server: the perp got clean away: it goes cold. */
+	void PerpGotAway();
+
+	/** Server: fully talked down (or a chase run to ground): the perp gives up for the cuffs (a car chase's driver
+	 *  climbs out first). What a full progress bar does for a crime. */
+	void TalkedDown();
 
 	/** Whoever's at the heart of it (null for car chases, the perp being in the car). */
 	AFTOPerp* GetPerp() const { return Perp; }
@@ -109,9 +130,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
 	float CleanupDelay = 4.f;
 
-	/** From being put on the floor to being cuffed (the incident's handled then). */
+	/** Officers within this distance of a perp on the run are after them. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
-	float SubdueSeconds = 2.6f;
+	float FootChaseRadius = 2500.f;
 
 protected:
 	virtual void BeginPlay() override;
@@ -122,6 +143,8 @@ protected:
 	bool IsWitnessedByAnyOfficer() const;
 	void SetState(EFTOIncidentState NewState);
 	void Resolve();
+	/** Server: the end of a car chase: the driver gets out beside the car, and they're the perp now. */
+	void BringOutTheDriver();
 
 	UFUNCTION() void OnRep_State();
 	UFUNCTION() void OnRep_Info();
@@ -150,11 +173,13 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Info) int32 BuildingIndex = INDEX_NONE;
 	UPROPERTY(Replicated) TObjectPtr<AFTOPerp> Perp;
 	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bSubdued = false;
+	/** The perp's running and we're riding along with them. */
+	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bFootChase = false;
 
 	// Server-only
 	mutable TWeakObjectPtr<AFTOCityGenerator> City;
 	TWeakObjectPtr<AController> SubduedBy;
-	FTimerHandle SubdueTimer;
+	TWeakObjectPtr<AFTOCharacter> ArrestingOfficer;
 	bool bWillBeReported = false;
 	float ReportAt = 0.f;
 	float WitnessCheckAccumulator = 0.f;

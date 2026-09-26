@@ -16,6 +16,21 @@ class UMaterialInterface;
 class UFTOKnockdownComponent;
 struct FInputActionValue;
 
+/** A move an officer is locked into with someone else (cuffing a suspect, wrestling one): where, which way, what. */
+USTRUCT()
+struct FFTOSyncedAction
+{
+	GENERATED_BODY()
+
+	/** None when there's no move on. */
+	UPROPERTY() EFTOAnimAction Action = EFTOAnimAction::None;
+	/** Where the officer stands for it (capsule centre) and which way they face. */
+	UPROPERTY() FVector_NetQuantize10 Location = FVector::ZeroVector;
+	UPROPERTY() float Yaw = 0.f;
+	/** Who with. */
+	UPROPERTY() TObjectPtr<AActor> Partner;
+};
+
 /**
  * A player officer: the in-house Blender-built cop (Tools/Blender/build_officer.py) with its
  * uniform tinted in the player's badge colour. Falls back to a "bean cop" made of engine
@@ -24,6 +39,9 @@ struct FInputActionValue;
  * Carries up to three weapons (a taser as standard issue; the precinct armory hands out the rest). Drawing one
  * brings it up to the shoulder with an over-the-shoulder camera; every round is flown by UFTOBallistics. Shot
  * down, an officer stays down until a partner helps them up (they're interactable while they're down).
+ *
+ * Arrests are two-person moves (see AFTOPerp): the officer steps in behind a kneeling suspect and cuffs them, or
+ * squares up to one who fights back and wrestles them down (mashing Interact).
  */
 UCLASS()
 class FTO_API AFTOCharacter : public ACharacter, public IFTOAnimatedActor, public IFTOInteractable
@@ -68,6 +86,9 @@ public:
 	/** Flying tackle (what F does on foot): dive forward and bowl over whoever's in the way. */
 	void TacklePressed();
 
+	/** Local player: what E does (use whatever's in focus; heave in a struggle). */
+	void PressInteract() { InteractPressed(); }
+
 	/** Server: play a full-body action for a while (ticket writing, chatting). */
 	void PlayTimedAction(EFTOAnimAction Action, float Duration);
 
@@ -106,6 +127,19 @@ public:
 	/** Server: flattened by gunfire: down until a partner helps them up, or Seconds pass. False if already down. */
 	bool GoDown(const FVector& Launch, float Seconds);
 	bool IsDowned() const { return bDowned; }
+
+	// ---- Two-person moves (cuffing a suspect, wrestling one) ----
+	/**
+	 * Server: lock this officer into a move with Partner: they step onto the spot (Feet, on the floor) facing Yaw,
+	 * eased over a moment on every machine, and play Action, unable to move or draw, until EndSyncedAction.
+	 */
+	void BeginSyncedAction(EFTOAnimAction Action, const FVector& Feet, float Yaw, AActor* Partner);
+	void EndSyncedAction();
+	bool IsInSyncedAction() const { return SyncedAction.Action != EFTOAnimAction::None; }
+	EFTOAnimAction GetSyncedAction() const { return SyncedAction.Action; }
+	AActor* GetSyncedPartner() const { return SyncedAction.Partner; }
+	/** On their feet and free to act (not knocked down, seeing stars, in a car or in the middle of a move). */
+	bool IsReadyForAction() const;
 
 	/** The interactable the local officer would use if they pressed Interact now. */
 	AActor* GetFocusedInteractable() const { return FocusedInteractable.Get(); }
@@ -255,6 +289,28 @@ protected:
 	/** Seconds between tackles. */
 	UPROPERTY(EditDefaultsOnly, Category="FTO")
 	float TackleCooldown = 1.2f;
+
+	// ---- Two-person moves ----
+	UPROPERTY(ReplicatedUsing=OnRep_SyncedAction)
+	FFTOSyncedAction SyncedAction;
+
+	UFUNCTION()
+	void OnRep_SyncedAction();
+	/** Every machine: stop and start easing onto the spot for a move, or let go once it's over. */
+	void ApplySyncedAction();
+	/** Server and owner: ease onto the move's spot (everyone else sees it through replicated movement). */
+	void TickSyncedAction();
+
+	/** Mashing Interact in a struggle goes straight to the suspect we're wrestling. */
+	UFUNCTION(Server, Reliable)
+	void ServerMash();
+
+	/** Whether this machine has us locked into a move, and the ease onto its spot: from here, starting then. */
+	bool bInSyncedAction = false;
+	FVector SyncFrom = FVector::ZeroVector;
+	FQuat SyncFromRotation = FQuat::Identity;
+	float SyncStartTime = -1.f;
+	static constexpr float SyncEaseSeconds = 0.3f;
 
 	// ---- Weapons ----
 	/** Where the weapon goes: in hand along the aim when drawn, else on the hip (sidearms) or slung on the back. */

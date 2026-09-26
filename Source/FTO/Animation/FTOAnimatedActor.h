@@ -37,13 +37,14 @@ enum class EFTOAnimAction : uint8
 	SitHandsUp	// busted at the wheel
 };
 
-/** Upper-body weapon pose layered over whatever the legs are doing. */
+/** Upper-body pose layered over whatever the legs are doing: a weapon up, or hands cuffed behind the back. */
 UENUM(BlueprintType)
 enum class EFTOAimPose : uint8
 {
 	None,
 	Pistol,
-	Rifle
+	Rifle,
+	Cuffed	// A_Officer_HandsBehind: walked to the cells in cuffs
 };
 
 UINTERFACE(MinimalAPI)

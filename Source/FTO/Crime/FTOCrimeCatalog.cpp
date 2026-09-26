@@ -199,6 +199,7 @@ FFTOIncidentInfo UFTOCrimeCatalog::RollIncident(const FFTOCrimeTemplate& Templat
 				Info.ResolveSeconds *= M.ResolveMultiplier;
 				Info.OfficersRequired = FMath::Clamp(Info.OfficersRequired + M.ExtraOfficers, 1, 4);
 				Info.bArmed |= M.Id == TEXT("Armed") && Info.bArrest;
+				Info.Twist = M.Id;
 				break;
 			}
 		}

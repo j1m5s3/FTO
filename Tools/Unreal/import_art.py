@@ -38,7 +38,7 @@ CHARACTERS = [
      "clips": ["Idle", "Walk", "Run", "Jump", "Interact", "Cheer",
                "Sit", "Drive", "Talk", "Work", "HandsUp", "Kneel", "Cuffed", "Cuffing", "Struggle", "Tackle",
                "Punch", "Cower", "AimPistol", "AimRifle", "Dance", "Slump", "Dazed",
-               "Ride", "SitCuffed", "SitHandsUp"],
+               "Ride", "SitCuffed", "SitHandsUp", "HandsBehind"],
      "dest": "/Game/FTO/Characters/Officer"},
     {"folder": "Characters/Civilians",
      "meshes": [f"SK_Civilian_{i:02d}" for i in range(1, 9)] + ["SK_Suspect"],
@@ -308,8 +308,26 @@ def ensure_physics_assets():
             unreal.log(f"FTO: {mesh_name} physics asset has {bodies} bodies")
 
 
-# FTO_IMPORT=characters|statics|vehicles|weapons|kit limits the run (default: everything).
+def import_named_clips(names):
+    """Just these clips, onto the meshes already imported (so nothing else is re-imported and churned)."""
+    for group in CHARACTERS:
+        wanted = [clip for clip in group["clips"] if clip in names]
+        for mesh_name in group["meshes"] if wanted else []:
+            mesh = eal.load_asset(f"{group['dest']}/{mesh_name}")
+            if not mesh:
+                unreal.log_error(f"FTO: import {mesh_name} before its clips")
+                continue
+            import_clips(os.path.join(ART, group["folder"]), mesh_name, wanted, group["dest"], mesh.get_editor_property("skeleton"))
+            for clip in wanted:
+                eal.save_asset(f"{group['dest']}/A_{mesh_name[3:]}_{clip}", only_if_is_dirty=False)
+
+
+# FTO_IMPORT=characters|statics|vehicles|weapons|kit limits the run (default: everything); FTO_IMPORT=clips with
+# FTO_CLIPS=A,B imports only those animation clips.
 ONLY = os.environ.get("FTO_IMPORT", "").lower()
+
+if ONLY == "clips":
+    import_named_clips(set(filter(None, os.environ.get("FTO_CLIPS", "").split(","))))
 
 if ONLY in ("", "characters"):
     for character_group in CHARACTERS:

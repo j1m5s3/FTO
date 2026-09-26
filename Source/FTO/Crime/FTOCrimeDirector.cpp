@@ -389,9 +389,13 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 	AFTOPerp* Perp = Incident->GetPerp();
 	if (Info.bArrest)
 	{
-		// Whoever put them on the floor, else the nearest officer.
+		// Whoever put the cuffs on (else whoever put them on the floor, else the nearest officer).
 		const AController* Subduer = Incident->GetSubduedBy();
-		AFTOCharacter* Arresting = Subduer ? Cast<AFTOCharacter>(Subduer->GetPawn()) : nullptr;
+		AFTOCharacter* Arresting = Incident->GetArrestingOfficer();
+		if (!Arresting && Subduer)
+		{
+			Arresting = Cast<AFTOCharacter>(Subduer->GetPawn());
+		}
 		float BestDistSq = FMath::Square(Incident->GetSceneRadius() * 3.f);
 		for (TActorIterator<AFTOCharacter> It(GetWorld()); It && !Arresting; ++It)
 		{
@@ -417,11 +421,10 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 		}
 		if (Arresting)
 		{
-			// The perp becomes a cuffed arrestee right where they stand (or lie).
+			// The perp becomes a cuffed arrestee right where they knelt (and gets up to go with the officer).
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-			const FVector Floor = Incident->GetActorLocation();
-			const FVector SpawnAt = Perp ? FVector(Perp->GetActorLocation().X, Perp->GetActorLocation().Y, Floor.Z + 92.f) : Floor + FVector(0.f, 0.f, 92.f);
+			const FVector SpawnAt = Perp ? Perp->GetActorLocation() : Incident->GetActorLocation() + FVector(0.f, 0.f, AFTOPedestrian::HalfHeight);
 			const FRotator Facing = Perp ? FRotator(0.f, Perp->GetActorRotation().Yaw, 0.f) : Incident->GetActorRotation();
 			if (AFTOArrestee* Cuffed = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), SpawnAt, Facing, Params))
 			{

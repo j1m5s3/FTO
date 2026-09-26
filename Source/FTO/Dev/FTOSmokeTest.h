@@ -10,6 +10,8 @@ class AFTOCityGenerator;
 class AFTOCruiser;
 class AFTOGameMode;
 class AFTOPedestrian;
+class AFTOPerp;
+class AFTOTrafficCar;
 class APawn;
 class APlayerController;
 
@@ -44,10 +46,14 @@ protected:
 		/** Seconds to wait after this step before running the next one. */
 		float Delay = 1.f;
 		TFunction<void()> Action;
+		/** If set, the next step runs as soon as this is true (Delay is then the longest it waits). */
+		TFunction<bool()> Until;
 	};
 
 	void BuildSteps();
 	void AddStep(const TCHAR* Name, float Delay, TFunction<void()> Action);
+	/** A step that waits until Until() is true (or MaxSeconds pass), e.g. for the other player. */
+	void AddWait(const TCHAR* Name, float MaxSeconds, TFunction<bool()> Until);
 	void AddShot(const TCHAR* Name, float Delay, bool bShowUI = true);
 
 	bool AreShadersReady() const;
@@ -71,12 +77,26 @@ protected:
 	float StableSince = -1.f;
 	int32 NextStep = 0;
 	float NextStepTime = 0.f;
+	/** The last step's early-out, if it had one. */
+	TFunction<bool()> WaitUntil;
 	int32 FramesSinceReady = 0;
 
 	/** Citizens stood in the road for the cruiser, and the one who gets tackled. */
 	TArray<TWeakObjectPtr<AFTOPedestrian>> Pins;
 	TWeakObjectPtr<AFTOPedestrian> TackleTarget;
 	float ChaosBefore = 0.f;
+
+	/** The suspect in the arrest checks, and the getaway car. */
+	TWeakObjectPtr<AFTOPerp> TestPerp;
+	TWeakObjectPtr<AFTOTrafficCar> TestCar;
+	/** Host: the shoplifter staged for the client to arrest. */
+	TWeakObjectPtr<AFTOPerp> RiderPerp;
+	/** Stages Crime Ahead cm in front of the local officer (in the street, the perp facing them) and returns its perp. */
+	AFTOPerp* StagePerp(FName Crime, float Ahead);
+	/** The nearest perp at a Crime incident to the local officer. */
+	AFTOPerp* FindNearestPerp(FName Crime) const;
+	/** Films the officer and a suspect side on. */
+	void ViewArrest(const AActor* Suspect, float Side = 1.f);
 
 	FVector IncidentSpot = FVector::ZeroVector;
 	FVector WalkDirection = FVector::ForwardVector;
