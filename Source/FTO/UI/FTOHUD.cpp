@@ -10,6 +10,9 @@
 #include "Core/FTOCharacter.h"
 #include "Interaction/FTOInteractable.h"
 #include "Vehicles/FTOCruiser.h"
+#include "City/FTOCityGenerator.h"
+#include "Crime/FTOArrestee.h"
+#include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 
@@ -88,6 +91,7 @@ void AFTOHUD::DrawHUD()
 		DrawOnSceneProgress(GS);
 		DrawInteractPrompt();
 		DrawCruiserPanel();
+		DrawEscortPanel();
 		break;
 
 	default:
@@ -410,7 +414,7 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 	};
 	const int32 Pick = FMath::Abs(GS->ShiftSeed) % 3;
 
-	DrawPanel(CX - 460.f * S, CY - 30.f * S, 920.f * S, 400.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
+	DrawPanel(CX - 460.f * S, CY - 30.f * S, 920.f * S, 440.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
 	DrawCenteredText(bSurvived ? TEXT("SHIFT SURVIVED!") : TEXT("THE CITY FELL INTO CHAOS"), CX, CY - 20.f * S,
 		bSurvived ? FLinearColor(0.3f, 1.f, 0.4f) : FLinearColor(1.f, 0.25f, 0.25f), GEngine->GetLargeFont(), S * 1.6f);
 	DrawCenteredText(FString::Printf(TEXT("\"%s\""), bSurvived ? WinHeadlines[Pick] : LoseHeadlines[Pick]), CX, CY + 40.f * S,
@@ -421,6 +425,7 @@ void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)
 		FString::Printf(TEXT("Incidents handled:     %d"), GS->IncidentsResolved),
 		FString::Printf(TEXT("Caught in the act:     %d"), GS->IncidentsWitnessed),
 		FString::Printf(TEXT("Traffic stops:         %d"), GS->TrafficStops),
+		FString::Printf(TEXT("Suspects booked:       %d"), GS->SuspectsBooked),
 		FString::Printf(TEXT("Went cold / escalated: %d"), GS->IncidentsFailed),
 		FString::Printf(TEXT("Peak chaos:            %d%%"), FMath::RoundToInt(GS->PeakChaos)),
 	};
@@ -623,4 +628,64 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 			bAlarmArmed = true;
 		}
 	}
+}
+
+void AFTOHUD::DrawEscortPanel()
+{
+	// Who am I? On foot the pawn is the officer; driving, it's the cruiser's driver.
+	const AFTOCharacter* Me = Cast<AFTOCharacter>(GetOwningPawn());
+	if (!Me)
+	{
+		if (const AFTOCruiser* Cruiser = Cast<AFTOCruiser>(GetOwningPawn()))
+		{
+			Me = Cruiser->GetDriver();
+		}
+	}
+	if (!Me)
+	{
+		return;
+	}
+
+	int32 Count = 0;
+	FString Crimes;
+	for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+	{
+		const EFTOArresteeState State = It->GetArrestState();
+		if (It->GetEscort() == Me && (State == EFTOArresteeState::Escorted || State == EFTOArresteeState::InCruiser))
+		{
+			Crimes += (Count++ ? TEXT(", ") : TEXT("")) + It->GetCrime().ToString();
+		}
+	}
+	if (Count == 0)
+	{
+		return;
+	}
+
+	// Point the way home.
+	const AFTOCityGenerator* City = nullptr;
+	for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
+	{
+		City = *It;
+		break;
+	}
+	const float S = UIScale();
+	if (City)
+	{
+		FVector2D Screen;
+		const bool bOnScreen = ProjectToScreenEdge(City->GetPrecinctLocation() + FVector(0.f, 0.f, 600.f), 40.f * S, Screen);
+		const float Size = 16.f * S * (1.f + 0.15f * FMath::Sin(GetWorld()->GetTimeSeconds() * 6.f));
+		DrawDiamond(Screen, Size + 3.f * S, FLinearColor::Black);
+		DrawDiamond(Screen, Size, FLinearColor(0.3f, 0.6f, 1.f));
+		const int32 Meters = FMath::RoundToInt(FVector::Dist2D(GetOwningPawn()->GetActorLocation(), City->GetPrecinctLocation()) / 100.f);
+		DrawCenteredText(bOnScreen ? FString::Printf(TEXT("PRECINCT  %dm"), Meters) : FString::Printf(TEXT("%dm"), Meters),
+			Screen.X, Screen.Y + Size + 4.f * S, FLinearColor(0.6f, 0.8f, 1.f), GEngine->GetSmallFont(), S * 1.1f);
+	}
+
+	const float CX = Canvas->ClipX * 0.5f;
+	const float Y = 110.f * S;
+	const FString Line = FString::Printf(TEXT("Escorting %d suspect%s (%s): take them to the precinct"), Count, Count > 1 ? TEXT("s") : TEXT(""), *Crimes);
+	float W = 0.f, H = 0.f;
+	GetTextSize(Line, W, H, GEngine->GetMediumFont(), S);
+	DrawPanel(CX - W * 0.5f - 12.f * S, Y - 6.f * S, W + 24.f * S, H + 12.f * S, FLinearColor(0.02f, 0.08f, 0.2f, 0.75f));
+	DrawCenteredText(Line, CX, Y, FLinearColor(0.7f, 0.85f, 1.f), GEngine->GetMediumFont(), S);
 }

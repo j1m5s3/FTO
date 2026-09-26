@@ -64,6 +64,8 @@ struct FTO_API FFTOCrimeTemplate
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) float MinChaos = 0.f;
 	/** Only one of these may be active at once (big set pieces). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bUnique = false;
+	/** A perp gets cuffed when this is handled (false for cats, lost tourists, tickets...). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bArrest = true;
 };
 
 /** Random twist layered onto a template to keep shifts fresh. */
@@ -102,6 +104,7 @@ struct FTO_API FFTOIncidentInfo
 	UPROPERTY(BlueprintReadOnly) float FailPenalty = 3.f;
 	UPROPERTY(BlueprintReadOnly) float TimeToEscalate = 60.f;
 	UPROPERTY(BlueprintReadOnly) FName EscalatesTo;
+	UPROPERTY(BlueprintReadOnly) bool bArrest = true;
 };
 
 namespace FTOCrime

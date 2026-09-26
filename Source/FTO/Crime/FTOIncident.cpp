@@ -360,6 +360,8 @@ void AFTOIncident::RefreshVisuals()
 
 	// Unreported incidents are just "something happening": no beacon until someone knows.
 	Beacon->SetVisibility(State != EFTOIncidentState::Unreported);
+	// Handled perps are now a cuffed arrestee (or the incident is mobile and they're in the car).
+	Suspect->SetVisibility(!bMobile && !(State == EFTOIncidentState::Resolved && Info.bArrest));
 
 	FText LabelText = Info.Title;
 	switch (State)

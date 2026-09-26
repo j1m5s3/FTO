@@ -3,6 +3,8 @@
 #include "Crime/FTOCrimeCatalog.h"
 #include "Crime/FTOCrimeSpawnPoint.h"
 #include "Crime/FTOIncident.h"
+#include "Crime/FTOArrestee.h"
+#include "Core/FTOCharacter.h"
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "NavigationSystem.h"
@@ -368,6 +370,45 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 	const float Relief = Info.ChaosRelief * (Incident->WasWitnessed() ? WitnessBonus : 1.f);
 	GS->AddChaos(-Relief);
 	++GS->IncidentsResolved;
+
+	// Perps get cuffed and have to be walked or driven back to the precinct for the rest of the credit.
+	if (Info.bArrest)
+	{
+		AFTOCharacter* Arresting = nullptr;
+		float BestDistSq = FMath::Square(Incident->GetSceneRadius() * 3.f);
+		for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+		{
+			const float DistSq = FVector::DistSquared2D(It->GetActorLocation(), Incident->GetActorLocation());
+			if (DistSq < BestDistSq && It->GetController())
+			{
+				Arresting = *It;
+				BestDistSq = DistSq;
+			}
+		}
+		if (!Arresting)
+		{
+			// Officers in cruisers are hidden but still "there".
+			for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+			{
+				const float DistSq = FVector::DistSquared2D(It->GetActorLocation(), Incident->GetActorLocation());
+				if (DistSq < BestDistSq)
+				{
+					Arresting = *It;
+					BestDistSq = DistSq;
+				}
+			}
+		}
+		if (Arresting)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			const FVector SpawnAt = Incident->GetActorLocation() + FVector(0.f, 0.f, 92.f);
+			if (AFTOArrestee* Perp = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), SpawnAt, Incident->GetActorRotation(), Params))
+			{
+				Perp->Init(Arresting, FMath::Max(2.f, Info.ChaosRelief * 0.6f), Info.Title);
+			}
+		}
+	}
 }
 
 void UFTOCrimeDirector::HandleFailed(AFTOIncident* Incident)

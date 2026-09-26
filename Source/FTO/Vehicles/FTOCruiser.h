@@ -64,6 +64,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="Cruiser") float GetSpeed() const { return ForwardSpeed; }
 	UFUNCTION(BlueprintPure, Category="Cruiser") bool IsSirenOn() const { return bSiren; }
 	UFUNCTION(BlueprintPure, Category="Cruiser") bool HasDriver() const { return Driver != nullptr; }
+	AFTOCharacter* GetDriver() const { return Driver; }
 
 	/** Server: switch the lights and siren. */
 	void SetSiren(bool bOn) { bSiren = bOn; }
