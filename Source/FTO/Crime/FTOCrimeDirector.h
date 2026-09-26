@@ -37,6 +37,9 @@ public:
 	/** Spawns a specific template right now (debug / scripted events). */
 	AFTOIncident* SpawnIncident(FName TemplateId, bool bForceReported = false);
 
+	/** Spawns a specific template at a given spot (e.g. a traffic stop gone wrong). */
+	AFTOIncident* SpawnIncidentAt(FName TemplateId, const FVector& Location, bool bForceReported = true);
+
 	/** Optional designer override; defaults are built in. */
 	UPROPERTY(EditAnywhere, Category="Director")
 	TObjectPtr<UFTOCrimeCatalog> CatalogOverride;

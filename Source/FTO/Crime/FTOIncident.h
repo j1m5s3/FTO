@@ -50,6 +50,9 @@ public:
 	UFUNCTION(BlueprintPure, Category="Incident")
 	bool IsKnownToDispatch() const { return State == EFTOIncidentState::Reported || State == EFTOIncidentState::Responding; }
 
+	/** Server: a citizen tip or radio call puts this on the board right now. */
+	void ForceReport();
+
 	/** Current chaos per second this incident is pushing into the city (server). */
 	float GetChaosRate() const;
 

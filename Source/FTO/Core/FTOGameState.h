@@ -58,6 +58,7 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 IncidentsResolved = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 IncidentsFailed = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 IncidentsWitnessed = 0;
+	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") int32 TrafficStops = 0;
 	UPROPERTY(Replicated, BlueprintReadOnly, Category="FTO|Stats") float PeakChaos = 0.f;
 
 	/** Seed for this shift's procedural generation (city layout + crimes). */

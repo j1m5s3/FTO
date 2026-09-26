@@ -102,6 +102,16 @@ float AFTOIncident::GetChaosRate() const
 	return State == EFTOIncidentState::Responding ? Info.ChaosPerSecond * 0.35f : Info.ChaosPerSecond;
 }
 
+void AFTOIncident::ForceReport()
+{
+	check(HasAuthority());
+	if (State == EFTOIncidentState::Unreported)
+	{
+		SetState(EFTOIncidentState::Reported);
+		OnReported.Broadcast(this);
+	}
+}
+
 void AFTOIncident::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

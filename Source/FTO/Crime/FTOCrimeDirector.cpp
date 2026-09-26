@@ -382,3 +382,9 @@ void UFTOCrimeDirector::HandleFailed(AFTOIncident* Incident)
 		}
 	}
 }
+
+AFTOIncident* UFTOCrimeDirector::SpawnIncidentAt(FName TemplateId, const FVector& Location, bool bForceReported)
+{
+	const FFTOCrimeTemplate* Template = Catalog ? Catalog->FindTemplate(TemplateId) : nullptr;
+	return Template ? SpawnFromTemplate(*Template, Location, bForceReported) : nullptr;
+}

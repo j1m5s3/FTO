@@ -13,6 +13,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Interaction/FTOInteractable.h"
+#include "Engine/OverlapResult.h"
+#include "Engine/World.h"
 #include "FTO.h"
 
 AFTOCharacter::AFTOCharacter()
@@ -65,6 +68,8 @@ AFTOCharacter::AFTOCharacter()
 
 	// No skeletal mesh yet.
 	GetMesh()->SetVisibility(false);
+
+	PrimaryActorTick.bCanEverTick = true;
 }
 
 void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -183,6 +188,89 @@ void AFTOCharacter::ApplySprint()
 	GetCharacterMovement()->MaxWalkSpeed = bSprinting ? SprintSpeed : WalkSpeed;
 }
 
-void AFTOCharacter::InteractPressed() {}
 void AFTOCharacter::InteractReleased() {}
 void AFTOCharacter::WhistlePressed() {}
+
+void AFTOCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (IsLocallyControlled())
+	{
+		FocusAccumulator += DeltaSeconds;
+		if (FocusAccumulator >= 0.1f)
+		{
+			FocusAccumulator = 0.f;
+			UpdateFocus();
+		}
+	}
+}
+
+void AFTOCharacter::UpdateFocus()
+{
+	FocusedInteractable.Reset();
+
+	TArray<FOverlapResult> Overlaps;
+	FCollisionObjectQueryParams Objects;
+	Objects.AddObjectTypesToQuery(ECC_Pawn);
+	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOInteractFocus), false, this);
+
+	if (!GetWorld()->OverlapMultiByObjectType(Overlaps, GetActorLocation(), FQuat::Identity, Objects, FCollisionShape::MakeSphere(800.f), Params))
+	{
+		return;
+	}
+
+	// Prefer what the officer is facing, then what's closest.
+	const FVector Facing = GetActorForwardVector();
+	float BestScore = TNumericLimits<float>::Max();
+	for (const FOverlapResult& Overlap : Overlaps)
+	{
+		AActor* Actor = Overlap.GetActor();
+		const IFTOInteractable* Interactable = Cast<IFTOInteractable>(Actor);
+		if (!Interactable || !Interactable->CanInteract(this))
+		{
+			continue;
+		}
+
+		const FVector ToTarget = Interactable->GetInteractLocation() - GetActorLocation();
+		const float Distance = ToTarget.Size2D();
+		if (Distance > Interactable->GetInteractRange())
+		{
+			continue;
+		}
+
+		const float FacingDot = FVector::DotProduct(Facing, ToTarget.GetSafeNormal2D());
+		const float Score = Distance * (1.5f - FacingDot);
+		if (Score < BestScore)
+		{
+			BestScore = Score;
+			FocusedInteractable = Actor;
+		}
+	}
+}
+
+void AFTOCharacter::InteractPressed()
+{
+	UpdateFocus();
+	if (AActor* Target = FocusedInteractable.Get())
+	{
+		ServerInteract(Target);
+	}
+}
+
+void AFTOCharacter::ServerInteract_Implementation(AActor* Target)
+{
+	IFTOInteractable* Interactable = Cast<IFTOInteractable>(Target);
+	if (!Interactable || !Interactable->CanInteract(this))
+	{
+		return;
+	}
+
+	// Generous tolerance for latency, but no interacting from across the map.
+	const float Distance = FVector::Dist2D(Interactable->GetInteractLocation(), GetActorLocation());
+	if (Distance <= Interactable->GetInteractRange() + 250.f)
+	{
+		Interactable->Interact(this);
+	}
+}
