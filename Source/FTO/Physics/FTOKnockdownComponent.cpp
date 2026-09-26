@@ -39,8 +39,17 @@ void UFTOKnockdownComponent::BeginPlay()
 		SavedProfile = Mesh->GetCollisionProfileName();
 		SavedRelative = Mesh->GetRelativeTransform();
 	}
+}
 
-	// Cartoon stars that circle the head while dazed.
+void UFTOKnockdownComponent::EnsureStars()
+{
+	// Cartoon stars that circle the head while dazed, made the first time they're needed (most of the
+	// crowd never gets bowled over).
+	AActor* Owner = GetOwner();
+	if (!Stars.IsEmpty() || !Owner || !Owner->GetRootComponent())
+	{
+		return;
+	}
 	UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, FTOArt::BaseMaterialPath);
 	for (int32 i = 0; i < NumStars; ++i)
@@ -139,6 +148,7 @@ void UFTOKnockdownComponent::StartRagdoll(const FVector& LaunchVelocity)
 	Mesh->SetAllPhysicsLinearVelocity(LaunchVelocity);
 	// A little tumble so nobody lands neatly on their feet (purely cosmetic, so local randomness is fine).
 	Mesh->SetAllPhysicsAngularVelocityInDegrees(FMath::VRand() * FMath::FRandRange(180.f, 420.f));
+	EnsureStars();
 	StarsUntil = TNumericLimits<float>::Max();
 }
 

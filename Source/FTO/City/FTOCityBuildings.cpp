@@ -620,9 +620,11 @@ void AFTOCityGenerator::BuildPrecinct(const FFTOCityBlock& Block)
 	InteriorWall(B, false, -450.f, Cross, B.Depth + WallThickness, {}, Plaster);
 	InteriorWall(B, false, 450.f, Cross, B.Depth + WallThickness, {}, Plaster);
 
-	// Lobby: the front desk facing the door, benches, the wanted board, coffee (and donuts).
+	// Lobby: the front desk facing the door with the desk sergeant sat behind it, benches for whoever's waiting,
+	// the wanted board, coffee (and donuts).
 	PlaceInRoom(B, TEXT("SM_FrontDesk"), 320.f, 0.f, 180.f);
-	B.WorkSpots.Add(RoomToWorld(B, 410.f, 0.f, 180.f));
+	PlaceInRoom(B, TEXT("SM_OfficeChair"), 430.f, 0.f, 180.f, Blue);
+	B.WorkSpots.Add(SeatedSpot(B, 430.f, 0.f, 180.f, SitBack - 19.f, SeatHeight + 2.f));
 	PlaceInRoom(B, TEXT("SM_Bench"), 45.f, -600.f, 0.f);
 	PlaceInRoom(B, TEXT("SM_Bench"), 45.f, 600.f, 0.f);
 	PlaceInRoom(B, TEXT("SM_WantedBoard"), 0.f, -350.f, 0.f);
@@ -631,10 +633,11 @@ void AFTOCityGenerator::BuildPrecinct(const FFTOCityBlock& Block)
 	PlaceInRoom(B, TEXT("SM_Plant"), 60.f, B.YMin + 60.f, 0.f);
 	PlaceInRoom(B, TEXT("SM_Plant"), 60.f, B.YMax - 60.f, 0.f);
 	PlaceInRoom(B, TEXT("SM_Doormat"), 50.f, 0.f, 0.f, Blue);
-	for (const float Y : { -600.f, 600.f })
+	for (const float Y : { -645.f, -555.f, 555.f, 645.f })
 	{
-		B.VisitSpots.Add(RoomToWorld(B, 90.f, Y, 0.f));
+		B.VisitSpots.Add(SeatedSpot(B, 45.f, Y, 0.f, SitBack - 20.f, SeatHeight + 2.f));
 	}
+	B.VisitSpots.Add(StandingSpot(B, 150.f, B.YMin + 110.f, -90.f, EFTOAnimAction::Talk)); // at the coffee
 
 	// Briefing room (Y -12.7..-4.5): whiteboard and podium at the back, rows of chairs.
 	PlaceInRoom(B, TEXT("SM_Whiteboard"), B.Depth, -860.f, 180.f);
@@ -660,6 +663,7 @@ void AFTOCityGenerator::BuildPrecinct(const FFTOCityBlock& Block)
 	}
 	PlaceInRoom(B, TEXT("SM_AmmoCrate"), Cross + 330.f, -90.f, 0.f);
 	PlaceInRoom(B, TEXT("SM_AmmoCrate"), Cross + 330.f, 90.f, 0.f);
+	B.WorkSpots.Add(StandingSpot(B, B.Depth - 260.f, 330.f, 180.f, EFTOAnimAction::None)); // the quartermaster
 
 	// Holding cells (Y 4.5..12.7): two cells behind bars at the back, with a bench and a toilet each.
 	const float CellFront = 1020.f;
@@ -673,7 +677,13 @@ void AFTOCityGenerator::BuildPrecinct(const FFTOCityBlock& Block)
 	{
 		PlaceInRoom(B, TEXT("SM_CellBench"), B.Depth, Y - 20.f, 180.f);
 		PlaceInRoom(B, TEXT("SM_Toilet"), B.Depth, Y + (Y < CellMid ? 150.f : -150.f) + (Y < CellMid ? 20.f : 0.f), 180.f);
-		B.CellSpots.Add(RoomToWorld(B, CellFront + 150.f, Y, 180.f));
+		// Two to a bench, backs to the wall, glaring out through the bars; in through the cell's door.
+		const float Door = Y < CellMid ? 755.f : 965.f;
+		for (const float Along : { -45.f, 45.f })
+		{
+			B.CellSpots.Add(RoomToWorld(B, B.Depth - SitBack, Y - 20.f + Along, 180.f, SeatHeight + 2.f - SitDrop));
+			B.CellDoors.Add(RoomToWorld(B, CellFront, Door, 0.f));
+		}
 	}
 }
 
@@ -740,23 +750,29 @@ void AFTOCityGenerator::BuildBank(const FFTOCityBlock& Block)
 	InteriorWall(B, true, VaultLine, B.YMin - WallThickness, -2.f * PanelWidth * 0.5f, StaffDoor, Plaster);
 	InteriorWall(B, true, VaultLine, 2.f * PanelWidth * 0.5f, B.YMax + WallThickness, {}, Plaster);
 
-	// Tellers facing the door, a queue, benches and plants.
+	// Tellers facing the door with customers at their windows, a queue, benches and plants.
 	for (const float Y : { -340.f, 340.f })
 	{
 		PlaceInRoom(B, TEXT("SM_TellerCounter"), VaultLine - 330.f, Y, 180.f);
-		B.WorkSpots.Add(RoomToWorld(B, VaultLine - 230.f, Y - 80.f, 180.f));
-		B.WorkSpots.Add(RoomToWorld(B, VaultLine - 230.f, Y + 80.f, 180.f));
+		B.WorkSpots.Add(StandingSpot(B, VaultLine - 230.f, Y - 80.f, 180.f, EFTOAnimAction::Work));
+		B.WorkSpots.Add(StandingSpot(B, VaultLine - 230.f, Y + 80.f, 180.f, EFTOAnimAction::Work));
+		B.VisitSpots.Add(StandingSpot(B, VaultLine - 440.f, Y - 80.f, 0.f, EFTOAnimAction::Talk));
 	}
 	for (int32 k = 0; k < 6; ++k)
 	{
 		PlaceInRoom(B, TEXT("SM_QueuePost"), 650.f, -300.f + k * 117.f, 0.f);
-		B.VisitSpots.Add(RoomToWorld(B, 820.f - k * 60.f, 250.f, 0.f));
+		B.VisitSpots.Add(StandingSpot(B, 820.f - k * 60.f, 250.f, 0.f, EFTOAnimAction::None));
 	}
 	for (const float X : { 350.f, 750.f })
 	{
 		PlaceInRoom(B, TEXT("SM_Bench"), X, B.YMin + 30.f, 90.f);
 		PlaceInRoom(B, TEXT("SM_Bench"), X, B.YMax - 30.f, -90.f);
+		B.VisitSpots.Add(SeatedSpot(B, X, B.YMin + 30.f, 90.f, SitBack - 20.f, SeatHeight + 2.f));
+		B.VisitSpots.Add(SeatedSpot(B, X, B.YMax - 30.f, -90.f, SitBack - 20.f, SeatHeight + 2.f));
 	}
+	// A hold-up in the hall, facing the tellers; a heist in the vault itself.
+	B.CrimeSpots.Add(RoomToWorld(B, VaultLine - 520.f, 0.f, 0.f));
+	B.CrimeSpots.Add(RoomToWorld(B, VaultLine + 250.f, 0.f, 0.f));
 	PlaceInRoom(B, TEXT("SM_Plant"), 60.f, B.YMin + 60.f, 0.f);
 	PlaceInRoom(B, TEXT("SM_Plant"), 60.f, B.YMax - 60.f, 0.f);
 	PlaceInRoom(B, TEXT("SM_Doormat"), 50.f, 0.f, 0.f, BankGold);
@@ -768,5 +784,4 @@ void AFTOCityGenerator::BuildBank(const FFTOCityBlock& Block)
 	}
 	PlaceInRoom(B, TEXT("SM_VaultShelf"), VaultLine + 450.f, B.YMin, 90.f);
 	PlaceInRoom(B, TEXT("SM_VaultShelf"), VaultLine + 450.f, B.YMax, -90.f);
-	B.VisitSpots.Add(RoomToWorld(B, VaultLine + 400.f, 0.f, 0.f));
 }

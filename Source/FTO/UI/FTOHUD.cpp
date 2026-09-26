@@ -679,19 +679,25 @@ void AFTOHUD::DrawEscortPanel()
 	const float S = UIScale();
 	if (City)
 	{
+		// The precinct's front door from outside; the holding cells once in.
+		const FFTOBuilding* Precinct = City->FindBuilding(EFTOBuildingType::Precinct);
+		const bool bInside = Precinct && Precinct->Contains(Me->GetActorLocation() - FVector(0.f, 0.f, 96.f), 50.f);
+		const FVector Goal = bInside ? City->GetHoldingCellsLocation() + FVector(0.f, 0.f, 160.f)
+			: Precinct ? Precinct->DoorOutside + FVector(0.f, 0.f, 350.f) : City->GetPrecinctLocation() + FVector(0.f, 0.f, 600.f);
+
 		FVector2D Screen;
-		const bool bOnScreen = ProjectToScreenEdge(City->GetPrecinctLocation() + FVector(0.f, 0.f, 600.f), 40.f * S, Screen);
+		const bool bOnScreen = ProjectToScreenEdge(Goal, 40.f * S, Screen);
 		const float Size = 16.f * S * (1.f + 0.15f * FMath::Sin(GetWorld()->GetTimeSeconds() * 6.f));
 		DrawDiamond(Screen, Size + 3.f * S, FLinearColor::Black);
 		DrawDiamond(Screen, Size, FLinearColor(0.3f, 0.6f, 1.f));
-		const int32 Meters = FMath::RoundToInt(FVector::Dist2D(GetOwningPawn()->GetActorLocation(), City->GetPrecinctLocation()) / 100.f);
-		DrawCenteredText(bOnScreen ? FString::Printf(TEXT("PRECINCT  %dm"), Meters) : FString::Printf(TEXT("%dm"), Meters),
+		const int32 Meters = FMath::RoundToInt(FVector::Dist2D(GetOwningPawn()->GetActorLocation(), Goal) / 100.f);
+		DrawCenteredText(bOnScreen ? FString::Printf(TEXT("%s  %dm"), bInside ? TEXT("HOLDING CELLS") : TEXT("PRECINCT"), Meters) : FString::Printf(TEXT("%dm"), Meters),
 			Screen.X, Screen.Y + Size + 4.f * S, FLinearColor(0.6f, 0.8f, 1.f), GEngine->GetSmallFont(), S * 1.1f);
 	}
 
 	const float CX = Canvas->ClipX * 0.5f;
 	const float Y = 110.f * S;
-	const FString Line = FString::Printf(TEXT("Escorting %d suspect%s (%s): take them to the precinct"), Count, Count > 1 ? TEXT("s") : TEXT(""), *Crimes);
+	const FString Line = FString::Printf(TEXT("Escorting %d suspect%s (%s): walk them into the holding cells"), Count, Count > 1 ? TEXT("s") : TEXT(""), *Crimes);
 	float W = 0.f, H = 0.f;
 	GetTextSize(Line, W, H, GEngine->GetMediumFont(), S);
 	DrawPanel(CX - W * 0.5f - 12.f * S, Y - 6.f * S, W + 24.f * S, H + 12.f * S, FLinearColor(0.02f, 0.08f, 0.2f, 0.75f));

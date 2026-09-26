@@ -42,8 +42,9 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 
 ## Controls
 - **On foot**: WASD / left stick to move, Shift to sprint, Space to jump. Q blows the police whistle (citizens
-  freeze, nearby crimes get called in). E interacts: tickets, chats, taking a cruiser, or riding shotgun in one
-  someone's already driving.
+  freeze, nearby crimes get called in). E interacts: tickets, chats (with anyone, indoors or out), questioning a
+  suspicious character, taking a cruiser, or riding shotgun in one someone's already driving. Cuffed suspects follow
+  in your footsteps: walk them into the precinct's holding cells to book them.
 - **Driving a cruiser**: W/S to drive and brake, A/D to steer, Space for the handbrake (drift). Q switches the lights
   and siren (offending cars ahead pull over), H honks. C (right stick click) swaps the chase camera for the view from
   the seat, and the mouse / right stick glances around (it eases back to the road). E gets out.
@@ -58,6 +59,9 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 ## Smoke test
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
+Along the way it books a suspect into the cells, looks inside every kind of building (with their people), stages a
+hold-up and a bar brawl, questions a crook, walks through front doors, and checks that shop windows let sight
+through; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around and gets out.
 
@@ -81,8 +85,14 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
   shop signs, rooftop units, gable roofs, porches and fences, furniture for every interior (shop, diner, bar, office,
   home, warehouse, bank vault, precinct armory and cells), street dressing and trees. Every piece faces +X; collision is
   `UCX_` boxes, so doorways stay open. Translucent panes are separate `*_Glass` pieces so the walls can be Nanite, and
-  `kit_manifest.json` tells the importer which pieces have glass. `--preview <dir>` renders every piece.
+  `kit_manifest.json` tells the importer which pieces have glass. The panes carry the window's collision (the wall
+  pieces only frame the opening), and the game lets sight lines through them, so officers can see into shops.
+  Seats are low (`SEAT`, 31 cm) to suit the cast's short legs: sitters' feet reach the floor and their hands the
+  tables. `--preview <dir>` renders every piece.
   `Source/FTO/City/FTOCityKit.h` mirrors the grid, and the `FTOCity*.cpp` files assemble buildings, rooms and streets.
+  Furnishing a room also records its *spots*: where staff work, where customers and residents sit or stand (with
+  what they do there), and where a crime inside would play out. `AFTOInteriorLife` fills rooms from those spots as
+  officers come near and empties them once they've gone.
 - **Import**: `Tools/Unreal/import_art.py` brings the FBX into `/Game/FTO/...` (vertex colours, materials by slot name,
   sockets squared up to scale 1 and no rotation, Nanite for opaque kit pieces) and can be re-run after any Blender change:
   (`FTO_IMPORT=characters`, `statics` or `kit` limits a run to one group)

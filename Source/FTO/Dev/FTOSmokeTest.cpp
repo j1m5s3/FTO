@@ -1,5 +1,7 @@
 #include "Dev/FTOSmokeTest.h"
 #include "City/FTOCityGenerator.h"
+#include "City/FTOInteriorLife.h"
+#include "City/FTOOccupant.h"
 #include "City/FTOTrafficCar.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameMode.h"
@@ -273,16 +275,37 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddStep(TEXT("stop"), 0.6f, [this]() { bWalkOfficer = false; });
 	AddShot(TEXT("02b_arrest"), 0.2f);
-	AddStep(TEXT("go home"), 1.5f, [this]()
+	AddStep(TEXT("go home"), 3.5f, [this]()
 	{
+		// Straight to the holding cells (the suspect catches up): booked, they let themselves into a cell and sit.
 		AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn());
 		AFTOCityGenerator* City = GetCity();
-		if (Officer && City)
+		const FFTOBuilding* Precinct = City ? City->FindBuilding(EFTOBuildingType::Precinct) : nullptr;
+		if (Officer && Precinct)
 		{
-			Officer->TeleportTo(City->GetPrecinctLocation() + FVector(0.f, 0.f, 100.f), FRotator(0.f, 180.f, 0.f));
+			const FVector Into = Precinct->Room.GetRotation().GetForwardVector();
+			Officer->TeleportTo(City->GetHoldingCellsLocation() - Into * 100.f + FVector(0.f, 0.f, 100.f), Into.Rotation());
 		}
 	});
-	AddShot(TEXT("02c_booked"), 1.f);
+	AddStep(TEXT("watch the cells"), 0.5f, [this]()
+	{
+		const AFTOCityGenerator* City = GetCity();
+		if (const FFTOBuilding* Precinct = City ? City->FindBuilding(EFTOBuildingType::Precinct) : nullptr)
+		{
+			// From the far corner of the cell block, looking at the first cell.
+			ViewFrom(Precinct->Room.TransformPosition(FVector(640.f, 1200.f, 240.f)), Precinct->Room.TransformPosition(FVector(1250.f, 640.f, 70.f)));
+		}
+		for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: suspect %s (%s)."), It->IsJailed() ? TEXT("sat in a cell") :
+				*StaticEnum<EFTOArresteeState>()->GetNameStringByValue(int64(It->GetArrestState())), *It->GetCrime().ToString());
+		}
+	});
+	AddShot(TEXT("02c_booked"), 0.5f);
+	AddStep(TEXT("back to the officer"), 0.5f, [this]()
+	{
+		if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+	});
 
 	// City views.
 	AddStep(TEXT("aerial"), 3.f, [this]()
@@ -386,6 +409,120 @@ void AFTOSmokeTest::BuildSteps()
 		});
 		AddShot(Inside.Shot, 0.3f, false);
 	}
+
+	// Life indoors: who's in, a close look at people sat in a diner, trouble inside (a hold-up, a brawl), a crook
+	// questioned, and a look through a shop window from the street.
+	AddStep(TEXT("cells check"), 0.f, [this]()
+	{
+		for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: in the cells: %s, %s, doing %s at %s."), *It->GetCrime().ToString(), It->IsJailed() ? TEXT("sat down") : TEXT("NOT sat"),
+				*StaticEnum<EFTOAnimAction>()->GetNameStringByValue(int64(It->GetAnimAction())), *It->GetActorLocation().ToCompactString());
+		}
+	});
+	AddStep(TEXT("census"), 0.f, [this]()
+	{
+		if (const AFTOInteriorLife* Life = AFTOInteriorLife::Get(GetWorld()))
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: interiors: %d rooms awake, %d people inside."), Life->GetAwakeCount(), Life->GetOccupantCount());
+		}
+	});
+	AddStep(TEXT("diner close-up"), 1.2f, [this]()
+	{
+		const AFTOCityGenerator* City = GetCity();
+		if (const FFTOBuilding* B = City ? City->FindBuilding(EFTOBuildingType::Diner) : nullptr)
+		{
+			// Along the booths on the left wall, from the door end.
+			ViewFrom(B->Room.TransformPosition(FVector(90.f, B->YMin + 330.f, 190.f)), B->Room.TransformPosition(FVector(420.f, B->YMin + 60.f, 70.f)));
+		}
+	});
+	AddShot(TEXT("15a_diner_close"), 0.3f, false);
+	AddStep(TEXT("stool close-up"), 1.2f, [this]()
+	{
+		const AFTOCityGenerator* City = GetCity();
+		if (const FFTOBuilding* B = City ? City->FindBuilding(EFTOBuildingType::Diner) : nullptr)
+		{
+			ViewFrom(B->Room.TransformPosition(FVector(B->Depth - 420.f, -260.f, 170.f)), B->Room.TransformPosition(FVector(B->Depth - 180.f, 60.f, 80.f)));
+		}
+	});
+	AddShot(TEXT("15b_diner_stools"), 0.3f, false);
+	if (GetNetMode() != NM_Client)
+	{
+		for (const EFTOBuildingType Type : { EFTOBuildingType::Shop, EFTOBuildingType::Bar })
+		{
+			AddStep(TEXT("trouble inside"), 2.f, [this, Type]()
+			{
+				AFTOGameMode* GM = GetAuthGameMode();
+				AFTOCityGenerator* City = GetCity();
+				const int32 Index = City ? City->FindBuildingIndex(Type) : INDEX_NONE;
+				const FFTOBuilding* B = City ? City->GetBuilding(Index) : nullptr;
+				if (!GM || !B || B->CrimeSpots.IsEmpty())
+				{
+					return;
+				}
+				GM->FTOSkipBriefing();
+				const TCHAR* Crime = Type == EFTOBuildingType::Shop ? TEXT("ArmedRobbery") : TEXT("BarFight");
+				GM->GetCrimeDirector()->SpawnIncidentAt(Crime, B->CrimeSpots[0], Index, true);
+				// Over the perp's shoulder, from the room side (away from the shop windows).
+				const FVector Spot = B->CrimeSpots[0].GetLocation();
+				const FVector Toward = B->CrimeSpots[0].GetRotation().GetForwardVector();
+				const FVector Side = FVector::CrossProduct(FVector::UpVector, Toward);
+				const FVector Middle = B->GetCenter();
+				const float Sign = FVector::DotProduct(Middle - Spot, Side) >= 0.f ? 1.f : -1.f;
+				ViewFrom(Spot - Toward * 240.f + Side * Sign * 220.f + FVector(0.f, 0.f, 230.f), Spot + Toward * 80.f + FVector(0.f, 0.f, 90.f));
+			});
+			AddShot(Type == EFTOBuildingType::Shop ? TEXT("15c_holdup") : TEXT("15d_bar_fight"), 0.3f, false);
+		}
+		AddStep(TEXT("question a crook"), 1.5f, [this]()
+		{
+			AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn());
+			AFTOOccupant* Crook = nullptr;
+			for (TActorIterator<AFTOOccupant> It(GetWorld()); It && !Crook; ++It)
+			{
+				Crook = It->GetRole() == EFTOOccupantRole::Crook ? *It : nullptr;
+			}
+			if (!Crook)
+			{
+				// None lying low nearby: plant one in the warehouse.
+				AFTOInteriorLife* Life = AFTOInteriorLife::Get(GetWorld());
+				const AFTOCityGenerator* City = GetCity();
+				Crook = Life && City ? Life->PlantCrook(City->FindBuildingIndex(EFTOBuildingType::Warehouse)) : nullptr;
+			}
+			if (!Officer || !Crook)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: no crook about to question."));
+				return;
+			}
+			const FVector Front = Crook->GetActorLocation() + Crook->GetActorForwardVector() * 140.f;
+			Officer->TeleportTo(Front + FVector(0.f, 0.f, 6.f), (Crook->GetActorLocation() - Front).Rotation());
+			// Along the aisle, over the officer's shoulder.
+			ViewFrom(Front + Crook->GetActorForwardVector() * 260.f + FVector(0.f, 0.f, 170.f), Crook->GetActorLocation());
+			Crook->Interact(Officer);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: questioned a crook: %s."), IsValid(Crook) && !Crook->IsActorBeingDestroyed() ? TEXT("they kept schtum") : TEXT("they confessed"));
+		});
+		AddShot(TEXT("15e_questioned"), 0.3f);
+	}
+	AddStep(TEXT("shop window"), 0.f, [this]()
+	{
+		// From the pavement, through the shop window beside the door, to the middle of the shop.
+		const AFTOCityGenerator* City = GetCity();
+		const FFTOBuilding* B = City ? City->FindBuilding(EFTOBuildingType::Shop) : nullptr;
+		if (!B)
+		{
+			return;
+		}
+		const FVector Out = -B->Room.GetRotation().GetForwardVector();
+		const FVector Along = B->Room.GetRotation().GetRightVector();
+		const FVector Street = B->DoorOutside + Along * 200.f + FVector(0.f, 0.f, 150.f);
+		const FVector Inside = B->Room.TransformPosition(FVector(400.f, 200.f, 150.f));
+		FHitResult Hit;
+		const bool bBlocked = GetWorld()->LineTraceSingleByChannel(Hit, Street, Inside, ECC_Visibility);
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: through a shop window: %s%s."), bBlocked ? TEXT("BLOCKED by ") : TEXT("clear"),
+			bBlocked ? *GetNameSafe(Hit.GetComponent()) : TEXT(""));
+		const FVector Lintel(0.f, 0.f, 180.f); // 3.3 m up: the wall over the window
+		const bool bWalled = GetWorld()->LineTraceSingleByChannel(Hit, Street + Lintel, Inside + Lintel, ECC_Visibility);
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: through the wall above it: %s."), bWalled ? TEXT("blocked") : TEXT("CLEAR"));
+	});
 
 	// Walk in through front doors: the doorways must really be open. (Server only: a client can't teleport itself.)
 	for (const EFTOBuildingType Type : { EFTOBuildingType::Diner, EFTOBuildingType::Precinct, EFTOBuildingType::Home })

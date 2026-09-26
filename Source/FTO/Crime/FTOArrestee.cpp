@@ -19,6 +19,11 @@
 namespace
 {
 	constexpr float HalfHeight = 92.f;
+	/** Breadcrumbs are dropped this far apart. */
+	constexpr float TrailStep = 40.f;
+	/** Anything more than a jump between breadcrumbs is a teleport: catch up rather than walk it. */
+	constexpr float TrailJump = 800.f;
+	constexpr float CellWalkSpeed = 160.f;
 }
 
 AFTOArrestee::AFTOArrestee()
@@ -65,6 +70,7 @@ void AFTOArrestee::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOArrestee, NetYaw);
 	DOREPLIFETIME(AFTOArrestee, AnimSpeed);
 	DOREPLIFETIME(AFTOArrestee, Crime);
+	DOREPLIFETIME(AFTOArrestee, bJailed);
 }
 
 void AFTOArrestee::Init(AFTOCharacter* Officer, float InBookingRelief, const FText& InCrime)
@@ -78,23 +84,23 @@ void AFTOArrestee::Init(AFTOCharacter* Officer, float InBookingRelief, const FTe
 
 	for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
 	{
-		PrecinctLocation = It->GetPrecinctLocation();
+		City = *It;
 		break;
 	}
 
 	if (AFTOPlayerController* PC = Officer ? Cast<AFTOPlayerController>(Officer->GetController()) : nullptr)
 	{
-		PC->ClientToast(FText::Format(INVTEXT("Cuffed! Bring the suspect to the precinct to book them ({0})."), Crime), FLinearColor(0.6f, 0.85f, 1.f));
+		PC->ClientToast(FText::Format(INVTEXT("Cuffed! Walk the suspect into the precinct's holding cells to book them ({0})."), Crime), FLinearColor(0.6f, 0.85f, 1.f));
 	}
 }
 
 EFTOAnimAction AFTOArrestee::GetAnimAction() const
 {
-	if (State == EFTOArresteeState::InCruiser)
+	if (State == EFTOArresteeState::InCruiser || bJailed)
 	{
 		return EFTOAnimAction::SitCuffed;
 	}
-	return AnimSpeed < 20.f ? EFTOAnimAction::Cheer : EFTOAnimAction::None;
+	return AnimSpeed < 20.f ? EFTOAnimAction::HandsUp : EFTOAnimAction::None;
 }
 
 void AFTOArrestee::Tick(float DeltaSeconds)
@@ -107,7 +113,7 @@ void AFTOArrestee::Tick(float DeltaSeconds)
 		NetLocation = GetActorLocation();
 		NetYaw = GetActorRotation().Yaw;
 	}
-	else if (State == EFTOArresteeState::Escorted)
+	else if (State == EFTOArresteeState::Escorted || State == EFTOArresteeState::Booked)
 	{
 		SetActorLocation(FMath::VInterpTo(GetActorLocation(), NetLocation, DeltaSeconds, 10.f));
 		SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0.f, NetYaw, 0.f), DeltaSeconds, 10.f));
@@ -124,10 +130,21 @@ void AFTOArrestee::Tick(float DeltaSeconds)
 	}
 }
 
+FVector AFTOArrestee::FootstepOf(const AActor* Officer) const
+{
+	// The officer's capsule is a little taller than ours; stand on the same floor.
+	return Officer->GetActorLocation() - FVector(0.f, 0.f, 96.f - HalfHeight);
+}
+
 void AFTOArrestee::ServerTick(float DeltaSeconds)
 {
-	if (State == EFTOArresteeState::Booked || State == EFTOArresteeState::Escaped)
+	if (State == EFTOArresteeState::Escaped)
 	{
+		return;
+	}
+	if (State == EFTOArresteeState::Booked)
+	{
+		WalkIntoCell(DeltaSeconds);
 		return;
 	}
 
@@ -155,12 +172,8 @@ void AFTOArrestee::ServerTick(float DeltaSeconds)
 			else
 			{
 				AloneTime += DeltaSeconds;
+				AnimSpeed = 0.f;
 			}
-		}
-		if (State == EFTOArresteeState::InCruiser && FVector::DistSquared2D(Vehicle->GetActorLocation(), PrecinctLocation) < FMath::Square(BookingRadius))
-		{
-			Book();
-			return;
 		}
 	}
 	else
@@ -171,22 +184,10 @@ void AFTOArrestee::ServerTick(float DeltaSeconds)
 			LeaveCruiser();
 		}
 
-		// Trot along behind the officer.
-		const FVector Target = Escort->GetActorLocation() - Escort->GetActorForwardVector() * FollowDistance - FVector(0.f, 0.f, 96.f - HalfHeight);
-		const FVector ToTarget = Target - GetActorLocation();
-		const float Distance = ToTarget.Size2D();
-		const float Speed = Distance > 30.f ? FMath::Min(MaxSpeed, Distance * 3.f) : 0.f;
-		AnimSpeed = Speed;
-		if (Speed > 0.f)
-		{
-			const FVector Step = ToTarget.GetSafeNormal() * FMath::Min(Distance, Speed * DeltaSeconds);
-			SetActorLocation(GetActorLocation() + Step);
-			SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0.f, ToTarget.Rotation().Yaw, 0.f), DeltaSeconds, 8.f));
-		}
+		FollowTrail(DeltaSeconds);
+		AloneTime = FVector::DistSquared2D(Escort->GetActorLocation(), GetActorLocation()) > FMath::Square(2500.f) ? AloneTime + DeltaSeconds : 0.f;
 
-		AloneTime = Distance > 2500.f ? AloneTime + DeltaSeconds : 0.f;
-
-		if (FVector::DistSquared2D(Escort->GetActorLocation(), PrecinctLocation) < FMath::Square(BookingRadius))
+		if (IsAtHoldingCells())
 		{
 			Book();
 			return;
@@ -197,6 +198,80 @@ void AFTOArrestee::ServerTick(float DeltaSeconds)
 	{
 		Escape();
 	}
+}
+
+void AFTOArrestee::FollowTrail(float DeltaSeconds)
+{
+	// Drop a breadcrumb wherever the officer goes. A big jump is a teleport: catch up rather than walk it.
+	const FVector Footstep = FootstepOf(Escort);
+	if (!Trail.IsEmpty() && FVector::Dist(Trail.Last(), Footstep) > TrailJump)
+	{
+		Trail.Reset();
+		SetActorLocation(Footstep - Escort->GetActorForwardVector() * FollowDistance);
+	}
+	if (Trail.IsEmpty() || FVector::Dist(Trail.Last(), Footstep) > TrailStep)
+	{
+		Trail.Add(Footstep);
+	}
+	if (Trail.Num() > 600)
+	{
+		Trail.RemoveAt(0, Trail.Num() - 600);
+	}
+
+	// How far we are from the officer, the way they went.
+	float Remaining = FVector::Dist(GetActorLocation(), Trail[0]);
+	for (int32 i = 0; i + 1 < Trail.Num(); ++i)
+	{
+		Remaining += FVector::Dist(Trail[i], Trail[i + 1]);
+	}
+	const float Gap = Remaining - FollowDistance;
+	if (Gap <= 10.f)
+	{
+		AnimSpeed = 0.f;
+		return;
+	}
+
+	const float Speed = FMath::Min(MaxSpeed, 120.f + Gap * 3.f);
+	float Step = FMath::Min(Gap, Speed * DeltaSeconds);
+	AnimSpeed = Speed;
+	FVector Here = GetActorLocation();
+	FVector Heading = FVector::ZeroVector;
+	while (Step > 0.f && !Trail.IsEmpty())
+	{
+		const FVector ToNext = Trail[0] - Here;
+		const float Length = ToNext.Size();
+		if (Length > KINDA_SMALL_NUMBER)
+		{
+			Heading = ToNext / Length;
+		}
+		if (Length <= Step)
+		{
+			Here = Trail[0];
+			Step -= Length;
+			Trail.RemoveAt(0);
+		}
+		else
+		{
+			Here += Heading * Step;
+			Step = 0.f;
+		}
+	}
+	SetActorLocation(Here);
+	if (!Heading.IsNearlyZero())
+	{
+		SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0.f, Heading.Rotation().Yaw, 0.f), DeltaSeconds, 8.f));
+	}
+}
+
+bool AFTOArrestee::IsAtHoldingCells() const
+{
+	if (!City)
+	{
+		return false;
+	}
+	const FFTOBuilding* Precinct = City->FindBuilding(EFTOBuildingType::Precinct);
+	const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, HalfHeight);
+	return Precinct && Precinct->Contains(Feet) && FVector::DistSquared2D(GetActorLocation(), City->GetHoldingCellsLocation()) < FMath::Square(CellRadius);
 }
 
 void AFTOArrestee::SetInCruiser(AActor* Cruiser)
@@ -213,6 +288,7 @@ void AFTOArrestee::SetInCruiser(AActor* Cruiser)
 	RideVehicle = Cruiser;
 	State = EFTOArresteeState::InCruiser;
 	AnimSpeed = 0.f;
+	Trail.Reset();
 	OnRep_State();
 }
 
@@ -222,8 +298,9 @@ void AFTOArrestee::LeaveCruiser()
 	RideSeat = EFTOSeat::None;
 	State = EFTOArresteeState::Escorted;
 	OnRep_State();
-	SetActorLocation(Escort->GetActorLocation() - Escort->GetActorForwardVector() * FollowDistance - FVector(0.f, 0.f, 96.f - HalfHeight));
+	SetActorLocation(FootstepOf(Escort) - Escort->GetActorForwardVector() * FollowDistance);
 	NetLocation = GetActorLocation();
+	Trail.Reset();
 }
 
 void AFTOArrestee::ApplyRide()
@@ -247,16 +324,54 @@ void AFTOArrestee::OnRep_State()
 {
 	ApplyRide();
 
-	// Visible on foot and in the back seat; the tag only on foot (it'd poke through the roof).
-	const bool bRiding = State == EFTOArresteeState::InCruiser;
-	Body->SetVisibility(State == EFTOArresteeState::Escorted || bRiding);
+	// Visible on foot, in the back seat and in the cell; the tag only on the way (it'd poke through the roof).
+	Body->SetVisibility(State != EFTOArresteeState::Escaped);
 	Tag->SetVisibility(State == EFTOArresteeState::Escorted);
 }
 
 void AFTOArrestee::Book()
 {
 	State = EFTOArresteeState::Booked;
+	AnimSpeed = 0.f;
+	Trail.Reset();
 	OnRep_State();
+
+	// A free place on a cell bench (or the longest-serving occupant gets taken off to court).
+	const FFTOBuilding* Precinct = City ? City->FindBuilding(EFTOBuildingType::Precinct) : nullptr;
+	if (Precinct && Precinct->CellSpots.Num() > 0)
+	{
+		TArray<AFTOArrestee*> Taken;
+		Taken.SetNumZeroed(Precinct->CellSpots.Num());
+		for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+		{
+			if (*It != this && It->State == EFTOArresteeState::Booked && Taken.IsValidIndex(It->CellIndex))
+			{
+				Taken[It->CellIndex] = *It;
+			}
+		}
+		CellIndex = Taken.IndexOfByKey(nullptr);
+		if (CellIndex == INDEX_NONE)
+		{
+			CellIndex = 0;
+			float Oldest = TNumericLimits<float>::Max();
+			for (int32 i = 0; i < Taken.Num(); ++i)
+			{
+				if (Taken[i]->GetLifeSpan() < Oldest)
+				{
+					Oldest = Taken[i]->GetLifeSpan();
+					CellIndex = i;
+				}
+			}
+			Taken[CellIndex]->Destroy();
+		}
+
+		// Up to the bars, through the cell door, onto the bench.
+		const FTransform& Door = Precinct->CellDoors[CellIndex];
+		const FVector Into = Door.GetRotation().GetForwardVector();
+		const FVector Up(0.f, 0.f, HalfHeight);
+		CellPath = { Door.GetLocation() - Into * 110.f + Up, Door.GetLocation() + Into * 90.f + Up, Precinct->CellSpots[CellIndex].GetLocation() + Up };
+		CellYaw = Precinct->CellSpots[CellIndex].Rotator().Yaw;
+	}
 
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{
@@ -268,8 +383,37 @@ void AFTOArrestee::Book()
 	{
 		PC->ClientToast(FText::Format(INVTEXT("Booked! {0}. The city breathes a little easier."), Crime), FLinearColor(0.4f, 1.f, 0.5f));
 	}
-	UE_LOG(LogFTO, Log, TEXT("Suspect booked: %s"), *Crime.ToString());
-	SetLifeSpan(1.f);
+	UE_LOG(LogFTO, Log, TEXT("Suspect booked: %s (cell place %d)"), *Crime.ToString(), CellIndex);
+	SetLifeSpan(CellTime);
+}
+
+void AFTOArrestee::WalkIntoCell(float DeltaSeconds)
+{
+	if (bJailed)
+	{
+		return;
+	}
+	if (CellPath.IsEmpty())
+	{
+		// Sat down on the bench.
+		bJailed = true;
+		AnimSpeed = 0.f;
+		SetActorRotation(FRotator(0.f, CellYaw, 0.f));
+		return;
+	}
+	const FVector ToNext = CellPath[0] - GetActorLocation();
+	const float Step = CellWalkSpeed * DeltaSeconds;
+	AnimSpeed = CellWalkSpeed;
+	if (ToNext.Size() <= Step)
+	{
+		SetActorLocation(CellPath[0]);
+		CellPath.RemoveAt(0);
+	}
+	else
+	{
+		SetActorLocation(GetActorLocation() + ToNext.GetSafeNormal() * Step);
+		SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0.f, ToNext.Rotation().Yaw, 0.f), DeltaSeconds, 8.f));
+	}
 }
 
 void AFTOArrestee::Escape()

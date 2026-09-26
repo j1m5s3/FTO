@@ -89,6 +89,11 @@ void AFTOPedestrian::BeginPlay()
 
 void AFTOPedestrian::OnRep_Look()
 {
+	ApplyLook();
+}
+
+void AFTOPedestrian::ApplyLook()
+{
 	if (Looks.Num() == 0)
 	{
 		return;
@@ -98,8 +103,12 @@ void AFTOPedestrian::OnRep_Look()
 	Body->SetSkeletalMeshAsset(Looks[LookRng.RandRange(0, Looks.Num() - 1)]);
 
 	// Every variant tints its shirt (vertex alpha 1) with a random cheerful colour.
-	const FLinearColor Shirt = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 170, 235);
-	BodyMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Shirt);
+	PaintBody(FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 170, 235));
+}
+
+void AFTOPedestrian::PaintBody(const FLinearColor& Color)
+{
+	BodyMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Color);
 	for (int32 Slot = 1; Slot < Body->GetNumMaterials(); ++Slot)
 	{
 		Body->SetMaterial(Slot, BodyMaterial);
@@ -125,6 +134,24 @@ void AFTOPedestrian::StartWandering(AFTOCityGenerator* InCity, int32 InBlockX, i
 	Segment.To = Start;
 	SetActorLocation(Start);
 	WalkToNextCorner();
+}
+
+void AFTOPedestrian::Resume()
+{
+	WalkToNextCorner();
+}
+
+void AFTOPedestrian::FaceOfficer(const AActor* Officer)
+{
+	if (Officer)
+	{
+		FaceToward(Officer->GetActorLocation());
+	}
+}
+
+FString AFTOPedestrian::GetSmallTalk()
+{
+	return SmallTalk[Rng.RandRange(0, int32(UE_ARRAY_COUNT(SmallTalk)) - 1)];
 }
 
 void AFTOPedestrian::WalkToNextCorner()
@@ -173,7 +200,7 @@ void AFTOPedestrian::OnArrived()
 	if (Rng.FRand() < 0.15f)
 	{
 		Hold();
-		GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::WalkToNextCorner, Rng.FRandRange(1.5f, 5.f), false);
+		GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::Resume, Rng.FRandRange(1.5f, 5.f), false);
 		return;
 	}
 	WalkToNextCorner();
@@ -184,11 +211,8 @@ void AFTOPedestrian::FreezeFor(const AActor* Officer, float Seconds)
 	check(HasAuthority());
 	Hold();
 	bHandsUp = true;
-	if (Officer)
-	{
-		SetActorRotation(FRotator(0.f, (Officer->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
-	}
-	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::WalkToNextCorner, Seconds * Rng.FRandRange(0.8f, 1.2f), false);
+	FaceOfficer(Officer);
+	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::Resume, Seconds * Rng.FRandRange(0.8f, 1.2f), false);
 }
 
 bool AFTOPedestrian::CanInteract(const AFTOCharacter* Officer) const
@@ -215,8 +239,8 @@ void AFTOPedestrian::Interact(AFTOCharacter* Officer)
 	// Stop and face the officer for a moment.
 	Hold();
 	bChatting = true;
-	SetActorRotation(FRotator(0.f, (Officer->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f));
-	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::WalkToNextCorner, 2.5f, false);
+	FaceOfficer(Officer);
+	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::Resume, 2.5f, false);
 
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now >= ChatCooldownUntil)
@@ -255,7 +279,7 @@ void AFTOPedestrian::Interact(AFTOCharacter* Officer)
 		}
 	}
 
-	PC->ClientToast(FText::FromString(SmallTalk[Rng.RandRange(0, int32(UE_ARRAY_COUNT(SmallTalk)) - 1)]), FLinearColor::White);
+	PC->ClientToast(FText::FromString(GetSmallTalk()), FLinearColor::White);
 }
 
 bool AFTOPedestrian::IsMovementFrozen() const
@@ -273,5 +297,5 @@ void AFTOPedestrian::HandleRecovered()
 	TeleportAndHold(GetActorLocation());
 	bChatting = false;
 	bHandsUp = false;
-	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::WalkToNextCorner, 1.6f, false);
+	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::Resume, 1.6f, false);
 }

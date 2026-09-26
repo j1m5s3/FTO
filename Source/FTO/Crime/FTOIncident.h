@@ -13,6 +13,7 @@ class UTextRenderComponent;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class AFTOIncident;
+class AFTOCityGenerator;
 
 DECLARE_MULTICAST_DELEGATE_OneParam(FFTOIncidentEvent, AFTOIncident*);
 
@@ -62,6 +63,11 @@ public:
 	/** Server: make this a moving incident that rides along with Target (car chases). */
 	void FollowActor(AActor* Target);
 
+	/** Server: this one's happening inside building Index (AFTOCityGenerator::GetBuildings). */
+	void SetBuilding(int32 Index);
+	int32 GetBuildingIndex() const { return BuildingIndex; }
+	bool IsIndoors() const { return BuildingIndex != INDEX_NONE; }
+
 	/** Officers within this distance count as on scene (chases use a wider radius). */
 	UFUNCTION(BlueprintPure, Category="Incident")
 	float GetSceneRadius() const { return bMobile ? ChaseRadius : SceneRadius; }
@@ -69,8 +75,10 @@ public:
 	UFUNCTION(BlueprintPure, Category="Incident")
 	bool IsMobile() const { return bMobile; }
 
-	// IFTOAnimatedActor: the suspect acts shifty, then puts their hands up when officers arrive.
+	// IFTOAnimatedActor: the perp gets on with the crime (brawling, dancing, holding up the till with a
+	// finger gun), then puts their hands up when officers arrive.
 	virtual EFTOAnimAction GetAnimAction() const override;
+	virtual EFTOAimPose GetAimPose() const override;
 	virtual float GetAnimSpeed() const override { return 0.f; }
 
 	/** Current chaos per second this incident is pushing into the city (server). */
@@ -130,10 +138,13 @@ protected:
 	UPROPERTY(Replicated) float NeglectTime = 0.f;
 	/** Riding along with a moving target; the suspect is inside it, not standing here. */
 	UPROPERTY(ReplicatedUsing=OnRep_Mobile) bool bMobile = false;
+	/** The building it's in, if it's indoors (the beacon hangs under the ceiling). */
+	UPROPERTY(ReplicatedUsing=OnRep_Info) int32 BuildingIndex = INDEX_NONE;
 
 	UFUNCTION() void OnRep_Mobile();
 
 	// Server-only
+	mutable TWeakObjectPtr<AFTOCityGenerator> City;
 	bool bWillBeReported = false;
 	float ReportAt = 0.f;
 	float WitnessCheckAccumulator = 0.f;

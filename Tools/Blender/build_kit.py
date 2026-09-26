@@ -36,6 +36,11 @@ G = 4.0     # ground floor height
 U = 3.2     # upper floor height
 T = 0.3     # wall thickness
 
+# The cast are short in the leg (hip 0.72 m, knee 0.42 m), so seats are low: at SEAT a sitter's feet reach the floor
+# and their hands the 0.75 m tables. Stools stay tall (feet dangle, as on any bar stool). FTOCityInteriors.cpp seats
+# people to these numbers.
+SEAT = 0.31
+
 # Colours (sRGB)
 PAINT = (0.85, 0.85, 0.85)          # tinted in game
 INNER = (0.94, 0.91, 0.84)          # interior plaster
@@ -122,6 +127,21 @@ def full_panel_collision(height, width=P, t=T):
     return [((-t / 2, 0, height / 2), (t, width, height))]
 
 
+def frame_collision(height, opening, width=P, t=T):
+    """Wall round an opening; the glass piece blocks the opening itself (walkers, but not line of sight)."""
+    y0, y1, z0, z1 = opening
+    h = width / 2
+    return [((-t / 2, (-h + y0) / 2, height / 2), (t, y0 + h, height)),
+            ((-t / 2, (y1 + h) / 2, height / 2), (t, h - y1, height)),
+            ((-t / 2, (y0 + y1) / 2, z0 / 2), (t, y1 - y0, z0)),
+            ((-t / 2, (y0 + y1) / 2, (z1 + height) / 2), (t, y1 - y0, height - z1))]
+
+
+def glass_collision(opening, x=-0.1):
+    y0, y1, z0, z1 = opening
+    return [((x, (y0 + y1) / 2, (z0 + z1) / 2), (0.1, y1 - y0, z1 - z0))]
+
+
 def door_collision(height, y0, y1, z1, width=P, t=T):
     h = width / 2
     return [((-t / 2, (-h + y0) / 2, height / 2), (t, y0 + h, height)),
@@ -144,11 +164,11 @@ def wall_g_plain():
 
 def wall_g_window():
     y0, y1, z0, z1 = WINDOW_G
-    return wall(G, WINDOW_G) + frame(y0, y1, z0, z1) + plinth(-P / 2, P / 2), full_panel_collision(G)
+    return wall(G, WINDOW_G) + frame(y0, y1, z0, z1) + plinth(-P / 2, P / 2), frame_collision(G, WINDOW_G)
 
 
 def wall_g_window_glass():
-    return glazing(*WINDOW_G), []
+    return glazing(*WINDOW_G), glass_collision(WINDOW_G)
 
 
 def wall_g_door():
@@ -163,11 +183,11 @@ def wall_g_shop():
     y0, y1, z0, z1 = SHOP_G
     p = wall(G, SHOP_G) + frame(y0, y1, z0, z1, color=DARK, w=0.07, sill=False)
     p.append(box(PLINTH, (0.02, 0, z0 / 2), (0.04, P, z0), bevel=0.008))                          # kick plate
-    return p, full_panel_collision(G)
+    return p, frame_collision(G, SHOP_G)
 
 
 def wall_g_shop_glass():
-    return glazing(*SHOP_G), []
+    return glazing(*SHOP_G), glass_collision(SHOP_G)
 
 
 def wall_g_shopdoor():
@@ -502,9 +522,9 @@ def booth():
          cyl(YELLOW, (0.3, 0.38, 0.83), 0.035, 0.14, segments=8)]
     for side in (1, -1):
         y = side * 0.78
-        p += [box(PAINT, (0.75, y, 0.24), (1.4, 0.5, 0.45), bevel=0.05, tint=True),
-              box(PAINT, (0.75, y + side * 0.22, 0.75), (1.4, 0.16, 0.7), bevel=0.05, tint=True),
-              box(CHROME, (0.75, y + side * 0.3, 1.12), (1.4, 0.06, 0.05), bevel=0.01)]
+        p += [box(PAINT, (0.75, y, (SEAT + 0.01) / 2), (1.4, 0.5, SEAT + 0.01), bevel=0.05, tint=True),
+              box(PAINT, (0.75, y + side * 0.22, 0.65), (1.4, 0.16, 0.8), bevel=0.05, tint=True),
+              box(CHROME, (0.75, y + side * 0.3, 1.07), (1.4, 0.06, 0.05), bevel=0.01)]
     return p, [((0.75, 0, 0.6), (1.45, 2.1, 1.2))]
 
 
@@ -570,12 +590,13 @@ def round_table():
 
 def chair():
     """A wooden chair; whoever sits in it faces +X."""
-    p = [box(WOOD, (0, 0, 0.46), (0.45, 0.45, 0.05), bevel=0.01),
-         box(WOOD, (-0.2, 0, 0.8), (0.05, 0.42, 0.6), bevel=0.01)]
+    leg = SEAT - 0.05
+    p = [box(WOOD, (0, 0, SEAT - 0.025), (0.45, 0.45, 0.05), bevel=0.01),
+         box(WOOD, (-0.2, 0, SEAT + 0.3), (0.05, 0.42, 0.6), bevel=0.01)]
     for sx in (1, -1):
         for sy in (1, -1):
-            p.append(box(WOOD_DARK, (sx * 0.19, sy * 0.19, 0.22), (0.04, 0.04, 0.45), bevel=0.0))
-    return p, [((0, 0, 0.5), (0.45, 0.45, 1.0))]
+            p.append(box(WOOD_DARK, (sx * 0.19, sy * 0.19, leg / 2), (0.04, 0.04, leg), bevel=0.0))
+    return p, [((0, 0, (SEAT + 0.6) / 2), (0.45, 0.45, SEAT + 0.6))]
 
 
 def pool_table():
@@ -616,11 +637,12 @@ def desk():
 
 
 def office_chair():
-    p = [cyl(DARK, (0, 0, 0.08), 0.3, 0.05, segments=5),
-         cyl(CHROME, (0, 0, 0.28), 0.03, 0.4, segments=8),
-         box(PAINT, (0, 0, 0.5), (0.5, 0.5, 0.1), bevel=0.04, tint=True),
-         box(PAINT, (-0.23, 0, 0.85), (0.08, 0.46, 0.6), bevel=0.04, tint=True)]
-    return p, [((0, 0, 0.55), (0.5, 0.5, 1.1))]
+    top = SEAT + 0.02
+    p = [cyl(DARK, (0, 0, 0.05), 0.3, 0.05, segments=5),
+         cyl(CHROME, (0, 0, (top - 0.1) / 2 + 0.04), 0.03, top - 0.1, segments=8),
+         box(PAINT, (0, 0, top - 0.05), (0.5, 0.5, 0.1), bevel=0.04, tint=True),
+         box(PAINT, (-0.23, 0, top + 0.3), (0.08, 0.46, 0.6), bevel=0.04, tint=True)]
+    return p, [((0, 0, (top + 0.6) / 2), (0.5, 0.5, top + 0.6))]
 
 
 def filing_cabinet():
@@ -657,26 +679,28 @@ def reception_desk():
 
 
 def sofa():
-    p = [box(PAINT, (0, 0, 0.25), (0.9, 2.2, 0.3), bevel=0.06, tint=True),
-         box(PAINT, (-0.33, 0, 0.62), (0.24, 2.2, 0.62), bevel=0.08, tint=True),
-         box(PAINT, (0, -1.0, 0.45), (0.9, 0.22, 0.5), bevel=0.08, tint=True),
-         box(PAINT, (0, 1.0, 0.45), (0.9, 0.22, 0.5), bevel=0.08, tint=True)]
+    top = SEAT + 0.02                       # cushion top
+    p = [box(PAINT, (0, 0, 0.15), (0.9, 2.2, 0.14), bevel=0.05, tint=True),
+         box(PAINT, (-0.33, 0, 0.525), (0.24, 2.2, 0.65), bevel=0.08, tint=True),
+         box(PAINT, (0, -1.0, 0.325), (0.9, 0.22, 0.45), bevel=0.08, tint=True),
+         box(PAINT, (0, 1.0, 0.325), (0.9, 0.22, 0.45), bevel=0.08, tint=True)]
     for y in (-0.45, 0.45):
-        p.append(box(PAINT, (0.05, y, 0.46), (0.75, 0.86, 0.15), bevel=0.06, tint=True))
+        p.append(box(PAINT, (0.05, y, top - 0.065), (0.75, 0.86, 0.13), bevel=0.06, tint=True))
     for sx in (1, -1):
         for sy in (1, -1):
-            p.append(cyl(WOOD_DARK, (sx * 0.35, sy * 1.0, 0.05), 0.04, 0.1, segments=8))
-    p.append(box(YELLOW, (-0.15, 0.6, 0.72), (0.12, 0.4, 0.35), bevel=0.06, rot=(0, -15, 0)))  # a cushion
-    return p, [((0, 0, 0.45), (0.9, 2.2, 0.9))]
+            p.append(cyl(WOOD_DARK, (sx * 0.35, sy * 1.0, 0.04), 0.04, 0.08, segments=8))
+    p.append(box(YELLOW, (-0.15, 0.6, top + 0.2), (0.12, 0.4, 0.35), bevel=0.06, rot=(0, -15, 0)))  # a cushion
+    return p, [((0, 0, 0.43), (0.9, 2.2, 0.86))]
 
 
 def armchair():
-    p = [box(PAINT, (0, 0, 0.25), (0.9, 0.9, 0.3), bevel=0.06, tint=True),
-         box(PAINT, (-0.33, 0, 0.65), (0.24, 0.9, 0.65), bevel=0.08, tint=True),
-         box(PAINT, (0, -0.4, 0.45), (0.9, 0.18, 0.5), bevel=0.07, tint=True),
-         box(PAINT, (0, 0.4, 0.45), (0.9, 0.18, 0.5), bevel=0.07, tint=True),
-         box(PAINT, (0.05, 0, 0.46), (0.75, 0.6, 0.14), bevel=0.06, tint=True)]
-    return p, [((0, 0, 0.45), (0.9, 0.9, 0.9))]
+    top = SEAT + 0.02
+    p = [box(PAINT, (0, 0, 0.13), (0.9, 0.9, 0.14), bevel=0.05, tint=True),
+         box(PAINT, (-0.33, 0, 0.54), (0.24, 0.9, 0.68), bevel=0.08, tint=True),
+         box(PAINT, (0, -0.4, 0.34), (0.9, 0.18, 0.48), bevel=0.07, tint=True),
+         box(PAINT, (0, 0.4, 0.34), (0.9, 0.18, 0.48), bevel=0.07, tint=True),
+         box(PAINT, (0.05, 0, top - 0.07), (0.75, 0.6, 0.14), bevel=0.06, tint=True)]
+    return p, [((0, 0, 0.44), (0.9, 0.9, 0.88))]
 
 
 def tv_stand():
@@ -749,11 +773,12 @@ def dining_table():
 
 def chair_parts(fr):
     """A chair at a frame (for sets like the dining table)."""
-    p = [box(WOOD, fr.at((0, 0, 0.46)), (0.42, 0.42, 0.05), rot=fr.rot, bevel=0.01),
-         box(WOOD, fr.at((-0.19, 0, 0.78)), (0.05, 0.4, 0.55), rot=fr.rot, bevel=0.01)]
+    leg = SEAT - 0.05
+    p = [box(WOOD, fr.at((0, 0, SEAT - 0.025)), (0.42, 0.42, 0.05), rot=fr.rot, bevel=0.01),
+         box(WOOD, fr.at((-0.19, 0, SEAT + 0.28)), (0.05, 0.4, 0.55), rot=fr.rot, bevel=0.01)]
     for sx in (1, -1):
         for sy in (1, -1):
-            p.append(box(WOOD_DARK, fr.at((sx * 0.17, sy * 0.17, 0.22)), (0.04, 0.04, 0.45), rot=fr.rot, bevel=0.0))
+            p.append(box(WOOD_DARK, fr.at((sx * 0.17, sy * 0.17, leg / 2)), (0.04, 0.04, leg), rot=fr.rot, bevel=0.0))
     return p
 
 
@@ -898,16 +923,18 @@ def queue_post():
 
 
 def bench():
+    """Slatted bench; whoever sits on it faces +X."""
+    top = SEAT + 0.02
     p = []
     for i in range(3):
-        p.append(box(WOOD, (-0.12 + i * 0.13, 0, 0.45), (0.11, 1.8, 0.04), bevel=0.01))
+        p.append(box(WOOD, (-0.12 + i * 0.13, 0, top - 0.02), (0.11, 1.8, 0.04), bevel=0.01))
     for i in range(2):
-        p.append(box(WOOD, (-0.22, 0, 0.62 + i * 0.14), (0.04, 1.8, 0.1), bevel=0.01, rot=(0, -12, 0)))
+        p.append(box(WOOD, (-0.22, 0, top + 0.17 + i * 0.14), (0.04, 1.8, 0.1), bevel=0.01, rot=(0, -12, 0)))
     for y in (-0.75, 0.75):
-        p += [box(DARK, (0, y, 0.22), (0.45, 0.06, 0.06), bevel=0.0),
-              box(DARK, (-0.18, y, 0.45), (0.05, 0.06, 0.9), bevel=0.0),
-              box(DARK, (0.15, y, 0.22), (0.05, 0.06, 0.44), bevel=0.0)]
-    return p, [((0, 0, 0.4), (0.5, 1.8, 0.8))]
+        p += [box(DARK, (0, y, top - 0.08), (0.45, 0.06, 0.06), bevel=0.0),
+              box(DARK, (-0.18, y, (top + 0.45) / 2), (0.05, 0.06, top + 0.45), bevel=0.0),
+              box(DARK, (0.15, y, (top - 0.04) / 2), (0.05, 0.06, top - 0.04), bevel=0.0)]
+    return p, [((0, 0, (top + 0.45) / 2), (0.5, 1.8, top + 0.45))]
 
 
 def front_desk():
@@ -933,13 +960,14 @@ def star_facing_x(color, x, cy, cz, r_out, r_in, depth=0.02):
 
 
 def briefing_chair():
-    p = [box(BLUE, (0, 0, 0.44), (0.45, 0.45, 0.05), bevel=0.02),
-         box(BLUE, (-0.2, 0, 0.75), (0.05, 0.42, 0.45), bevel=0.02),
-         box(WOOD_LIGHT, (0.1, 0.28, 0.72), (0.4, 0.25, 0.03), bevel=0.01)]
+    leg = SEAT - 0.05
+    p = [box(BLUE, (0, 0, SEAT - 0.025), (0.45, 0.45, 0.05), bevel=0.02),
+         box(BLUE, (-0.2, 0, SEAT + 0.28), (0.05, 0.42, 0.45), bevel=0.02),
+         box(WOOD_LIGHT, (0.1, 0.28, SEAT + 0.3), (0.4, 0.25, 0.03), bevel=0.01)]     # writing tablet
     for sx in (1, -1):
         for sy in (1, -1):
-            p.append(box(CHROME, (sx * 0.18, sy * 0.18, 0.21), (0.03, 0.03, 0.42), bevel=0.0))
-    return p, [((0, 0, 0.45), (0.5, 0.55, 0.9))]
+            p.append(box(CHROME, (sx * 0.18, sy * 0.18, leg / 2), (0.03, 0.03, leg), bevel=0.0))
+    return p, [((0, 0, (SEAT + 0.5) / 2), (0.5, 0.55, SEAT + 0.5))]
 
 
 def whiteboard():
@@ -1038,9 +1066,12 @@ def cell_bars(door=False):
 
 
 def cell_bench():
-    return [box(METAL, (0.25, 0, 0.45), (0.5, 1.8, 0.06), bevel=0.01),
-            box(METAL, (0.25, -0.8, 0.22), (0.45, 0.06, 0.44), bevel=0.0),
-            box(METAL, (0.25, 0.8, 0.22), (0.45, 0.06, 0.44), bevel=0.0)], [((0.25, 0, 0.25), (0.5, 1.8, 0.5))]
+    """Steel bench bolted to the wall (x = 0); the prisoner sits with their back to it, facing +X."""
+    top = SEAT + 0.02
+    return [box(METAL, (0.25, 0, top - 0.03), (0.5, 1.8, 0.06), bevel=0.01),
+            box(METAL, (0.25, -0.8, (top - 0.06) / 2), (0.45, 0.06, top - 0.06), bevel=0.0),
+            box(METAL, (0.25, 0.8, (top - 0.06) / 2), (0.45, 0.06, top - 0.06), bevel=0.0)], \
+        [((0.25, 0, top / 2), (0.5, 1.8, top))]
 
 
 def toilet():
@@ -1132,15 +1163,15 @@ def bus_stop():
         for y in (-1.55, 1.55):
             p.append(box(DARK, (x, y, 1.27), (0.08, 0.08, 2.55), bevel=0.0))
     for i in range(3):
-        p.append(box(WOOD, (-0.35 + i * 0.12, 0, 0.45), (0.1, 2.0, 0.04), bevel=0.01))
+        p.append(box(WOOD, (-0.35 + i * 0.12, 0, SEAT), (0.1, 2.0, 0.04), bevel=0.01))
     for y in (-0.9, 0.9):
-        p.append(box(DARK, (-0.22, y, 0.22), (0.4, 0.06, 0.44), bevel=0.0))
+        p.append(box(DARK, (-0.22, y, (SEAT - 0.02) / 2), (0.4, 0.06, SEAT - 0.02), bevel=0.0))
     p += [cyl(DARK, (0.9, 1.35, 1.4), 0.04, 2.8, segments=8),
           cyl(YELLOW, (0.9, 1.35, 2.85), 0.3, 0.04, axis='x', segments=16),
           lettering("BUS", DARK, (0.93, 1.35, 2.85), '+x', 0.2),
           lettering("BUS", DARK, (0.87, 1.35, 2.85), '-x', 0.2)]
     return p, [((-0.65, 0, 1.3), (0.1, 3.2, 2.6)), ((0, -1.55, 1.3), (1.4, 0.1, 2.6)), ((0, 1.55, 1.3), (1.4, 0.1, 2.6)),
-               ((-0.22, 0, 0.25), (0.45, 2.0, 0.5))]
+               ((-0.22, 0, (SEAT + 0.02) / 2), (0.45, 2.0, SEAT + 0.02))]
 
 
 def mailbox():

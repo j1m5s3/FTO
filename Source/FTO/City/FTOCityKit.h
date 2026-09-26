@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Animation/FTOAnimatedActor.h"
 #include "FTOCityKit.generated.h"
 
 /**
@@ -14,6 +15,13 @@ namespace FTOKit
 	constexpr float GroundHeight = 400.f;
 	constexpr float UpperHeight = 320.f;
 	constexpr float WallThickness = 30.f;
+
+	/** Top of the kit's chairs, benches and booths (build_kit.py SEAT): low, for a cast that's short in the leg. */
+	constexpr float SeatHeight = 31.f;
+	/** Sitting (A_Officer_Sit): the root is this far below the seat top... */
+	constexpr float SitDrop = 33.f;
+	/** ...and this far in front of whatever they lean back on. */
+	constexpr float SitBack = 27.f;
 }
 
 /** What goes on inside a building's ground floor. */
@@ -28,6 +36,18 @@ enum class EFTOBuildingType : uint8
 	Warehouse,
 	Bank,
 	Precinct
+};
+
+/** Somewhere a person spends their time indoors, and what they do there. */
+USTRUCT()
+struct FFTOSpot
+{
+	GENERATED_BODY()
+
+	/** Their feet (root), facing the way they face. Seats put the root below the seat top by FTOKit::SitDrop. */
+	UPROPERTY() FTransform Transform;
+	UPROPERTY() EFTOAnimAction Action = EFTOAnimAction::None;
+	UPROPERTY() bool bSeated = false;
 };
 
 /**
@@ -48,11 +68,25 @@ struct FFTOBuilding
 	UPROPERTY() float YMax = 0.f;
 	/** On the pavement just outside the door. */
 	UPROPERTY() FVector DoorOutside = FVector::ZeroVector;
-	/** Where staff stand to serve (behind counters, at desks), facing their customers. */
-	UPROPERTY() TArray<FTransform> WorkSpots;
-	/** Where customers or residents hang about (aisles, stools, sofas). */
-	UPROPERTY() TArray<FTransform> VisitSpots;
-	/** Precinct only: the armory's racks and the holding cells. */
+	/** Staff at their posts (behind counters, at desks), facing their customers. The first is the one who's always in. */
+	UPROPERTY() TArray<FFTOSpot> WorkSpots;
+	/** Customers or residents (aisles, stools, booths, sofas). */
+	UPROPERTY() TArray<FFTOSpot> VisitSpots;
+	/** Where a crime inside plays out: the perp stands here facing their victim (the bank's second is its vault). */
+	UPROPERTY() TArray<FTransform> CrimeSpots;
+	/** Precinct only: the armory's racks... */
 	UPROPERTY() TArray<FTransform> ArmorySpots;
+	/** ...the holding cells' bench places (a sitter's root, facing out through the bars)... */
 	UPROPERTY() TArray<FTransform> CellSpots;
+	/** ...and, for each of those, the cell door to go in by (on the floor in the doorway, facing into the cell). */
+	UPROPERTY() TArray<FTransform> CellDoors;
+
+	/** Middle of the room, on the floor. */
+	FVector GetCenter() const { return Room.TransformPosition(FVector(Depth * 0.5f, (YMin + YMax) * 0.5f, 0.f)); }
+	/** Is this world point inside the room (with a little slack for the walls)? */
+	bool Contains(const FVector& World, float Slack = 0.f) const
+	{
+		const FVector Local = Room.InverseTransformPosition(World);
+		return Local.X > -Slack && Local.X < Depth + Slack && Local.Y > YMin - Slack && Local.Y < YMax + Slack && Local.Z > -100.f && Local.Z < FTOKit::GroundHeight;
+	}
 };

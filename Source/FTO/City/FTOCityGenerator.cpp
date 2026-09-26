@@ -12,12 +12,38 @@
 
 namespace FTOSpawnTags
 {
+	// Out on the sidewalks...
 	static const TArray<FName> Street     = { "Jaywalking", "Speeding", "IllegalParking", "CarChase", "PettyTheft", "LostTourist", "Graffiti" };
-	static const TArray<FName> Commercial = { "Shoplifting", "ArmedRobbery", "BarFight", "Vandalism", "Riot", "NoiseComplaint", "TerrorPlot", "Graffiti" };
-	static const TArray<FName> Home       = { "DomesticDispute", "NoiseComplaint", "Burglary", "CatInTree", "Standoff", "Vandalism" };
+	static const TArray<FName> Commercial = { "Vandalism", "Riot", "TerrorPlot", "Graffiti" };
+	static const TArray<FName> Home       = { "CatInTree", "Vandalism" };
 	static const TArray<FName> Park       = { "CatInTree", "LostTourist", "Graffiti", "NoiseComplaint", "Riot", "PettyTheft" };
-	static const TArray<FName> Industrial = { "Burglary", "Vandalism", "Standoff", "TerrorPlot", "Graffiti", "HostageSituation" };
-	static const TArray<FName> Bank       = { "BankHeist", "ArmedRobbery", "HostageSituation" };
+	static const TArray<FName> Industrial = { "Vandalism", "Graffiti" };
+
+	// ...and indoors, by what the building is.
+	static const TArray<FName> InShop      = { "Shoplifting", "ArmedRobbery", "Vandalism" };
+	static const TArray<FName> InDiner     = { "ArmedRobbery", "NoiseComplaint", "BarFight" };
+	static const TArray<FName> InBar       = { "BarFight", "NoiseComplaint", "ArmedRobbery" };
+	static const TArray<FName> InOffice    = { "HostageSituation", "Standoff", "TerrorPlot", "Vandalism" };
+	static const TArray<FName> InHome      = { "DomesticDispute", "NoiseComplaint", "Burglary", "Standoff" };
+	static const TArray<FName> InWarehouse = { "Burglary", "TerrorPlot", "HostageSituation", "Standoff" };
+	static const TArray<FName> InBankHall  = { "ArmedRobbery", "HostageSituation" };
+	static const TArray<FName> InBankVault = { "BankHeist" };
+	static const TArray<FName> None;
+
+	const TArray<FName>& Indoors(EFTOBuildingType Type, int32 Spot)
+	{
+		switch (Type)
+		{
+		case EFTOBuildingType::Shop:      return InShop;
+		case EFTOBuildingType::Diner:     return InDiner;
+		case EFTOBuildingType::Bar:       return InBar;
+		case EFTOBuildingType::Office:    return InOffice;
+		case EFTOBuildingType::Home:      return InHome;
+		case EFTOBuildingType::Warehouse: return InWarehouse;
+		case EFTOBuildingType::Bank:      return Spot == 0 ? InBankHall : InBankVault;
+		default:                          return None;
+		}
+	}
 }
 
 // Everything sits a hair above Z=0 so it never z-fights with a template floor.
@@ -121,6 +147,27 @@ float AFTOCityGenerator::StreetZ() const
 const FFTOBuilding* AFTOCityGenerator::FindBuilding(EFTOBuildingType Type) const
 {
 	return Buildings.FindByPredicate([Type](const FFTOBuilding& B) { return B.Type == Type; });
+}
+
+int32 AFTOCityGenerator::FindBuildingIndex(EFTOBuildingType Type) const
+{
+	return Buildings.IndexOfByPredicate([Type](const FFTOBuilding& B) { return B.Type == Type; });
+}
+
+FVector AFTOCityGenerator::GetHoldingCellsLocation() const
+{
+	// The corridor in front of the bars, between the two cell doors.
+	const FFTOBuilding* Precinct = FindBuilding(EFTOBuildingType::Precinct);
+	if (!Precinct || Precinct->CellDoors.IsEmpty())
+	{
+		return PrecinctLocation;
+	}
+	FVector Sum = FVector::ZeroVector;
+	for (const FTransform& Door : Precinct->CellDoors)
+	{
+		Sum += Door.GetLocation() - Door.GetRotation().GetForwardVector() * 150.f;
+	}
+	return Sum / Precinct->CellDoors.Num();
 }
 
 void AFTOCityGenerator::BuildLayout()
@@ -246,6 +293,11 @@ void AFTOCityGenerator::FlushInstances()
 			ISM->SetCollisionProfileName(TEXT("BlockAll"));
 			ISM->SetCanEverAffectNavigation(false);
 			ISM->SetNumCustomDataFloats(3);
+			if (GetNameSafe(Mesh).EndsWith(TEXT("_Glass")))
+			{
+				// Shop windows stop people, not eyes: officers on patrol can see (and witness) what goes on inside.
+				ISM->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+			}
 
 			// Paint comes from each instance's custom data (MI_FTOCity); rooms get the slightly self-lit
 			// variant so they read clearly through shop windows.
@@ -392,14 +444,15 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 	check(HasAuthority());
 	UWorld* World = GetWorld();
 
-	auto SpawnPoint = [&](const FVector& Location, const TArray<FName>& Allowed, EFTODistrict District)
+	auto SpawnPoint = [&](const FTransform& Where, const TArray<FName>& Allowed, const FName& District, int32 BuildingIndex)
 	{
 		FActorSpawnParameters Params;
 		Params.Owner = this;
-		if (AFTOCrimeSpawnPoint* Point = World->SpawnActor<AFTOCrimeSpawnPoint>(AFTOCrimeSpawnPoint::StaticClass(), Location, FRotator::ZeroRotator, Params))
+		if (AFTOCrimeSpawnPoint* Point = World->SpawnActor<AFTOCrimeSpawnPoint>(AFTOCrimeSpawnPoint::StaticClass(), Where, Params))
 		{
 			Point->AllowedTemplates = Allowed;
-			Point->District = FName(*UEnum::GetValueAsString(District));
+			Point->District = District;
+			Point->BuildingIndex = BuildingIndex;
 		}
 	};
 
@@ -407,18 +460,14 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 	{
 		const float Edge = BlockSize * 0.5f - SidewalkWidth * 0.5f;
 		const FVector Z(0.f, 0.f, CurbHeight);
+		const FName District(*UEnum::GetValueAsString(Block.District));
 
 		// Street-side points on the sidewalk midpoints.
-		SpawnPoint(Block.Center + FVector(-Edge, 0.f, 0.f) + Z, FTOSpawnTags::Street, Block.District);
-		SpawnPoint(Block.Center + FVector(0.f, Edge, 0.f) + Z, FTOSpawnTags::Street, Block.District);
+		SpawnPoint(FTransform(Block.Center + FVector(-Edge, 0.f, 0.f) + Z), FTOSpawnTags::Street, District, INDEX_NONE);
+		SpawnPoint(FTransform(Block.Center + FVector(0.f, Edge, 0.f) + Z), FTOSpawnTags::Street, District, INDEX_NONE);
 
-		if (Block.bPrecinct)
+		if (Block.bPrecinct || Block.bBank)
 		{
-			continue;
-		}
-		if (Block.bBank)
-		{
-			SpawnPoint(Block.Center + FVector(-Block.HalfSize * 0.7f - 350.f, 0.f, 0.f) + Z, FTOSpawnTags::Bank, Block.District);
 			continue;
 		}
 
@@ -430,9 +479,26 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 		case EFTODistrict::Industrial:  AllowedTags = &FTOSpawnTags::Industrial; break;
 		case EFTODistrict::Park:        AllowedTags = &FTOSpawnTags::Park; break;
 		}
-		SpawnPoint(Block.Center + FVector(Edge, 0.f, 0.f) + Z, *AllowedTags, Block.District);
-		SpawnPoint(Block.Center + FVector(0.f, -Edge, 0.f) + Z, *AllowedTags, Block.District);
+		SpawnPoint(FTransform(Block.Center + FVector(Edge, 0.f, 0.f) + Z), *AllowedTags, District, INDEX_NONE);
+		SpawnPoint(FTransform(Block.Center + FVector(0.f, -Edge, 0.f) + Z), *AllowedTags, District, INDEX_NONE);
 	}
+
+	// Indoors: every building's crime spots (robbery at the counter, brawl in the bar, heist in the vault...).
+	int32 Indoor = 0;
+	for (int32 Index = 0; Index < Buildings.Num(); ++Index)
+	{
+		const FFTOBuilding& B = Buildings[Index];
+		for (int32 Spot = 0; Spot < B.CrimeSpots.Num(); ++Spot)
+		{
+			const TArray<FName>& Allowed = FTOSpawnTags::Indoors(B.Type, Spot);
+			if (Allowed.Num() > 0)
+			{
+				SpawnPoint(B.CrimeSpots[Spot], Allowed, FName(*UEnum::GetValueAsString(B.Type)), Index);
+				++Indoor;
+			}
+		}
+	}
+	UE_LOG(LogFTO, Log, TEXT("City: %d indoor crime spots."), Indoor);
 
 	// Officers clock in at the precinct parking lot.
 	for (int32 i = 0; i < 4; ++i)

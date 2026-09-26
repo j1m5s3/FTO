@@ -47,7 +47,10 @@ Modifiers (random): *in progress* (witnessable), *armed*, *fleeing*, *repeat off
 - **Patrol** on foot or by cruiser; witness crimes in progress.
 - **Traffic stops**: pull over NPC cars, quick mini-interaction (ticket / warning / arrest).
 - **Small calls**: cat in tree, lost tourist, noise complaint — cheap relief, fun filler.
-- **Arrest & transport**: bring suspects back to the precinct for bonus relief.
+- **Arrest & transport**: walk (or drive) suspects back to the precinct and into the holding cells to book them
+  for bonus relief.
+- **Community policing**: chat to shopkeepers, bartenders, customers and residents (tip-offs about crimes nobody has
+  called in), and question suspicious characters, who sometimes crack and confess.
 
 ## City
 Medium-scale procedural grid city (a few districts: downtown, residential, industrial, waterfront), roads, sidewalks, NPC pedestrians and traffic. Built from modular low-poly pieces so it can be generated and later hand-dressed.
@@ -89,9 +92,15 @@ Done:
   furnished: shops, diners, bars, offices, homes, warehouses, the bank (with its vault) and the precinct (front desk,
   briefing room, armory, holding cells). Streets get crossings, traffic lights, lamps, hydrants, benches, bins, bus
   stops, planters and trees.
+- Phase 2: interior life and indoor crime. Every building has its people: the clerk, the cooks and waiters, the
+  bartender, tellers, office workers at their desks, a forklift driver, the desk sergeant and quartermaster,
+  customers on stools and in booths, families at home, and now and then a crook lying low who might confess when
+  questioned. Rooms fill as officers approach and empty behind them. Crimes happen inside (hold-ups at the counter,
+  bar brawls, domestic rows, burglaries, the heist in the vault) with everyone reacting, officers can witness them
+  through shop windows, and suspects are walked into the holding cells to be booked.
 
-Next: see [Phase 2 plan](Phase2Plan.md) (people in every building and indoor crime, ragdolls in the world,
-destruction, armory and ballistics, arrests v2, radio, scoring, Steam invites).
+Next: see [Phase 2 plan](Phase2Plan.md) (ragdolls in the world, destruction, armory and ballistics, arrests v2,
+radio, scoring, Steam invites).
 
 Later ideas:
 - Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame

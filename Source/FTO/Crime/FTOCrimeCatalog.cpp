@@ -67,6 +67,11 @@ void UFTOCrimeCatalog::PopulateDefaults()
 		.Flavor({ TEXT("Suspect has 14 rotisserie chickens under their coat."), TEXT("Suspect fled with a single grape.") })
 		.Chaos(0.06f, 3.f, 2.f).Work(3.f, 1).Report(0.8f, 2.f, 6.f).Escalate(45.f, "ArmedRobbery").Spawn(1.2f);
 
+	// Never rolled: it's what a crook lying low in a building confesses to when an officer questions them.
+	Add(Templates, "StolenGoods", TEXT("Possession of Stolen Goods"), E::Petty)
+		.Flavor({ TEXT("Forty garden gnomes in the back room. 'They followed me home.'"), TEXT("Pockets full of other people's spoons.") })
+		.Chaos(0.02f, 3.f, 1.f).Work(3.f, 1).Report(1.f, 0.f, 0.f).Escalate(90.f).Spawn(0.f);
+
 	Add(Templates, "IllegalParking", TEXT("Illegal Parking"), E::Petty)
 		.Flavor({ TEXT("Car parked on the roof of another car."), TEXT("Food truck blocking a fire hydrant again.") })
 		.Chaos(0.03f, 1.5f, 1.f).Work(2.f, 1).Report(0.6f, 3.f, 10.f).Escalate(90.f).Spawn(0.8f).NoArrest();
