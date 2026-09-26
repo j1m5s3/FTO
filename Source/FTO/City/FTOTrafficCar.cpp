@@ -16,6 +16,7 @@
 #include "GameFramework/PlayerController.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
+#include "Scoring/FTOScoring.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Animation/FTOCharacterAnimInstance.h"
@@ -501,6 +502,7 @@ void AFTOTrafficCar::Interact(AFTOCharacter* Officer)
 	if (CarState == EFTOCarState::Stopped)
 	{
 		CarState = EFTOCarState::WritingTicket;
+		TicketOfficer = Officer;
 		GetWorldTimerManager().SetTimer(TicketTimer, this, &AFTOTrafficCar::FinishTicket, TicketSeconds, false);
 		if (Officer)
 		{
@@ -549,6 +551,7 @@ void AFTOTrafficCar::FinishTicket()
 		++GS->TrafficStops;
 		GS->MulticastPlaySound(AFTOGameState::Sounds().Chime, GetActorLocation(), 0.8f);
 	}
+	FTOScoring::Award(TicketOfficer.Get(), EFTOScore::Ticket, GetActorLocation() + FVector(0.f, 0.f, 200.f));
 
 	Violation = EFTOCarViolation::None;
 	CarState = EFTOCarState::Driving;

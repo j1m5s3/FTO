@@ -13,7 +13,9 @@
 #include "Dev/FTOAnimDummy.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
+#include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
+#include "Scoring/FTOScoring.h"
 #include "FTO.h"
 
 AFTOGameMode::AFTOGameMode()
@@ -61,6 +63,7 @@ void AFTOGameMode::StartPlay()
 	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
 	{
 		GS->ShiftSeed = ShiftSeed;
+		GS->OnShiftPhaseChanged.AddDynamic(this, &AFTOGameMode::HandleShiftPhase);
 	}
 
 	if (CityGenerator)
@@ -285,6 +288,82 @@ void AFTOGameMode::FTOAnimGallery()
 		if (AFTOAnimDummy* Dummy = GetWorld()->SpawnActor<AFTOAnimDummy>(AFTOAnimDummy::StaticClass(), Location, FacePlayer))
 		{
 			Dummy->Setup(Entries[i].Action, Entries[i].Aim, (i % 2) == 0);
+		}
+	}
+}
+
+void AFTOGameMode::HandleShiftPhase(EFTOShiftPhase NewPhase)
+{
+	if (NewPhase == EFTOShiftPhase::Survived || NewPhase == EFTOShiftPhase::Overrun)
+	{
+		GatherForDebrief();
+	}
+}
+
+void AFTOGameMode::GatherForDebrief()
+{
+	// Everyone out of the cars and up off the floor, lined up by badge outside the precinct for the scoreboard (the
+	// squad dances if the city survived, slumps if it didn't; see AFTOCharacter::GetAnimAction).
+	TArray<AFTOCharacter*> Squad;
+	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+	{
+		const AFTOPlayerState* PS = It->GetPlayerState<AFTOPlayerState>();
+		const AFTOCruiser* Cruiser = Cast<AFTOCruiser>(It->GetCurrentVehicle());
+		if (!PS && Cruiser && Cruiser->GetDriver() == *It)
+		{
+			PS = Cruiser->GetPlayerState<AFTOPlayerState>();
+		}
+		if (PS)
+		{
+			Squad.Add(*It);
+		}
+	}
+	auto BadgeOf = [](const AFTOCharacter& Officer)
+	{
+		const AFTOPlayerState* PS = Officer.GetPlayerState<AFTOPlayerState>();
+		const AFTOCruiser* Cruiser = Cast<AFTOCruiser>(Officer.GetCurrentVehicle());
+		PS = PS ? PS : (Cruiser ? Cruiser->GetPlayerState<AFTOPlayerState>() : nullptr);
+		return PS ? PS->GetBadgeIndex() : 0;
+	};
+	Squad.Sort([&BadgeOf](const AFTOCharacter& A, const AFTOCharacter& B) { return BadgeOf(A) < BadgeOf(B); });
+
+	TArray<FTransform> Spots;
+	FTransform Camera;
+	if (!FTOScoring::DebriefSpots(GetWorld(), Squad.Num(), Spots, Camera))
+	{
+		return;
+	}
+	for (int32 i = 0; i < Squad.Num(); ++i)
+	{
+		AFTOCharacter* Officer = Squad[i];
+		if (AFTOCruiser* Cruiser = Cast<AFTOCruiser>(Officer->GetCurrentVehicle()))
+		{
+			Cruiser->LetOut(Officer);
+		}
+		// Whatever arrest they were in the middle of is off (the suspect goes back to kneeling or runs for it).
+		Officer->EndSyncedAction();
+		if (UFTOKnockdownComponent* Knockdown = Officer->GetKnockdown(); Knockdown && Knockdown->IsDown())
+		{
+			Knockdown->Recover();
+		}
+		const float HalfHeight = Officer->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+		Officer->TeleportTo(Spots[i].GetLocation() + FVector(0.f, 0.f, HalfHeight + 5.f), Spots[i].Rotator(), false, true);
+		if (AController* Controller = Officer->GetController())
+		{
+			Controller->SetControlRotation(Spots[i].Rotator());
+		}
+	}
+	// Then point everyone at the line-up: facing on their own machine (control rotation doesn't replicate) and the
+	// debrief camera (reliable, after any "out of the car" restart, so that can't snap the camera back to the pawn).
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(It->Get()))
+		{
+			if (const APawn* Pawn = PC->GetPawn())
+			{
+				PC->ClientSetRotation(Pawn->GetActorRotation());
+			}
+			PC->ClientShowDebrief();
 		}
 	}
 }

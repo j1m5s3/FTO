@@ -11,6 +11,7 @@
 #include "Dev/FTOAnimDummy.h"
 #include "InputActionValue.h"
 #include "Radio/FTORadio.h"
+#include "Scoring/FTOScoring.h"
 #include "Sound/SoundEffectSource.h"
 #include "Physics/FTOKnockdownComponent.h"
 #include "Physics/FTOImpact.h"
@@ -420,17 +421,34 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddShot(TEXT("05_incident"), 2.f);
 
-	// Win the shift: report card up, officers cheering.
-	AddStep(TEXT("end shift"), 1.5f, [this]()
+	// Win the shift: the squad lines up outside the precinct and dances while the scoreboard counts up (the arrest
+	// and the booking above should have scored).
+	AddStep(TEXT("end shift"), 4.4f, [this]()
 	{
-		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOEndShift(true); }
-		if (APawn* Officer = GetPawn())
+		if (const AFTOPlayerState* PS = GetPC() ? GetPC()->GetPlayerState<AFTOPlayerState>() : nullptr)
 		{
-			const FVector Fwd = Officer->GetActorForwardVector();
-			ViewFrom(Officer->GetActorLocation() + Fwd * 420.f + FVector(0.f, 0.f, 80.f), Officer->GetActorLocation() + FVector(0.f, 0.f, 40.f));
+			const FFTOOfficerStats& Stats = PS->GetStats();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: score before the whistle: %d (%d arrests, %d booked, %d caught in the act, best combo x%s)."), Stats.Score, Stats.Arrests,
+				Stats.Booked, Stats.CaughtInAct, *FString::SanitizeFloat(FTOScoring::ComboMultiplier(Stats.BestCombo)));
+		}
+		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOEndShift(true); }
+	});
+	AddShot(TEXT("06_shift_report"), 0.5f);
+	AddStep(TEXT("after the debrief"), 0.3f, [this]()
+	{
+		if (const AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn()))
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: debrief: the officer is %s outside the precinct, %s."),
+				Officer->GetAnimAction() == EFTOAnimAction::Dance ? TEXT("dancing") : TEXT("NOT dancing"),
+				GetCity() && FVector::Dist2D(Officer->GetActorLocation(), GetCity()->FindBuilding(EFTOBuildingType::Precinct)->DoorOutside) < 800.f ? TEXT("lined up") : TEXT("NOT LINED UP"));
+		}
+		// The tour goes on: hands back on the controls.
+		if (APlayerController* PC = GetPC())
+		{
+			PC->ResetIgnoreInputFlags();
+			PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
 		}
 	});
-	AddShot(TEXT("06_shift_report"), 1.f);
 
 	// Eye level on a busy downtown sidewalk.
 	AddStep(TEXT("sidewalk"), 2.f, [this]()
@@ -1320,6 +1338,16 @@ void AFTOSmokeTest::BuildSteps()
 		AddStep(TEXT("back to the officer"), 0.3f, [this]()
 		{
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		AddStep(TEXT("arrest scores"), 0.f, [this]()
+		{
+			if (const AFTOPlayerState* PS = GetPC() ? GetPC()->GetPlayerState<AFTOPlayerState>() : nullptr)
+			{
+				const FFTOOfficerStats& Stats = PS->GetStats();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: score after the hard arrests: %d (%d arrests, %d busts, best combo x%s)."), Stats.Score, Stats.Arrests, Stats.Busts,
+					*FString::SanitizeFloat(FTOScoring::ComboMultiplier(Stats.BestCombo)));
+			}
 		});
 
 		// Radio: going down called "officer down" by itself; then the callout wheel (up for backup), and push-to-talk.

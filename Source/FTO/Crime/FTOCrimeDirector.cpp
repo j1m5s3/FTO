@@ -9,6 +9,7 @@
 #include "EngineUtils.h"
 #include "Engine/World.h"
 #include "NavigationSystem.h"
+#include "Scoring/FTOScoring.h"
 #include "FTO.h"
 
 UFTOCrimeDirector::UFTOCrimeDirector()
@@ -384,6 +385,9 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 	const float Relief = Info.ChaosRelief * (Incident->WasWitnessed() ? WitnessBonus : 1.f);
 	GS->AddChaos(-Relief);
 	++GS->IncidentsResolved;
+	// Credit whoever put the cuffs on (else whoever put the perp on the floor).
+	const AActor* Arrester = Incident->GetArrestingOfficer();
+	FTOScoring::IncidentResolved(Incident, Arrester ? Arrester : Incident->GetSubduedBy());
 
 	// Perps get cuffed and have to be walked or driven back to the precinct for the rest of the credit.
 	AFTOPerp* Perp = Incident->GetPerp();

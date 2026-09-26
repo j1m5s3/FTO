@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "Core/FTOGameState.h"
 #include "FTOGameMode.generated.h"
 
 class UFTOCrimeDirector;
@@ -57,4 +58,8 @@ protected:
 	int32 ShiftSeed = 0;
 
 	int32 PickFreeBadge(const APlayerController* ForPlayer) const;
+
+	/** The shift's over (survived or overrun): the squad lines up outside the precinct for the scoreboard. */
+	UFUNCTION() void HandleShiftPhase(EFTOShiftPhase NewPhase);
+	void GatherForDebrief();
 };

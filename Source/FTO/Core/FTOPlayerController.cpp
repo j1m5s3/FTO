@@ -8,7 +8,9 @@
 #include "Vehicles/FTOCruiser.h"
 #include "Core/FTOGameMode.h"
 #include "UI/FTOMenuWidget.h"
+#include "Camera/CameraActor.h"
 #include "EngineUtils.h"
+#include "Scoring/FTOScoring.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -414,4 +416,57 @@ void AFTOPlayerController::ServerEnterNearestCruiser_Implementation()
 	{
 		Nearest->Interact(Officer);
 	}
+}
+
+void AFTOPlayerController::ShowDebrief()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+	// Mid-callout or transmission: let go.
+	RadioReleased();
+	if (bWheelOpen)
+	{
+		WheelAim = FVector2D::ZeroVector;
+		WheelClosed();
+	}
+	// Once (the HUD and the server both ask; the server's reliable call can also arrive after a restart that took the
+	// camera back to the pawn, so the view is always re-applied).
+	if (!DebriefCamera)
+	{
+		TArray<FTransform> Spots;
+		FTransform Eye;
+		if (!FTOScoring::DebriefSpots(GetWorld(), 4, Spots, Eye))
+		{
+			return;
+		}
+		FActorSpawnParameters Params;
+		Params.ObjectFlags |= RF_Transient;
+		DebriefCamera = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Eye, Params);
+	}
+	if (DebriefCamera && GetViewTarget() != DebriefCamera)
+	{
+		SetViewTargetWithBlend(DebriefCamera, 1.2f, VTBlend_EaseInOut, 2.f);
+	}
+	ResetIgnoreInputFlags();
+	SetIgnoreMoveInput(true);
+	SetIgnoreLookInput(true);
+}
+
+void AFTOPlayerController::ClientShowDebrief_Implementation()
+{
+	ShowDebrief();
+}
+
+void AFTOPlayerController::EndDebrief()
+{
+	if (!DebriefCamera)
+	{
+		return;
+	}
+	DebriefCamera->Destroy();
+	DebriefCamera = nullptr;
+	ResetIgnoreInputFlags();
+	SetViewTargetWithBlend(GetPawn(), 0.5f);
 }

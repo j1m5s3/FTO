@@ -10,7 +10,7 @@ Details live in the [Phase 2 plan](Phase2Plan.md) and the [game design](GameDesi
   as debris, vehicle damage states (dents, shed parts, smoke, fire), cartoon debris and dust on impacts.
 - [x] **Radio** (plan item 9): push-to-talk team voice with a radio filter and squelch; quick callouts with no mic
   ("Need backup!", "Suspect fleeing!", "Officer down!", "10-4") that ping the map.
-- [ ] **Scoring** (plan item 10): per-officer points (arrests by tier, catches in the act, tickets, busts, revives;
+- [x] **Scoring** (plan item 10): per-officer points (arrests by tier, catches in the act, tickets, busts, revives;
   penalties for collateral and friendly fire), "+250 ARREST!" popups with combos, and an end-of-shift scoreboard
   that counts up with awards and grades while the squad dances (or slumps).
 - [ ] **Shift extension**: when the 20 minutes are up, the squad votes to extend the shift (chaos carries over) or

@@ -12,6 +12,7 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "Net/UnrealNetwork.h"
+#include "Scoring/FTOScoring.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Vehicles/FTOCruiser.h"
 #include "FTO.h"
@@ -405,6 +406,7 @@ void AFTOArrestee::Book()
 	{
 		PC->ClientToast(FText::Format(INVTEXT("Booked! {0}. The city breathes a little easier."), Crime), FLinearColor(0.4f, 1.f, 0.5f));
 	}
+	FTOScoring::Award(Escort, EFTOScore::Booked, GetActorLocation() + FVector(0.f, 0.f, 120.f));
 	UE_LOG(LogFTO, Log, TEXT("Suspect booked: %s (cell place %d)"), *Crime.ToString(), CellIndex);
 	SetLifeSpan(CellTime);
 }

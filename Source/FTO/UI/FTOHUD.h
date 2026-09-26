@@ -4,10 +4,12 @@
 #include "GameFramework/HUD.h"
 #include "Core/FTOGameState.h"
 #include "Crime/FTOCrimeTypes.h"
+#include "Scoring/FTOScoring.h"
 #include "FTOHUD.generated.h"
 
 class AFTOGameState;
 class AFTOIncident;
+class AFTOPlayerState;
 class UFont;
 
 /**
@@ -28,6 +30,9 @@ public:
 
 	/** One of our rounds landed on someone (a bad hit: a citizen or a partner). */
 	void ShowHitMarker(bool bBadHit);
+
+	/** "+250 ARREST! x2" rising from Where (bigger, and with a ding, when it's ours). */
+	void AddScorePopup(const AFTOPlayerState* Officer, int32 Points, EFTOScore Event, const FVector& Where, int32 Combo);
 
 	/** Max dispatch entries listed at once. */
 	UPROPERTY(EditDefaultsOnly, Category="HUD")
@@ -50,6 +55,24 @@ protected:
 	void DrawWeaponPanel();
 	/** Arrests in progress: the struggle meter (mash!), the cuffing bar, and a suspect on the run. */
 	void DrawArrestPanel(const AFTOGameState* GS);
+
+	/** Scoring (FTOHUDScore.cpp): popups in the world, our score and combo, and the end-of-shift scoreboard. */
+	void DrawScorePopups();
+	void DrawScoreTicker();
+	void DrawScoreboard(const AFTOGameState* GS);
+
+	struct FScorePopup
+	{
+		FString Text;
+		FLinearColor Color;
+		FVector Where = FVector::ZeroVector;
+		float Start = 0.f;
+		bool bMine = false;
+	};
+	TArray<FScorePopup> ScorePopups;
+	/** When the scoreboard went up (it counts up from there); below zero while it isn't. */
+	float ScoreboardShownTime = -1.f;
+	float LastCountTick = 0.f;
 
 	/** The squad radio (FTOHUDRadio.cpp): callout pings, who's on air, and the callout wheel. */
 	void DrawRadio(const AFTOGameState* GS);
