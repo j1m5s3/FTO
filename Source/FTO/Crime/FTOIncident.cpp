@@ -355,6 +355,14 @@ void AFTOIncident::ReportSighting(const FVector& Where)
 	SetActorLocation(Where - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight) + FVector(Off, 0.f));
 }
 
+void AFTOIncident::RefreshSuspectDescription()
+{
+	if (IsValid(Perp))
+	{
+		Info.SuspectDescription = FText::FromString(Perp->DescribeSuspect());
+	}
+}
+
 void AFTOIncident::EndSearch()
 {
 	if (!bSearch)

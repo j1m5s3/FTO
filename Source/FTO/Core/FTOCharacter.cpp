@@ -215,6 +215,44 @@ void AFTOCharacter::EndTalk()
 	}
 }
 
+void AFTOCharacter::UnPossessed()
+{
+	EndTalk();
+	SetTalkKeys(false);
+	Super::UnPossessed();
+}
+
+void AFTOCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	EndTalk();
+	SetTalkKeys(false);
+	Super::EndPlay(EndPlayReason);
+}
+
+void AFTOCharacter::SetTalkKeys(bool bWant)
+{
+	if (bWant == bTalkKeys)
+	{
+		return;
+	}
+	AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController());
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = PC && PC->GetLocalPlayer() ? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()) : nullptr;
+	if (!Subsystem)
+	{
+		bTalkKeys = false;
+		return;
+	}
+	bTalkKeys = bWant;
+	if (bWant)
+	{
+		Subsystem->AddMappingContext(PC->GetInputConfig()->TalkContext, 90);
+	}
+	else
+	{
+		Subsystem->RemoveMappingContext(PC->GetInputConfig()->TalkContext);
+	}
+}
+
 void AFTOCharacter::TalkPressed(int32 Index)
 {
 	if (TalkingTo)
@@ -247,26 +285,7 @@ void AFTOCharacter::ServerEndTalk_Implementation()
 void AFTOCharacter::OnRep_TalkingTo()
 {
 	// The conversation keys (1-4, the d-pad) lie over everything else while there's someone to talk to.
-	const bool bWant = TalkingTo != nullptr && IsLocallyControlled();
-	if (bWant == bTalkKeys)
-	{
-		return;
-	}
-	AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController());
-	UEnhancedInputLocalPlayerSubsystem* Subsystem = PC && PC->GetLocalPlayer() ? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()) : nullptr;
-	if (!Subsystem)
-	{
-		return;
-	}
-	bTalkKeys = bWant;
-	if (bWant)
-	{
-		Subsystem->AddMappingContext(PC->GetInputConfig()->TalkContext, 90);
-	}
-	else
-	{
-		Subsystem->RemoveMappingContext(PC->GetInputConfig()->TalkContext);
-	}
+	SetTalkKeys(TalkingTo != nullptr && IsLocallyControlled());
 }
 
 void AFTOCharacter::BeginPlay()

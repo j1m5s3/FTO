@@ -381,7 +381,13 @@ bool AFTOOccupant::TalkChoice(AFTOCharacter* Officer, int32 Index)
 	if (Index == 0 && OccupantRole == EFTOOccupantRole::Crook && !bQuestioned && Reaction == EFTOAnimAction::None)
 	{
 		Question(Officer);
-		return IsValid(this) && !IsActorBeingDestroyed();
+		if (IsActorBeingDestroyed())
+		{
+			return false; // they confessed: the perp in the new scene takes it from here
+		}
+		HoldForTalk(Officer);
+		GetWorldTimerManager().ClearTimer(ResumeTimer);
+		return true;
 	}
 	return Super::TalkChoice(Officer, Index);
 }

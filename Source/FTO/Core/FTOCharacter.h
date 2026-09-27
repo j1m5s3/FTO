@@ -54,6 +54,8 @@ public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void OnRep_PlayerState() override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual void Tick(float DeltaSeconds) override;
@@ -283,6 +285,7 @@ protected:
 	float TalkIdleSince = 0.f;
 	/** Local: the conversation keys are live (their mapping context is on). */
 	bool bTalkKeys = false;
+	void SetTalkKeys(bool bWant);
 
 	TWeakObjectPtr<AActor> FocusedInteractable;
 	float FocusAccumulator = 0.f;

@@ -1112,6 +1112,13 @@ void AFTOPerp::EndStruggle(bool bOfficersWon)
 
 void AFTOPerp::BeginFleeing(const AActor* From)
 {
+	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+	{
+		if (It->GetTalkingTo() == this)
+		{
+			It->EndTalk();
+		}
+	}
 	GetWorldTimerManager().ClearTimer(ResumeTimer);
 	ReleaseArrester();
 	bHandsUp = false;

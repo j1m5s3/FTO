@@ -1,4 +1,5 @@
 #include "City/FTOPedestrian.h"
+#include "EngineUtils.h"
 #include "Audio/FTOFootsteps.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
@@ -296,9 +297,14 @@ void AFTOPedestrian::HoldForTalk(AFTOCharacter* Officer)
 
 void AFTOPedestrian::TalkEnded(AFTOCharacter* Officer)
 {
-	if (TalkingWith.Get() != Officer)
+	// Still talking to another officer: carry on with them.
+	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
 	{
-		return;
+		if (*It != Officer && It->GetTalkingTo() == this)
+		{
+			TalkingWith = *It;
+			return;
+		}
 	}
 	TalkingWith.Reset();
 	GetWorldTimerManager().ClearTimer(SearchPoseTimer);
@@ -478,6 +484,7 @@ void AFTOPedestrian::ArrestForWhatWasFound(AFTOCharacter* Officer)
 	if (AFTOPerp* Perp = Caught->GetPerp())
 	{
 		Perp->WearLookOf(LookSeed);
+		Caught->RefreshSuspectDescription();
 		Destroy();
 		Perp->Interact(Officer);
 		return;
@@ -503,6 +510,7 @@ void AFTOPedestrian::WrongfulArrest(AFTOCharacter* Officer)
 	if (AFTOArrestee* Cuffed = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), GetActorLocation(), GetActorRotation(), Params))
 	{
 		Cuffed->Init(Officer, 0.f, INVTEXT("Wrongful arrest"));
+		Cuffed->MarkWrongful();
 		if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 		{
 			GS->MulticastPlaySound(AFTOGameState::Sounds().Cuffs, GetActorLocation(), 1.f);
