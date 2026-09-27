@@ -143,10 +143,29 @@ host). Finally the client checks it sees everything the host broke broken too.
   `FTO_IMPORT=clips FTO_CLIPS=HandsBehind` imports just the named animation clips, and `FTO_MESHES=SM_Car_Van_Dented`
   just the named vehicle or weapon meshes)
   `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/import_art.py"`
-- **Audio**: `Tools/Unreal/make_audio.py` synthesises every sound effect from code (siren, whistle, horn, engine,
-  radio squelch, chimes, alarm, fanfare, sad trombone, the knockdown bonk, gunshots, handcuffs, a scuffle, breaking
-  glass, car crashes, clangs, a gushing hydrant and a burning car) into
-  `Art/Source/Audio` and imports them to `/Game/FTO/Audio` (`FTO_SOUNDS=SW_Bonk` rebuilds just the ones named).
+- **Audio**: every sound effect is synthesised from code, no samples. `Tools/Audio/fto_synth.py` is plain Python
+  (numpy + scipy, no Unreal; `python -m pip install numpy scipy`) and renders 44.1 kHz 16-bit mono WAVs:
+  `python Tools/Audio/fto_synth.py --out Art/Source/Audio [--only SW_A,SW_B] [--list]` (the whole set takes seconds).
+  Each sound is seeded from its name, so `--only` gives the same file as a full rebuild. The rendered WAVs are
+  committed in `Art/Source/Audio` (Git LFS). `Tools/Unreal/make_audio.py` imports them to `/Game/FTO/Audio`, flags
+  the loops and creates `SA_FTOWorld` (`FTO_SOUNDS=SW_Bonk` imports just the ones named, `FTO_RESYNTH=1` re-renders
+  first, using `python` on PATH if the editor's Python lacks numpy).
+  - Recipes are layered: a transient, a body and a tail, with modal (resonant partial) banks for metal, glass and
+    wood, shaped noise, tanh saturation for weight and short room or outdoor slap-back tails. Levels differ on
+    purpose: gunshots and wall breaks peak near full scale, footsteps around a third of that.
+  - Loops (`SW_SirenLoop`, `SW_EngineLoop`, `SW_TireSkidLoop`, `SW_ElevatorLoop`, `SW_CityAmbienceLoop`,
+    `SW_GushLoop`, `SW_FireLoop`) are seamless: built from whole periods and filtered circularly, or crossfaded at
+    the wrap. The engine is a cross-plane V8 idle meant to be pitched 0.7x-2.2x.
+  - Variants: the original names stay, and frequently repeated sounds also come numbered (`_01`...), to pick at
+    random: `SW_ShotPistol/Rifle/Shotgun_01..04`, `SW_Crash_01..04`, `SW_Glass_01..03`, `SW_Clang_01..03`,
+    `SW_Ricochet_01..03`.
+  - Fighting: `SW_Punch_01..04`, `SW_Kick_01..03`, `SW_BodyFall_01..03`, `SW_Whoosh_01..03` (swings). No voices.
+  - Footsteps: `SW_Step_<Surface>_01..06` and `SW_StepRun_<Surface>_01..04` for Concrete, Wood, Tile, Carpet, Metal
+    and Grass, plus `SW_Land_Concrete_01..02` (jump landing) and `SW_Scuff_01..03` (shoe scrape).
+  - Vehicles and destruction: `SW_CarImpactLight_01..03`, `SW_CarImpactHeavy_01..03`, `SW_MetalCreak_01..02`,
+    `SW_Rubble_01..04`, `SW_WallBreak_01..03`, `SW_Collapse_01` (about 10 s).
+  - Buildings and city: `SW_DoorOpen`, `SW_DoorClose`, `SW_ElevatorDing`, plus the loops above.
+  - `--list` prints every name with its loop flag.
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
   idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) crossfading straight
   into one another, and an upper-body layer on top (aiming, or hands cuffed behind the back). Actors animating several
