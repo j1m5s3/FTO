@@ -31,6 +31,16 @@ UFTOInputConfig* AFTOPlayerController::GetInputConfig()
 	return InputConfig;
 }
 
+void AFTOPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (CityAmbience)
+	{
+		CityAmbience->Stop();
+		CityAmbience = nullptr;
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
 void AFTOPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
@@ -43,7 +53,7 @@ void AFTOPlayerController::BeginPlay()
 	// The city's distant hum under everything.
 	if (USoundBase* Ambience = AFTOGameState::Sounds().CityAmbienceLoop)
 	{
-		CityAmbience = UGameplayStatics::SpawnSound2D(this, Ambience, 0.35f, 1.f, 0.f, nullptr, true);
+		CityAmbience = UGameplayStatics::SpawnSound2D(this, Ambience, 0.35f, 1.f, 0.f, nullptr, false);
 	}
 
 #if !UE_BUILD_SHIPPING

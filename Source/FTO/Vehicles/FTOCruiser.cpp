@@ -559,12 +559,19 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 void AFTOCruiser::UpdateSkid(float DeltaSeconds)
 {
 	// Tyres squeal in a slide: measured from how the car's actually moving (works for everyone's car, on every machine).
+	// The driver's machine knows the slide exactly; everyone else (the host included, for a client's car, which only
+	// moves in ServerMove steps) smooths an estimate from how the car's moving.
 	const FVector Here = GetActorLocation();
 	const FVector Moved = DeltaSeconds > 0.f ? (Here - SkidLastLocation) / DeltaSeconds : FVector::ZeroVector;
 	SkidLastLocation = Here;
-	const float Sideways = FMath::Abs(FVector::DotProduct(Moved, GetActorRightVector()));
-	const float Speed = Moved.Size2D();
-	const float Target = Speed > 300.f && Speed < 6000.f ? FMath::Clamp((Sideways - 250.f) / 600.f, 0.f, 1.f) : 0.f;
+	if (Moved.Size2D() < 8000.f) // (not a teleport)
+	{
+		SkidVelocity = FMath::VInterpTo(SkidVelocity, Moved, DeltaSeconds, 5.f);
+	}
+	const bool bKnown = IsSimulatingLocally();
+	const float Sideways = bKnown ? FMath::Abs(LateralSpeed) : FMath::Abs(FVector::DotProduct(SkidVelocity, GetActorRightVector()));
+	const float Speed = bKnown ? FMath::Abs(ForwardSpeed) + Sideways : SkidVelocity.Size2D();
+	const float Target = Speed > 300.f ? FMath::Clamp((Sideways - 250.f) / 600.f, 0.f, 1.f) : 0.f;
 	SkidLevel = FMath::FInterpTo(SkidLevel, Target, DeltaSeconds, 8.f);
 	if (!SkidAudio)
 	{

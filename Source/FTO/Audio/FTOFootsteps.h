@@ -45,6 +45,7 @@ protected:
 	bool IsNearListener() const;
 
 	UPROPERTY(Transient) TObjectPtr<ACharacter> Character;
+	UPROPERTY(Transient) TObjectPtr<class UFTOKnockdownComponent> Knockdown;
 	FVector LastLocation = FVector::ZeroVector;
 	float Travelled = 0.f;
 	bool bHaveLast = false;

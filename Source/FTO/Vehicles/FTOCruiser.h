@@ -220,6 +220,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SkidAudio;
 	void UpdateSkid(float DeltaSeconds);
 	FVector SkidLastLocation = FVector::ZeroVector;
+	FVector SkidVelocity = FVector::ZeroVector;
 	float SkidLevel = 0.f;
 	/** Dents, smoke, fire, write-offs (the beaten-up body from build_vehicles.py --dented). */
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UFTOVehicleDamage> Damage;

@@ -46,9 +46,10 @@ namespace FTOAudio
 
 	USoundBase* Step(EFTOSurface Surface, bool bRunning)
 	{
-		static const TCHAR* Names[] = { TEXT("Concrete"), TEXT("Wood"), TEXT("Tile"), TEXT("Carpet"), TEXT("Metal"), TEXT("Grass") };
-		const TCHAR* Name = Names[FMath::Clamp(int32(Surface), 0, int32(UE_ARRAY_COUNT(Names)) - 1)];
-		return Pick(FName(*FString::Printf(TEXT("%s_%s"), bRunning ? TEXT("StepRun") : TEXT("Step"), Name)));
+		static const FName Walks[] = { TEXT("Step_Concrete"), TEXT("Step_Wood"), TEXT("Step_Tile"), TEXT("Step_Carpet"), TEXT("Step_Metal"), TEXT("Step_Grass") };
+		static const FName Runs[] = { TEXT("StepRun_Concrete"), TEXT("StepRun_Wood"), TEXT("StepRun_Tile"), TEXT("StepRun_Carpet"), TEXT("StepRun_Metal"), TEXT("StepRun_Grass") };
+		const int32 Index = FMath::Clamp(int32(Surface), 0, int32(UE_ARRAY_COUNT(Walks)) - 1);
+		return Pick(bRunning ? Runs[Index] : Walks[Index]);
 	}
 
 	EFTOSurface SurfaceOf(const FHitResult& Ground)

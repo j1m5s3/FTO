@@ -1,5 +1,6 @@
 #include "Audio/FTOFootsteps.h"
 #include "Audio/FTOAudio.h"
+#include "Animation/FTOAnimatedActor.h"
 #include "Core/FTOGameState.h"
 #include "Engine/World.h"
 #include "GameFramework/Character.h"
@@ -7,8 +8,26 @@
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "Physics/FTOKnockdownComponent.h"
+#include "Sound/SoundConcurrency.h"
+#include "UObject/StrongObjectPtr.h"
 
 int32 UFTOFootsteps::StepCount[6] = {};
+
+namespace
+{
+	/** The crowd's steps share a few voices (the nearest win), so they never crowd out a gunshot or a siren. */
+	USoundConcurrency* CrowdConcurrency()
+	{
+		static TStrongObjectPtr<USoundConcurrency> Shared;
+		if (!Shared.IsValid())
+		{
+			Shared.Reset(NewObject<USoundConcurrency>(GetTransientPackage(), TEXT("FTOCrowdSteps")));
+			Shared->Concurrency.MaxCount = 6;
+			Shared->Concurrency.ResolutionRule = EMaxConcurrentResolutionRule::StopFarthestThenOldest;
+		}
+		return Shared.Get();
+	}
+}
 
 UFTOFootsteps::UFTOFootsteps()
 {
@@ -27,9 +46,15 @@ void UFTOFootsteps::BeginPlay()
 		return;
 	}
 	Character = Cast<ACharacter>(GetOwner());
+	Knockdown = GetOwner()->FindComponentByClass<UFTOKnockdownComponent>();
 	if (Character)
 	{
 		Character->LandedDelegate.AddDynamic(this, &UFTOFootsteps::HandleLanded);
+	}
+	// The crowd doesn't need a check every frame: a stride takes a good few.
+	if (CrowdRange > 0.f)
+	{
+		SetComponentTickInterval(0.08f);
 	}
 }
 
@@ -38,12 +63,32 @@ bool UFTOFootsteps::IsOnFeet() const
 	const AActor* Owner = GetOwner();
 	if (!Owner || Owner->IsHidden())
 	{
-		return false; // sat in a car
+		return false;
 	}
-	if (const UFTOKnockdownComponent* Knockdown = Owner->FindComponentByClass<UFTOKnockdownComponent>(); Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed()))
+	if (Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed()))
 	{
 		return false;
 	}
+	// Sat down (a chair, a car seat, the back of a cruiser) or riding along on something.
+	if (Owner->GetAttachParentActor())
+	{
+		return false;
+	}
+	if (const IFTOAnimatedActor* Animated = Cast<IFTOAnimatedActor>(Owner))
+	{
+		switch (Animated->GetAnimAction())
+		{
+		case EFTOAnimAction::Sit:
+		case EFTOAnimAction::Drive:
+		case EFTOAnimAction::Ride:
+		case EFTOAnimAction::SitCuffed:
+		case EFTOAnimAction::SitHandsUp:
+			return false;
+		default:
+			break;
+		}
+	}
+	// (Seated in a car, an officer isn't walking: the movement mode says so.)
 	return !Character || (Character->GetCharacterMovement() && Character->GetCharacterMovement()->IsMovingOnGround());
 }
 
@@ -70,8 +115,9 @@ void UFTOFootsteps::TickComponent(float DeltaTime, ELevelTick TickType, FActorCo
 	LastLocation = Here;
 	bHaveLast = true;
 	const float Speed = DeltaTime > 0.f ? Moved / DeltaTime : 0.f;
-	// Standing still, off our feet, or teleported: start the stride afresh.
-	if (!IsOnFeet() || Speed < 40.f || Moved > 400.f)
+	// Standing still, faster than anyone runs (teleported, or getting out of a car), or off our feet: start the
+	// stride afresh. Cheapest checks first: the crowd's mostly standing about or far away.
+	if (Speed < 40.f || Speed > 1500.f || !IsOnFeet())
 	{
 		Travelled = 0.f;
 		return;
@@ -118,6 +164,7 @@ void UFTOFootsteps::PlayStep(bool bRunning, bool bLanding)
 	if (Sound)
 	{
 		const float Loud = Volume * (bLanding ? 1.4f : (bRunning ? 1.15f : 1.f));
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, Feet, Loud, FMath::FRandRange(0.93f, 1.07f), 0.f, AFTOGameState::Sounds().World);
+		UGameplayStatics::PlaySoundAtLocation(this, Sound, Feet, Loud, FMath::FRandRange(0.93f, 1.07f), 0.f, AFTOGameState::Sounds().World,
+			CrowdRange > 0.f ? CrowdConcurrency() : nullptr);
 	}
 }
