@@ -17,6 +17,8 @@
 #include "Engine/World.h"
 #include "IPAddress.h"
 #include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"
+#include "Core/FTOGameState.h"
 #include "SocketSubsystem.h"
 
 UFTOInputConfig* AFTOPlayerController::GetInputConfig()
@@ -36,6 +38,12 @@ void AFTOPlayerController::BeginPlay()
 	if (!IsLocalPlayerController())
 	{
 		return;
+	}
+
+	// The city's distant hum under everything.
+	if (USoundBase* Ambience = AFTOGameState::Sounds().CityAmbienceLoop)
+	{
+		CityAmbience = UGameplayStatics::SpawnSound2D(this, Ambience, 0.35f, 1.f, 0.f, nullptr, true);
 	}
 
 #if !UE_BUILD_SHIPPING

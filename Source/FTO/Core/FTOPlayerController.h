@@ -103,6 +103,9 @@ public:
 	void CalloutPicked(int32 Index);
 
 protected:
+	/** The city's hum (local player only). */
+	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> CityAmbience;
+
 	void SendCallout(EFTOCallout Callout);
 
 	UFUNCTION(Server, Reliable)

@@ -1,4 +1,5 @@
 #include "Physics/FTOKnockdownComponent.h"
+#include "Audio/FTOAudio.h"
 #include "Animation/FTOCharacterAnimInstance.h"
 #include "Core/FTOGameState.h"
 #include "Engine/SkeletalMesh.h"
@@ -89,7 +90,9 @@ void UFTOKnockdownComponent::Knockdown(const FVector& LaunchVelocity, float Dura
 
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{
-		GS->MulticastPlaySound(AFTOGameState::Sounds().Bonk, GetOwner()->GetActorLocation(), 0.9f);
+		// A body hitting the deck (the old cartoon bonk only as a faint grace note).
+		GS->MulticastPlaySound(FTOAudio::Pick(TEXT("BodyFall")), GetOwner()->GetActorLocation(), 1.f);
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Bonk, GetOwner()->GetActorLocation(), 0.2f);
 	}
 }
 

@@ -31,7 +31,16 @@ enum class EFTOShiftVote : uint8
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FFTOShiftPhaseChanged, EFTOShiftPhase, NewPhase);
 
-/** Every in-house synthesised sound (Tools/Unreal/make_audio.py). */
+/** Several takes of one sound (SW_Punch_01..04): FTOAudio::Pick plays one at random so repeats don't sound canned. */
+USTRUCT()
+struct FFTOSoundFamily
+{
+	GENERATED_BODY()
+
+	UPROPERTY() TArray<TObjectPtr<USoundBase>> Sounds;
+};
+
+/** Every in-house synthesised sound (Tools/Audio/fto_synth.py, imported by Tools/Unreal/make_audio.py). */
 USTRUCT(BlueprintType)
 struct FFTOSoundSet
 {
@@ -68,6 +77,19 @@ struct FFTOSoundSet
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Clang;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> GushLoop;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> FireLoop;
+	/** Loops: tyres squealing in a slide, the city's distant hum, a lift's motor. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> TireSkidLoop;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> CityAmbienceLoop;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> ElevatorLoop;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> ElevatorDing;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> DoorOpen;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> DoorClose;
+	/** A building coming down. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundBase> Collapse;
+	/** The numbered takes, by family name ("Punch", "Step_Wood", "CarImpactHeavy"...; see FTOAudio). */
+	UPROPERTY() TMap<FName, FFTOSoundFamily> Families;
+	/** Sounds with takes of their own (the gunshots, crashes, glass...): which family to pick from instead. */
+	UPROPERTY() TMap<TObjectPtr<USoundBase>, FName> TakesOf;
 	/** Shared 3D falloff for sounds in the world. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) TObjectPtr<USoundAttenuation> World;
 };

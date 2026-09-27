@@ -1,4 +1,5 @@
 #include "Weapons/FTOBallistics.h"
+#include "Audio/FTOAudio.h"
 #include "Art/FTOArt.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -84,7 +85,7 @@ void UFTOBallistics::Fire(AActor* Shooter, EFTOWeapon Weapon, const FVector& Ori
 		Flash(Origin);
 		if (USoundBase* Bang = FTOWeapons::ShotSound(Weapon))
 		{
-			UGameplayStatics::PlaySoundAtLocation(this, Bang, Origin, 1.f, 1.f, 0.f, AFTOGameState::Sounds().World);
+			UGameplayStatics::PlaySoundAtLocation(this, FTOAudio::Vary(Bang), Origin, 1.f, FMath::FRandRange(0.97f, 1.03f), 0.f, AFTOGameState::Sounds().World);
 		}
 	}
 }
@@ -221,7 +222,7 @@ bool UFTOBallistics::Land(FRound& Round, const FHitResult& Hit)
 		if (Round.bShow)
 		{
 			Puff(Hit.ImpactPoint, SparkColor, 10.f, 0.18f, 6.f);
-			UGameplayStatics::PlaySoundAtLocation(this, AFTOGameState::Sounds().Ricochet, Hit.ImpactPoint, 0.8f, Scatter.FRandRange(0.85f, 1.2f), 0.f,
+			UGameplayStatics::PlaySoundAtLocation(this, FTOAudio::Vary(AFTOGameState::Sounds().Ricochet), Hit.ImpactPoint, 0.8f, Scatter.FRandRange(0.85f, 1.2f), 0.f,
 				AFTOGameState::Sounds().World);
 		}
 		return true;
