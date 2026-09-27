@@ -24,6 +24,7 @@ import os
 import random
 import sys
 
+import bmesh
 import bpy
 from mathutils import Vector
 
@@ -599,6 +600,25 @@ def police_inside(s, cut):
     return p, {}
 
 
+def dice(mesh_obj, max_edge=0.14):
+    """
+    Split every edge longer than max_edge (metres) until none are, so flat panels have vertices in the middle. The game
+    dents cars where they're hit by pushing vertices about (UFTOVehicleDamage and M_FTOVehicle), and a bonnet that's
+    one quad has nothing in the middle to push. Colours, slots and shapes are unchanged.
+    """
+    bm = bmesh.new()
+    bm.from_mesh(mesh_obj.data)
+    limit = max_edge * fb.UNIT
+    for _ in range(7):
+        long_edges = [e for e in bm.edges if e.calc_length() > limit]
+        if not long_edges:
+            break
+        bmesh.ops.subdivide_edges(bm, edges=long_edges, cuts=1, use_grid_fill=True)
+    bm.to_mesh(mesh_obj.data)
+    bm.free()
+    mesh_obj.data.update()
+
+
 def dent(mesh_obj, seed):
     """
     The same car after a hard day: nose and tail crumpled in, a couple of knocks along the doors, and a roof that's
@@ -606,14 +626,7 @@ def dent(mesh_obj, seed):
     wheels, cameras) still fit: the game swaps this in when a car's badly damaged.
     """
     rng = random.Random(seed)
-    # Flat panels are single faces with nothing in the middle to push: split every face in four first (plain
-    # subdivision, so nothing gets rounded off; colours and slots carry over).
-    dicing = mesh_obj.modifiers.new("Dicing", 'SUBSURF')
-    dicing.subdivision_type = 'SIMPLE'
-    dicing.levels = 1
-    dicing.render_levels = 1
-    bpy.context.view_layer.objects.active = mesh_obj
-    bpy.ops.object.modifier_apply(modifier=dicing.name)
+    # (The body's already diced into small faces (dice()), so there's something in the middle of each panel to push.)
     verts = mesh_obj.data.vertices
     xs = [v.co.x for v in verts]
     x0, x1 = min(xs), max(xs)
@@ -740,6 +753,8 @@ def main():
         fb.reset_scene()
         parts, sockets = build()
         mesh_obj = fb.build_mesh_object(name, parts, materials=None if name == "SM_Wheel" else MATERIALS)
+        if name != "SM_Wheel":
+            dice(mesh_obj)
         counts = {}
         for poly in mesh_obj.data.polygons:
             counts[poly.material_index] = counts.get(poly.material_index, 0) + 1

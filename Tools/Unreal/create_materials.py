@@ -13,6 +13,11 @@ MI_FTOGlow   M_FTOBase glowing in its vertex colours (lights, dials, screens)
 MI_FTOCity   M_FTOBase tinted per instance (the building kit)
 MI_FTOCityInterior  the same, a little self-lit so rooms read clearly from the street
 M_FTODecal   deferred decal: a bullet hole (dark pit, chipped rim) that fades out over its lifetime
+M_FTOVehicle M_FTOBase for car bodies, plus dents: up to DENTS dents (DentN = local centre xyz + radius w,
+             PushN = the push into the body xyz + scrape w) move the vertices (World Position Offset), bend the
+             normals to match and scrape the paint back to bare metal. Set by UFTOVehicleDamage per car.
+MI_FTOVehicleGlow  M_FTOVehicle glowing (the lights, so they dent with the body)
+M_FTOVehicleGlass  M_FTOGlass that dents along with the body
 
 Engine primitives have no vertex colours (read as white), so they simply take `Color`.
 Blender-made assets bake flat colours into vertex colours; alpha = 1 marks "tintable"
@@ -27,6 +32,87 @@ mel = unreal.MaterialEditingLibrary
 eal = unreal.EditorAssetLibrary
 
 
+# How many dents a car's material can carry (UFTOVehicleDamage::MaxDents must match).
+DENTS = 12
+
+# Each dent is a smooth bowl: g = exp(-3 d^2 / r^2) around its centre. The push moves vertices by Push * g; the normal
+# tilts by the slope of that (the gradient of g along the surface, scaled by how far the push goes along the normal).
+DENT_HLSL_OFFSET = """
+float3 o = 0;
+#define FTO_DENT(D, P) { float r = max(D.w, 1.0); float3 v = Pos - D.xyz; float g = exp(-3.0 * dot(v, v) / (r * r)); o += P.xyz * g; }
+%s
+return o;
+"""
+DENT_HLSL_NORMAL = """
+float3 n = normalize(N);
+float3 t = 0;
+#define FTO_DENT(D, P) { float r = max(D.w, 1.0); float3 v = Pos - D.xyz; float g = exp(-3.0 * dot(v, v) / (r * r)); float3 dg = g * (-6.0 / (r * r)) * v; t -= dot(P.xyz, n) * (dg - dot(dg, n) * n); }
+%s
+return normalize(n + t);
+"""
+DENT_HLSL_SCRAPE = """
+float s = 0;
+#define FTO_DENT(D, P) { float r = max(D.w, 1.0); float3 v = Pos - D.xyz; float g = exp(-2.0 * dot(v, v) / (r * r)); s += P.w * g; }
+%s
+return saturate(s);
+"""
+
+
+def dent_nodes(mat, x, y):
+    """The dent maths: (world offset, world normal, scrape mask) nodes, fed by the DentN/PushN parameters."""
+    calls = "\n".join(f"FTO_DENT(D{i}, P{i})" for i in range(DENTS))
+    local_pos = mel.create_material_expression(mat, unreal.MaterialExpressionLocalPosition, x - 900, y)
+    normal_ws = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, x - 1100, y + 150)
+    normal_ls = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, x - 900, y + 150)
+    normal_ls.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD)
+    normal_ls.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_LOCAL)
+    mel.connect_material_expressions(normal_ws, "", normal_ls, "")
+
+    params = []
+    for i in range(DENTS):
+        d = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, x - 900, y + 300 + i * 120)
+        d.set_editor_property("parameter_name", f"Dent{i}")
+        d.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, -100000.0, 1.0))
+        pnode = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, x - 700, y + 300 + i * 120)
+        pnode.set_editor_property("parameter_name", f"Push{i}")
+        pnode.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, 0.0, 0.0))
+        params.append((d, pnode))
+
+    def custom(code, out_type, with_normal, cx, cy):
+        node = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, cx, cy)
+        node.set_editor_property("code", code % calls)
+        node.set_editor_property("output_type", out_type)
+        inputs = [unreal.CustomInput(input_name="Pos")]
+        if with_normal:
+            inputs.append(unreal.CustomInput(input_name="N"))
+        for i in range(DENTS):
+            inputs.append(unreal.CustomInput(input_name=f"D{i}"))
+            inputs.append(unreal.CustomInput(input_name=f"P{i}"))
+        node.set_editor_property("inputs", inputs)
+        mel.connect_material_expressions(local_pos, "", node, "Pos")
+        if with_normal:
+            mel.connect_material_expressions(normal_ls, "", node, "N")
+        for i, (d, pnode) in enumerate(params):
+            mel.connect_material_expressions(d, "", node, f"D{i}")
+            mel.connect_material_expressions(pnode, "", node, f"P{i}")
+        return node
+
+    offset_ls = custom(DENT_HLSL_OFFSET, unreal.CustomMaterialOutputType.CMOT_FLOAT3, False, x - 400, y)
+    offset_ws = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, x - 200, y)
+    offset_ws.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL)
+    offset_ws.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    mel.connect_material_expressions(offset_ls, "", offset_ws, "")
+
+    normal_new = custom(DENT_HLSL_NORMAL, unreal.CustomMaterialOutputType.CMOT_FLOAT3, True, x - 400, y + 200)
+    normal_out = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, x - 200, y + 200)
+    normal_out.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_LOCAL)
+    normal_out.set_editor_property("transform_type", unreal.MaterialVectorCoordTransform.TRANSFORM_WORLD)
+    mel.connect_material_expressions(normal_new, "", normal_out, "")
+
+    scrape = custom(DENT_HLSL_SCRAPE, unreal.CustomMaterialOutputType.CMOT_FLOAT1, False, x - 400, y + 400)
+    return offset_ws, normal_out, scrape
+
+
 def scalar_param(mat, name, value, x, y):
     node = mel.create_material_expression(mat, unreal.MaterialExpressionScalarParameter, x, y)
     node.set_editor_property("parameter_name", name)
@@ -34,7 +120,7 @@ def scalar_param(mat, name, value, x, y):
     return node
 
 
-def build_base_material(name, two_sided=False):
+def build_base_material(name, two_sided=False, dents=False):
     path = f"{PACKAGE_DIR}/{name}"
     if eal.does_asset_exist(path):
         eal.delete_asset(path)
@@ -83,6 +169,19 @@ def build_base_material(name, two_sided=False):
     mel.connect_material_expressions(base, "", burnt, "A")
     mel.connect_material_expressions(soot, "", burnt, "B")
     mel.connect_material_expressions(scorch, "", burnt, "Alpha")
+    if dents:
+        # Dents: the body pushed in, the light catching the creases, and scraped paint showing bare metal.
+        offset, normal, scrape = dent_nodes(mat, -400, 900)
+        mat.set_editor_property("tangent_space_normal", False)
+        mel.connect_material_property(offset, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+        mel.connect_material_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
+        metal = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -200, 300)
+        metal.set_editor_property("constant", unreal.LinearColor(0.42, 0.43, 0.45, 1.0))
+        scraped = mel.create_material_expression(mat, unreal.MaterialExpressionLinearInterpolate, 0, 100)
+        mel.connect_material_expressions(burnt, "", scraped, "A")
+        mel.connect_material_expressions(metal, "", scraped, "B")
+        mel.connect_material_expressions(scrape, "", scraped, "Alpha")
+        burnt = scraped
     mel.connect_material_property(burnt, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
     rough = scalar_param(mat, "Roughness", 0.75, -600, 400)
@@ -105,7 +204,7 @@ def build_base_material(name, two_sided=False):
     return mat
 
 
-def build_glass_material(name):
+def build_glass_material(name, dents=False):
     """Tinted see-through glass for car windows and shop fronts (lit translucency so it catches light)."""
     path = f"{PACKAGE_DIR}/{name}"
     if eal.does_asset_exist(path):
@@ -130,6 +229,10 @@ def build_glass_material(name):
     mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
     spec = scalar_param(mat, "Specular", 0.9, -600, 400)
     mel.connect_material_property(spec, "", unreal.MaterialProperty.MP_SPECULAR)
+    if dents:
+        # A car's windows move with its dents (the scrape mask means nothing on glass).
+        offset, _normal, _scrape = dent_nodes(mat, -400, 700)
+        mel.connect_material_property(offset, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
 
     mel.recompile_material(mat)
     eal.save_loaded_asset(mat)
@@ -237,5 +340,11 @@ if wanted("M_FTOBase") or wanted("MI_FTOGlow") or wanted("MI_FTOCity") or wanted
         build_instance("MI_FTOCityInterior", base_material, {"UseInstanceColor": 1.0, "Emissive": 0.12})  # rooms: a little self-lit
 if wanted("M_FTOGlass"):
     build_glass_material("M_FTOGlass")
+if wanted("M_FTOVehicle") or wanted("MI_FTOVehicleGlow"):
+    vehicle_material = build_base_material("M_FTOVehicle", dents=True) if wanted("M_FTOVehicle") else eal.load_asset(f"{PACKAGE_DIR}/M_FTOVehicle")
+    if wanted("MI_FTOVehicleGlow"):
+        build_instance("MI_FTOVehicleGlow", vehicle_material, {"Emissive": 2.5})         # a car's lights
+if wanted("M_FTOVehicleGlass"):
+    build_glass_material("M_FTOVehicleGlass", dents=True)
 if wanted("M_FTODecal"):
     build_decal_material("M_FTODecal")                                              # bullet holes and scuffs
