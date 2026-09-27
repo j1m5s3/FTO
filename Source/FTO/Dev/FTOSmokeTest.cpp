@@ -24,6 +24,8 @@
 #include "Weapons/FTOBallistics.h"
 #include "Crime/FTOArrestee.h"
 #include "Crime/FTOCrimeDirector.h"
+#include "Crime/FTOCrimeExtra.h"
+#include "Crime/FTOGraffitiTag.h"
 #include "Crime/FTOIncident.h"
 #include "Crime/FTOPerp.h"
 #include "Vehicles/FTOCruiser.h"
@@ -148,7 +150,13 @@ AFTOPerp* AFTOSmokeTest::StagePerp(FName Crime, float Ahead)
 	const FVector Fwd = Cop->GetActorForwardVector().GetSafeNormal2D();
 	const FVector Feet = Cop->GetActorLocation() - FVector(0.f, 0.f, 96.f) + Fwd * Ahead;
 	const AFTOIncident* Incident = GM->GetCrimeDirector()->SpawnIncidentAt(Crime, FTransform((-Fwd).Rotation(), Feet), INDEX_NONE, true);
-	return Incident ? Incident->GetPerp() : nullptr;
+	AFTOPerp* Perp = Incident ? Incident->GetPerp() : nullptr;
+	if (Perp)
+	{
+		// Staged for the camera: nobody bolts at the sight of the officer unless a check asks them to.
+		Perp->SetForcedResponse(EFTOArrestResponse::Comply);
+	}
+	return Perp;
 }
 
 void AFTOSmokeTest::AimAt(const FVector& Target)
@@ -368,7 +376,13 @@ void AFTOSmokeTest::BuildSteps()
 		{
 			const FVector Spot = City->GetSidewalkCorner(Far->X, Far->Y, 0) + FVector(0.f, 0.f, 100.f);
 			Officer->TeleportTo(Spot, FRotator(0.f, 45.f, 0.f));
-			GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("Shoplifting"), Spot + FVector(150.f, 0.f, -90.f), true);
+			if (const AFTOIncident* Shoplifting = GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("Shoplifting"), Spot + FVector(150.f, 0.f, -90.f), true))
+			{
+				if (AFTOPerp* Shoplifter = Shoplifting->GetPerp())
+				{
+					Shoplifter->SetForcedResponse(EFTOArrestResponse::Comply); // no running off before the cuffs
+				}
+			}
 		}
 	});
 	AddStep(TEXT("cuff"), 3.6f, [this]()
@@ -388,8 +402,11 @@ void AFTOSmokeTest::BuildSteps()
 		if (Shoplifter)
 		{
 			Shoplifter->SetForcedResponse(EFTOArrestResponse::Comply);
+			const bool bCould = Shoplifter->CanInteract(Officer);
 			Shoplifter->Interact(Officer);
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: arresting the shoplifter: %s."), Shoplifter->GetArrestState() == EFTOPerpArrest::Cuffing ? TEXT("cuffing") : TEXT("NOT CUFFING"));
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: arresting the shoplifter: %s."), Shoplifter->GetArrestState() == EFTOPerpArrest::Cuffing ? TEXT("cuffing") :
+				*FString::Printf(TEXT("NOT CUFFING (%s, %.0f cm away, state %d, %s)"), *Shoplifter->GetIncident()->GetInfo().Title.ToString(),
+					FVector::Dist(Shoplifter->GetActorLocation(), Officer->GetActorLocation()), int32(Shoplifter->GetArrestState()), bCould ? TEXT("could interact") : TEXT("couldn't interact")));
 		}
 	});
 	AddStep(TEXT("escort"), 1.5f, [this]()
@@ -1069,7 +1086,13 @@ void AFTOSmokeTest::BuildSteps()
 			const FVector Officer = Start + Along * 900.f;
 			const FVector Robber = Start + Along * 2100.f;
 			Cop->TeleportTo(Officer + FVector(0.f, 0.f, 100.f), Along.Rotation());
-			GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("ArmedRobbery"), FTransform((-Along).Rotation(), Robber), INDEX_NONE, true);
+			if (const AFTOIncident* HoldUp = GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("ArmedRobbery"), FTransform((-Along).Rotation(), Robber), INDEX_NONE, true))
+			{
+				if (AFTOPerp* Gunman = HoldUp->GetPerp())
+				{
+					Gunman->SetForcedResponse(EFTOArrestResponse::Comply); // stands and shoots rather than running off
+				}
+			}
 			if (APlayerController* PC = GetPC())
 			{
 				PC->SetViewTargetWithBlend(Cop, 0.f);
@@ -1406,6 +1429,130 @@ void AFTOSmokeTest::BuildSteps()
 		});
 		AddShot(TEXT("18g_driver_cuffed"), 0.3f);
 		AddStep(TEXT("back to the officer"), 0.3f, [this]()
+		{
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		// Crimes that play out: a mugging with its victim, the mugger slipping off into the crowd, and a search.
+		AddStep(TEXT("mugging"), 1.5f, [this]()
+		{
+			TestPerp = StagePerp(TEXT("Mugging"), 600.f);
+			if (!TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: mugging: NO MUGGER."));
+				return;
+			}
+			TestPerp->SetForcedResponse(EFTOArrestResponse::Comply); // no bolting at the sight of the camera
+			int32 Victims = 0;
+			for (TActorIterator<AFTOCrimeExtra> It(GetWorld()); It; ++It)
+			{
+				Victims += It->GetRole() == EFTOExtraRole::Victim && FVector::Dist2D(It->GetActorLocation(), TestPerp->GetActorLocation()) < 300.f ? 1 : 0;
+			}
+			const FVector At = TestPerp->GetActorLocation();
+			ViewFrom(At + TestPerp->GetActorRightVector() * 420.f + TestPerp->GetActorForwardVector() * 60.f + FVector(0.f, 0.f, 80.f), At + TestPerp->GetActorForwardVector() * 60.f);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: mugging: %s, the mugger %s."), Victims > 0 ? TEXT("a victim with their hands up") : TEXT("NO VICTIM"),
+				TestPerp->GetAnimAction() == EFTOAnimAction::Talk ? TEXT("demanding their wallet") : TEXT("NOT AT IT"));
+		});
+		AddShot(TEXT("21a_mugging"), 0.3f);
+		AddStep(TEXT("mugger slips away"), 4.f, [this]()
+		{
+			if (!TestPerp.IsValid())
+			{
+				return;
+			}
+			TestPerp->FinishDeedNow();
+			const AFTOIncident* Incident = TestPerp->GetIncident();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the mugger %s; the call %s (\"%s\")."), TestPerp->IsHiding() ? TEXT("walked off into the crowd") : TEXT("DIDN'T LEAVE"),
+				Incident && Incident->IsSearching() ? TEXT("is a search") : TEXT("IS NOT A SEARCH"), Incident ? *Incident->GetInfo().SuspectDescription.ToString() : TEXT(""));
+		});
+		AddStep(TEXT("film the getaway"), 0.1f, [this]()
+		{
+			if (TestPerp.IsValid())
+			{
+				const FVector At = TestPerp->GetActorLocation();
+				ViewFrom(At + FVector(-500.f, -500.f, 400.f), At);
+			}
+		});
+		AddShot(TEXT("21b_slipped_away"), 0.3f);
+		AddStep(TEXT("track them down"), 3.4f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop || !TestPerp.IsValid())
+			{
+				return;
+			}
+			const FVector At = TestPerp->GetActorLocation();
+			const FVector Back = -TestPerp->GetActorForwardVector().GetSafeNormal2D();
+			Cop->TeleportTo(At + Back * 150.f + FVector(0.f, 0.f, 6.f), (-Back).Rotation());
+			const bool bCould = TestPerp->CanInteract(Cop);
+			const FString Prompt = TestPerp->GetInteractPrompt(Cop).ToString();
+			TestPerp->Interact(Cop);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: found the mugger (prompt \"%s\"): %s."), *Prompt,
+				bCould && TestPerp->GetArrestState() == EFTOPerpArrest::Cuffing ? TEXT("cuffing them") : TEXT("NOT ARRESTED"));
+		});
+		AddStep(TEXT("mugger cuffed"), 0.2f, [this]()
+		{
+			int32 Cuffed = 0;
+			for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+			{
+				Cuffed += It->GetCrime().ToString().Contains(TEXT("Mugging")) ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the mugger %s."), Cuffed > 0 ? TEXT("is cuffed") : TEXT("WAS NOT ARRESTED"));
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		// A tagger at the wall and a vandal going from bin to bin.
+		AddStep(TEXT("graffiti"), 5.f, [this]()
+		{
+			TestPerp = StagePerp(TEXT("Graffiti"), 500.f);
+			if (TestPerp.IsValid())
+			{
+				TestPerp->SetForcedResponse(EFTOArrestResponse::Comply);
+			}
+		});
+		AddStep(TEXT("graffiti result"), 0.1f, [this]()
+		{
+			const AFTOGraffitiTag* Tag = nullptr;
+			for (TActorIterator<AFTOGraffitiTag> It(GetWorld()); It; ++It)
+			{
+				Tag = *It;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: graffiti: %s (%.0f%% sprayed, the tagger %.0f cm from it)."), Tag ? TEXT("a tag on the wall") : TEXT("NO TAG"), Tag ? Tag->GetProgress() * 100.f : 0.f,
+				Tag && TestPerp.IsValid() ? FVector::Dist2D(Tag->GetActorLocation(), TestPerp->GetActorLocation()) : -1.f);
+			if (Tag)
+			{
+				const_cast<AFTOGraffitiTag*>(Tag)->SetProgress(1.f); // the whole thing, for the photo
+			}
+			if (Tag && TestPerp.IsValid())
+			{
+				ViewFrom(Tag->GetActorLocation() + Tag->GetActorForwardVector() * 450.f + TestPerp->GetActorRightVector() * 320.f + FVector(0.f, 0.f, 60.f), Tag->GetActorLocation());
+			}
+		});
+		AddShot(TEXT("21c_graffiti"), 0.3f);
+		AddStep(TEXT("vandal"), 9.f, [this]()
+		{
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			CrashHealthBefore = Wreckage ? Wreckage->NumBroken() : 0;
+			TestPerp = StagePerp(TEXT("Vandalism"), 600.f);
+			if (TestPerp.IsValid())
+			{
+				TestPerp->SetForcedResponse(EFTOArrestResponse::Comply);
+				ViewArrest(TestPerp.Get());
+			}
+		});
+		AddStep(TEXT("vandal result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const int32 Smashed = Wreckage ? Wreckage->NumBroken() - int32(CrashHealthBefore) : 0;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the vandal smashed %d thing%s."), Smashed, Smashed == 1 ? TEXT("") : TEXT("s"));
+			if (TestPerp.IsValid())
+			{
+				ViewArrest(TestPerp.Get());
+			}
+		});
+		AddShot(TEXT("21d_vandal"), 0.3f);
+		AddStep(TEXT("back to the officer again"), 0.3f, [this]()
 		{
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});

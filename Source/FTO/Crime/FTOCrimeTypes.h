@@ -68,6 +68,13 @@ struct FTO_API FFTOCrimeTemplate
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bArrest = true;
 	/** The perp has a gun (hold-ups, stand-offs) and shoots at officers who come close. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bArmed = false;
+
+	/** Chance (0-1) the perp makes a run for it when the police turn up, rather than staying put. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) float EscapeChance = 0.f;
+	/** Seconds of crime before the perp is done and leaves with the goods (0 = they keep at it till the police come). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) float DeedSeconds = 0.f;
+	/** The perp dresses like anyone else (so a getaway ends in a search by description); else the striped jumper. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bStreetClothes = true;
 };
 
 /** Random twist layered onto a template to keep shifts fresh. */
@@ -111,6 +118,12 @@ struct FTO_API FFTOIncidentInfo
 	UPROPERTY(BlueprintReadOnly) bool bArmed = false;
 	/** The twist rolled onto it, if any (a FFTOCrimeModifier Id: "Drunk" suspects wrestle, "Fleeing" ones run). */
 	UPROPERTY(BlueprintReadOnly) FName Twist;
+	/** See FFTOCrimeTemplate. */
+	UPROPERTY(BlueprintReadOnly) float EscapeChance = 0.f;
+	UPROPERTY(BlueprintReadOnly) float DeedSeconds = 0.f;
+	UPROPERTY(BlueprintReadOnly) bool bStreetClothes = true;
+	/** What the suspect looks like, for the dispatch board once they've fled ("red top, bald with a beard"). */
+	UPROPERTY(BlueprintReadOnly) FText SuspectDescription;
 };
 
 namespace FTOCrime
