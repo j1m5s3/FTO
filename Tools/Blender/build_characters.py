@@ -447,11 +447,26 @@ def outfit_hoodie(an, pants=DENIM, shoe=WHITE):
     ]
 
 
+def skirt_tube(top, hem, r_top, r_hem):
+    """A skirt as an elliptic tube from top (x, y, z) to hem: radii (rx, ry) change linearly, so it follows the
+    hips and legs instead of flaring round like a cone."""
+    top, hem, r_top, r_hem = (np.asarray(v, dtype=float) for v in (top, hem, r_top, r_hem))
+
+    def f(P):
+        t = np.clip((top[2] - P[:, 2]) / (top[2] - hem[2]), 0.0, 1.0)[:, None]
+        c = top + (hem - top) * t
+        r = r_top + (r_hem - r_top) * t
+        q = (P[:, :2] - c[:, :2]) / r
+        k = np.sqrt((q * q).sum(axis=1))
+        return (k - 1.0) * r.min(axis=1)
+    return S.intersect(f, zband(hem[2], top[2]))
+
+
 def outfit_dress(an, shoe=RED):
     bodice = top_shell(an, 0.8, 99.0, 0.3)
     bodice = neck_opening(bodice, 140.5, width=6.5)
-    skirt = S.intersect(S.round_cone((0, 0.0, 101.0), (0, -0.5, 58.0), 16.5, 20.5), zband(56.0, 102.0))
-    skirt = S.smooth_union(2.0, S.intersect(S.offset(an.hips, 1.0), below(102.0)), skirt)
+    skirt = skirt_tube((0, -1.2, 101.0), (0, -2.5, 58.0), (17.2, 12.8), (20.6, 12.5))
+    skirt = S.smooth_union(2.0, S.intersect(S.offset(an.core, 1.0), zband(64.0, 102.0)), skirt)
     return [
         Layer("top", S.union(bodice, skirt), TOP, tint=True, weight="skirt"),
         Layer("shoes", shoes(an, 0.7, 6.0), shoe),
@@ -541,7 +556,7 @@ def outfit_jacket(an):
     jacket = S.union(jacket, S.intersect(S.offset(an.core, 2.1), zband(93.0, 97.0)),
                      S.intersect(S.offset(an.neck, 2.4), zband(142.0, 151.0)))
     opening = S.intersect(S.halfspace((0, -4.0, 0), (0, 1, 0)), S.box((0, -10, 128), (3.2, 12, 40)))
-    jacket = S.subtract(jacket, S.union(opening, S.ellipsoid((0, -8.5, 150.0), (5.5, 7.0, 9.0))))
+    jacket = S.subtract(jacket, S.union(opening, S.ellipsoid((0, -8.5, 150.0), (5.5, 7.0, 9.0))), k=0.8)
     return [
         Layer("tee", tee, (0.12, 0.12, 0.14)),
         Layer("top", jacket, TOP, tint=True, bias=0.02),
@@ -702,6 +717,11 @@ def body_mesh(name, layers):
     zs = np.array([v.co.z for v in obj.data.vertices])
     head.add([int(i) for i in np.nonzero(zs <= 156.0)[0]], 1.0, 'REPLACE')
     head.add([int(i) for i in np.nonzero(zs > 156.0)[0]], 0.3, 'REPLACE')   # the face keeps more detail
+    # So do hems and openings: where two layers meet, the surface steps and coarse triangles turn it ragged.
+    P = np.array([v.co for v in obj.data.vertices])
+    vals = np.sort(np.stack([l.sdf(P) - l.bias for l in layers], axis=1), axis=1)
+    near = np.nonzero((vals[:, 1] - vals[:, 0] < 0.9) & (zs <= 156.0))[0]
+    head.add([int(i) for i in near], 0.45, 'REPLACE')
     decimate(obj, int(BODY_TRIS * 0.30), weights="_detail")
     obj.vertex_groups.remove(obj.vertex_groups["_detail"])
     even_out(obj, solid, lambda p: MAX_EDGE_HEAD if p.z > 157.0 else MAX_EDGE)
@@ -746,21 +766,44 @@ def cut_along_labels(obj, layers, solid):
     vals = np.stack([f(P) - b for f, b in fields], axis=1)
     lab = np.argmin(vals, axis=1)
 
-    splits = []
+    vlab = bm.verts.layers.int.new("fto_vlab")   # the layer each original vertex lies on; -1 for cut vertices
+    for v in bm.verts:
+        v[vlab] = int(lab[v.index])
+
+    # Where each edge crosses from one layer to the other: bisect the difference of the two fields along the edge
+    # (it is far from linear over a 5 cm edge, e.g. a stripe's sine).
+    cross = []
     for e in bm.edges:
         a, b = e.verts
         la, lb = lab[a.index], lab[b.index]
-        if la == lb:
-            continue
-        ga = vals[a.index, la] - vals[a.index, lb]
-        gb = vals[b.index, la] - vals[b.index, lb]
-        t = ga / (ga - gb) if ga != gb else 0.5
-        splits.append((e, a, float(np.clip(t, 0.08, 0.92))))
+        if la != lb:
+            cross.append((e, a, b, la, lb))
     new_verts = []
-    for e, a, t in splits:
-        _e, v = bmesh.utils.edge_split(e, a, t)
-        new_verts.append(v)
-    if new_verts:
+    if cross:
+        A = np.array([a.co for _e, a, _b, _la, _lb in cross])
+        B = np.array([b.co for _e, _a, b, _la, _lb in cross])
+        LA = np.array([c[3] for c in cross])
+        LB = np.array([c[4] for c in cross])
+
+        def diff(t):
+            Q = A + (B - A) * t[:, None]
+            out = np.empty(len(Q))
+            for la, lb in set(zip(LA.tolist(), LB.tolist())):
+                idx = np.nonzero((LA == la) & (LB == lb))[0]
+                (fa, ba), (fb_, bb) = fields[la], fields[lb]
+                out[idx] = (fa(Q[idx]) - ba) - (fb_(Q[idx]) - bb)
+            return out        # < 0 where la still wins
+        lo, hi = np.zeros(len(cross)), np.ones(len(cross))
+        for _ in range(10):
+            mid = 0.5 * (lo + hi)
+            below = diff(mid) < 0.0
+            lo = np.where(below, mid, lo)
+            hi = np.where(below, hi, mid)
+        T = np.clip(0.5 * (lo + hi), 0.03, 0.97)
+        for (e, a, _b, _la, _lb), t in zip(cross, T):
+            _e, v = bmesh.utils.edge_split(e, a, float(t))
+            v[vlab] = -1
+            new_verts.append(v)
         NP = np.array([v.co for v in new_verts])
         NP = S.project_to_surface(solid, NP, max_step=0.6)
         for v, p in zip(new_verts, NP):
@@ -780,12 +823,18 @@ def cut_along_labels(obj, layers, solid):
             res = bmesh.ops.poke(bm, faces=[f])
             centre = res["verts"][0]
             centre.co = c
+            centre[vlab] = -1
     bmesh.ops.triangulate(bm, faces=bm.faces[:])
 
-    # Colour each face by the layer under its centre.
-    # Face centres sit slightly inside the curved surface, where an inner layer could win: project them out first.
+    # Colour each face by the layer of its original corners: after the cut, every piece has corners on one layer
+    # only (sampling the field at face centres instead flips thin pieces along the boundary and leaves teeth).
+    # Pieces with only cut corners (the centre of a three-layer corner) take the layer under their centre.
     C = S.project_to_surface(solid, np.array([f.calc_center_median() for f in bm.faces]), max_step=0.6)
     flab = S.label_vertices(fields, C)
+    for i, f in enumerate(bm.faces):
+        own = [v[vlab] for v in f.verts if v[vlab] >= 0]
+        if own:
+            flab[i] = max(set(own), key=own.count)
     col = bm.loops.layers.color.new("Col")
     for f, li in zip(bm.faces, flab):
         layer = layers[li]
@@ -793,6 +842,7 @@ def cut_along_labels(obj, layers, solid):
         f.smooth = True
         for loop in f.loops:
             loop[col] = rgba
+    bm.verts.layers.int.remove(vlab)
     face_layer = bm.faces.layers.int.new("fto_layer")
     for f, li in zip(bm.faces, flab):
         f[face_layer] = int(li)

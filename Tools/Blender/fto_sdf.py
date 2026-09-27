@@ -151,12 +151,12 @@ def offset(f, t):
 
 def cached(f):
     """Remembers the last evaluation, so a shape shared by several layers (the torso) is computed once per batch."""
-    memo = {"key": None, "val": None}
+    memo = {"P": None, "val": None}
 
     def g(P):
-        key = (id(P), P.shape)
-        if memo["key"] != key:
-            memo["key"], memo["val"] = key, f(P)
+        # Keyed on the array itself (kept alive here): an id() alone can be reused by the next temporary array.
+        if memo["P"] is not P:
+            memo["P"], memo["val"] = P, f(P)
         return memo["val"]
     return g
 
