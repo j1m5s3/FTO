@@ -1,4 +1,5 @@
 #include "Crime/FTOArrestee.h"
+#include "Audio/FTOFootsteps.h"
 #include "Animation/FTOCharacterAnimInstance.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
@@ -40,6 +41,8 @@ AFTOArrestee::AFTOArrestee()
 	RootComponent = Capsule;
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> SuspectMesh(TEXT("/Game/FTO/Characters/Civilians/SK_Suspect.SK_Suspect"));
+	Footsteps = CreateDefaultSubobject<UFTOFootsteps>(TEXT("Footsteps"));
+	Footsteps->Volume = 0.5f;
 	Body = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Body"));
 	Body->SetupAttachment(Capsule);
 	Body->SetRelativeLocationAndRotation(FVector(0.f, 0.f, -HalfHeight), FRotator(0.f, -90.f, 0.f));

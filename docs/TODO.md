@@ -22,10 +22,10 @@ Details live in the [Phase 2 plan](Phase2Plan.md) and the [game design](GameDesi
 
 ## Phase 3: James's eight upgrades
 Each item is one PR, reviewed before it's merged.
-- [ ] **Crimes that play out** (upgrade 5): longer response windows; crooks visibly commit the crime (victims,
+- [x] **Crimes that play out** (upgrade 5): longer response windows; crooks visibly commit the crime (victims,
   brawlers, graffiti, vandals smashing street furniture, shoplifters filling a sack); some run from the police or
   leave with the goods, and a getaway becomes a search for the suspect by description.
-- [ ] **Sound** (upgrade 4): footsteps by surface, heavier and more realistic synthesised effects, more variety.
+- [x] **Sound** (upgrade 4): footsteps by surface, heavier and more realistic synthesised effects, more variety.
 - [ ] **Tougher cars** (upgrade 3): more health, persistent dents and scrapes where they're hit, BeamNG-style wear.
 - [ ] **Talking to people** (upgrade 7): conversations for information and chit-chat, stop and search, arrests (with
   a chaos cost for arresting someone who's clean).

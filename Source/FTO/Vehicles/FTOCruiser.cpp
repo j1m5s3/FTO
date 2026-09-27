@@ -1,4 +1,5 @@
 #include "Vehicles/FTOCruiser.h"
+#include "Audio/FTOAudio.h"
 #include "Crime/FTOArrestee.h"
 #include "Physics/FTODestruction.h"
 #include "Physics/FTOImpact.h"
@@ -115,6 +116,9 @@ AFTOCruiser::AFTOCruiser()
 	SirenAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("SirenAudio"));
 	SirenAudio->SetupAttachment(Collision);
 	SirenAudio->bAutoActivate = false;
+	SkidAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("SkidAudio"));
+	SkidAudio->SetupAttachment(Collision);
+	SkidAudio->bAutoActivate = false;
 
 	Damage = CreateDefaultSubobject<UFTOVehicleDamage>(TEXT("Damage"));
 	Damage->bCitizensCar = false;
@@ -142,6 +146,8 @@ void AFTOCruiser::BeginPlay()
 	EngineAudio->SetVolumeMultiplier(0.35f);
 	SirenAudio->SetSound(Sounds.SirenLoop);
 	SirenAudio->AttenuationSettings = Sounds.World;
+	SkidAudio->SetSound(Sounds.TireSkidLoop);
+	SkidAudio->AttenuationSettings = Sounds.World;
 	SirenAudio->SetVolumeMultiplier(0.8f);
 
 	RedMaterial = FTOArt::ApplyColor(LightRed, BaseMaterial, FLinearColor(1.f, 0.05f, 0.05f));
@@ -546,7 +552,41 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 	}
 
 	UpdateCosmetics(DeltaSeconds);
+	UpdateSkid(DeltaSeconds);
 	UpdateViews(DeltaSeconds);
+}
+
+void AFTOCruiser::UpdateSkid(float DeltaSeconds)
+{
+	// Tyres squeal in a slide: measured from how the car's actually moving (works for everyone's car, on every machine).
+	// The driver's machine knows the slide exactly; everyone else (the host included, for a client's car, which only
+	// moves in ServerMove steps) smooths an estimate from how the car's moving.
+	const FVector Here = GetActorLocation();
+	const FVector Moved = DeltaSeconds > 0.f ? (Here - SkidLastLocation) / DeltaSeconds : FVector::ZeroVector;
+	SkidLastLocation = Here;
+	if (Moved.Size2D() < 8000.f) // (not a teleport)
+	{
+		SkidVelocity = FMath::VInterpTo(SkidVelocity, Moved, DeltaSeconds, 5.f);
+	}
+	const bool bKnown = IsSimulatingLocally();
+	const float Sideways = bKnown ? FMath::Abs(LateralSpeed) : FMath::Abs(FVector::DotProduct(SkidVelocity, GetActorRightVector()));
+	const float Speed = bKnown ? FMath::Abs(ForwardSpeed) + Sideways : SkidVelocity.Size2D();
+	const float Target = Speed > 300.f ? FMath::Clamp((Sideways - 250.f) / 600.f, 0.f, 1.f) : 0.f;
+	SkidLevel = FMath::FInterpTo(SkidLevel, Target, DeltaSeconds, 8.f);
+	if (!SkidAudio)
+	{
+		return;
+	}
+	if (SkidLevel > 0.05f && !SkidAudio->IsPlaying())
+	{
+		SkidAudio->Play();
+	}
+	else if (SkidLevel <= 0.02f && SkidAudio->IsPlaying())
+	{
+		SkidAudio->Stop();
+	}
+	SkidAudio->SetVolumeMultiplier(0.9f * SkidLevel);
+	SkidAudio->SetPitchMultiplier(0.9f + 0.25f * SkidLevel);
 }
 
 void AFTOCruiser::ServerMove_Implementation(FVector_NetQuantize10 Location, float Yaw, float Speed, float Lateral, float Steer)
@@ -777,7 +817,13 @@ void AFTOCruiser::ServerCrash_Implementation(AActor* Other, float Into, FVector_
 	}
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{
-		GS->MulticastPlaySound(AFTOGameState::Sounds().Crash, At, FMath::Clamp(Knock / 40.f, 0.4f, 1.f));
+		// A knock is a thud and a crunch; a big one is the whole car folding (with a metal groan after).
+		GS->MulticastPlaySound(FTOAudio::Pick(Knock > 25.f ? TEXT("CarImpactHeavy") : TEXT("CarImpactLight")), At, FMath::Clamp(Knock / 30.f, 0.5f, 1.f));
+		if (Knock > 25.f)
+		{
+			GS->MulticastPlaySound(AFTOGameState::Sounds().Crash, At, FMath::Clamp(Knock / 50.f, 0.5f, 1.f));
+			GS->MulticastPlaySound(FTOAudio::Pick(TEXT("MetalCreak")), At, 0.6f);
+		}
 	}
 }
 

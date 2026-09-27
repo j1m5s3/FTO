@@ -1,4 +1,5 @@
 #include "Core/FTOGameState.h"
+#include "Audio/FTOAudio.h"
 #include "Crime/FTOIncident.h"
 #include "GameFramework/Pawn.h"
 #include "Weapons/FTOBallistics.h"
@@ -42,6 +43,41 @@ AFTOGameState::AFTOGameState()
 	SoundSet.Clang = Load(TEXT("SW_Clang"));
 	SoundSet.GushLoop = Load(TEXT("SW_GushLoop"));
 	SoundSet.FireLoop = Load(TEXT("SW_FireLoop"));
+	SoundSet.TireSkidLoop = Load(TEXT("SW_TireSkidLoop"));
+	SoundSet.CityAmbienceLoop = Load(TEXT("SW_CityAmbienceLoop"));
+	SoundSet.ElevatorLoop = Load(TEXT("SW_ElevatorLoop"));
+	SoundSet.ElevatorDing = Load(TEXT("SW_ElevatorDing"));
+	SoundSet.DoorOpen = Load(TEXT("SW_DoorOpen"));
+	SoundSet.DoorClose = Load(TEXT("SW_DoorClose"));
+	SoundSet.Collapse = Load(TEXT("SW_Collapse_01"));
+
+	// The numbered takes. A sound that had just the one (a gunshot, a crash) keeps it among its takes.
+	for (const FTOAudio::FFamilySpec& Spec : FTOAudio::Families())
+	{
+		FFTOSoundFamily& Family = SoundSet.Families.FindOrAdd(Spec.Name);
+		for (int32 Take = 1; Take <= Spec.Takes; ++Take)
+		{
+			if (USoundBase* Sound = Load(*FString::Printf(TEXT("SW_%s_%02d"), *Spec.Name.ToString(), Take)))
+			{
+				Family.Sounds.Add(Sound);
+			}
+		}
+	}
+	auto Takes = [this](USoundBase* Original, FName Family)
+	{
+		if (Original && SoundSet.Families.Contains(Family))
+		{
+			SoundSet.Families[Family].Sounds.AddUnique(Original);
+			SoundSet.TakesOf.Add(Original, Family);
+		}
+	};
+	Takes(SoundSet.ShotPistol, TEXT("ShotPistol"));
+	Takes(SoundSet.ShotShotgun, TEXT("ShotShotgun"));
+	Takes(SoundSet.ShotRifle, TEXT("ShotRifle"));
+	Takes(SoundSet.Ricochet, TEXT("Ricochet"));
+	Takes(SoundSet.Crash, TEXT("Crash"));
+	Takes(SoundSet.Glass, TEXT("Glass"));
+	Takes(SoundSet.Clang, TEXT("Clang"));
 
 	static ConstructorHelpers::FObjectFinder<USoundAttenuation> WorldAttenuation(TEXT("/Game/FTO/Audio/SA_FTOWorld.SA_FTOWorld"));
 	SoundSet.World = WorldAttenuation.Object;
@@ -51,7 +87,7 @@ void AFTOGameState::MulticastPlaySound_Implementation(USoundBase* Sound, FVector
 {
 	if (Sound && GetNetMode() != NM_DedicatedServer)
 	{
-		UGameplayStatics::PlaySoundAtLocation(this, Sound, Location, Volume, 1.f, 0.f, SoundSet.World);
+		UGameplayStatics::PlaySoundAtLocation(this, FTOAudio::Vary(Sound), Location, Volume, FMath::FRandRange(0.96f, 1.04f), 0.f, SoundSet.World);
 	}
 }
 
