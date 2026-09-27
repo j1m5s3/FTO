@@ -92,6 +92,10 @@ public:
 	 */
 	UInstancedStaticMeshComponent* FindInstanced(FName Name) const;
 
+	/** The foot of each house's outside stairs, facing up them, and the doorway at the top, facing in (tests). */
+	const TArray<FTransform>& GetOutsideStairs() const { return OutsideStairs; }
+	const TArray<FTransform>& GetOutsideStairTops() const { return OutsideStairTops; }
+
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksY = 8;
@@ -171,6 +175,8 @@ protected:
 		TArray<FTransform> Stops;
 	};
 	TArray<FLiftPlan> LiftPlans;
+	TArray<FTransform> OutsideStairs;
+	TArray<FTransform> OutsideStairTops;
 	void BuildRoof(const FFootprint& F, float RoofZ, const FLinearColor& Paint, FRandomStream& Rng, bool bRooftopClutter);
 	void BuildCorners(const FFootprint& F, int32 Floors, const FLinearColor& Paint);
 	/** Floor, ceiling and lights for a ground floor, and the room record interiors are furnished from. */

@@ -49,6 +49,11 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   in one someone's already driving. F (B on a gamepad) is
   a flying tackle that bowls over whoever's in front (citizens cost a little chaos). Cuffed suspects follow in your
   footsteps: walk them into the precinct's holding cells to book them.
+- **Upstairs**: every building with floors above the ground has a way up. Towers, the bank and the precinct have a
+  lift: steel doors on the street (by the corner, under a floor sign); E brings up the buttons (up a floor, down a
+  floor, the top, the street) and everyone standing at the doors rides along. Every floor has a stop inside, with
+  offices on the lower floors and flats higher up. Two-storey houses have stairs up the back wall to a doorway into
+  the upstairs room.
 - **Talking to people**: E on anyone (in the street, indoors, a victim at a scene) stops them for a word, and 1-4 (the
   d-pad) pick what to say: *Seen anything unusual?* (a tip-off about trouble nobody's reported, a sighting of a
   suspect you're searching for, which moves the search, or a victim's statement), *How's your day?* (chit-chat), *I'm
@@ -114,7 +119,8 @@ drives into three citizens, tackles one, signs a shotgun out of the armory, trad
 cuffs them where they fell), has a downed officer helped up (the radio calls it in), makes the arrests that don't go
 quietly: a brawler wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who
 gives up beside their car, watches a mugger walk off with the goods and tracks them down in the crowd (a word, a search, the cuffs), stops
-and searches citizens (arresting one caught carrying and, wrongly, one who was clean), films a tagger
+and searches citizens (arresting one caught carrying and, wrongly, one who was clean), rides a lift to the top of a
+tower and climbs a house's outside stairs, films a tagger
 and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
 hydrant, knocks a lamp post flat with a cruiser, crashes the cruiser until it's a burning wreck, and writes off a
 citizen's car; the log (`SMOKE:` lines) reports each check.
@@ -157,6 +163,8 @@ host). Finally the client checks it sees everything the host broke broken too.
   Seats are low (`SEAT`, 31 cm) to suit the cast's short legs: sitters' feet reach the floor and their hands the
   tables. `--preview <dir>` renders every piece.
   `Source/FTO/City/FTOCityKit.h` mirrors the grid, and the `FTOCity*.cpp` files assemble buildings, rooms and streets.
+  `FTOCityUpperFloors.cpp` adds the upper storeys (slabs, lights, furniture), plans each lift (`AFTOLift`, one actor per
+  stop, spawned on the server with the crime spawn points) and builds houses' outside stairs.
   Furnishing a room also records its *spots*: where staff work, where customers and residents sit or stand (with
   what they do there), and where a crime inside would play out. `AFTOInteriorLife` fills rooms from those spots as
   officers come near and empties them once they've gone.

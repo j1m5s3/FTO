@@ -106,6 +106,9 @@ protected:
 	FVector TestTarget = FVector::ZeroVector;
 	FVector TestAway = FVector::ZeroVector;
 	float CrashHealthBefore = 0.f;
+	/** The upstairs checks: the lift ridden, and where the stairs start. */
+	TWeakObjectPtr<class AFTOLift> TestLift;
+	FVector StairsFoot = FVector::ZeroVector;
 	/** The nearest perp at a Crime incident to the local officer. */
 	AFTOPerp* FindNearestPerp(FName Crime) const;
 	/** Films the officer and a suspect side on. */

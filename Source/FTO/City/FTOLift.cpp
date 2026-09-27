@@ -212,6 +212,10 @@ void AFTOLift::Ride(int32 Target)
 		if (!It->GetCurrentVehicle() && FVector::Dist(It->GetActorLocation(), Front) < 260.f)
 		{
 			Riders.Add(*It);
+			if (It->GetTalkingTo() == this)
+			{
+				It->EndTalk();
+			}
 		}
 	}
 	RideTo = Target;

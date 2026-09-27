@@ -375,6 +375,8 @@ void AFTOCityGenerator::BuildGeometry()
 	using namespace FTOCityPalette;
 	Buildings.Reset();
 	LiftPlans.Reset();
+	OutsideStairs.Reset();
+	OutsideStairTops.Reset();
 	FRandomStream Rng(Seed ^ 0x5EED);
 
 	const float Pitch = BlockSize + RoadWidth;

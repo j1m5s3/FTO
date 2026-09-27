@@ -32,7 +32,7 @@ void AFTOCityGenerator::BuildUpperStoreys(const FFootprint& F, int32 Floors, boo
 		{
 			AddBox(Ceiling, F.Center + FVector(0.f, 0.f, Z - 12.f), FVector(IX * 2.f + 4.f, IY * 2.f + 4.f, 20.f), 0.f, true);
 		}
-		AddBox(bHomeFloor ? FloorWood : FloorCarpet, F.Center + FVector(0.f, 0.f, Z - 1.f), FVector(IX * 2.f, IY * 2.f, 2.f), 0.f, true);
+		AddBox(bHomeFloor ? FloorWood : FloorCarpet, F.Center + FVector(0.f, 0.f, Z + 1.f), FVector(IX * 2.f, IY * 2.f, 2.f), 0.f, true);
 
 		// Lights under the ceiling (the next slab, or the roof).
 		const float CeilingZ = Storey < Floors ? StoreyFloorZ(Storey + 1) - 22.f : CeilingTopZ;
@@ -130,6 +130,8 @@ void AFTOCityGenerator::BuildOutsideStairs(const FFootprint& F, EFace Face, int3
 	const float Rise = Top / Steps;
 	const float Run = 28.f;
 	const FVector FlightStart = Landing + Along * (PanelWidth * 0.5f);
+	OutsideStairs.Add(FTransform((-Along).Rotation(), FlightStart + Along * (Run * Steps + 60.f)));
+	OutsideStairTops.Add(FTransform((-Out).Rotation(), Landing + FVector(0.f, 0.f, Top)));
 	for (int32 s = 0; s < Steps; ++s)
 	{
 		// Step s from the top: each a solid block down to the ground, so there's nothing to fall through.

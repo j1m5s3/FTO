@@ -1,4 +1,5 @@
 #include "Dev/FTOSmokeTest.h"
+#include "City/FTOLift.h"
 #include "Audio/FTOFootsteps.h"
 #include "City/FTOCityGenerator.h"
 #include "City/FTOInteriorLife.h"
@@ -1663,6 +1664,132 @@ void AFTOSmokeTest::BuildSteps()
 				}
 			}
 		});
+
+		// Upstairs: the lift to the top of a tower and back down, and the outside stairs up to a house's first floor.
+		AddStep(TEXT("call the lift"), 0.3f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOLift* Lift = nullptr;
+			for (TActorIterator<AFTOLift> It(GetWorld()); It && Cop; ++It)
+			{
+				if (It->GetFloor() == 0 && It->GetNumFloors() >= 4 &&
+					(!Lift || FVector::DistSquared(It->GetActorLocation(), Cop->GetActorLocation()) < FVector::DistSquared(Lift->GetActorLocation(), Cop->GetActorLocation())))
+				{
+					Lift = *It;
+				}
+			}
+			if (!Cop || !Lift)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: lift: NO LIFT."));
+				return;
+			}
+			TestLift = Lift;
+			Cop->TeleportTo(Lift->GetArrivalPoint() + FVector(0.f, 0.f, 6.f), (-Lift->GetActorForwardVector()).Rotation());
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetViewTargetWithBlend(Cop, 0.f);
+				PC->SetControlRotation((-Lift->GetActorForwardVector()).Rotation() + FRotator(-8.f, 0.f, 0.f));
+			}
+		});
+		AddShot(TEXT("22a_lift_street"), 0.3f);
+		AddStep(TEXT("ride to the top"), 2.6f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop || !TestLift.IsValid())
+			{
+				return;
+			}
+			TestLift->Interact(Cop);
+			const bool bButtons = Cop->GetTalkingTo() == TestLift.Get();
+			Cop->TalkPressed(2); // "Top floor"
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: lift: %s, going up %d floors."), bButtons ? TEXT("buttons up") : TEXT("NO BUTTONS"), TestLift->GetNumFloors() - 1);
+		});
+		AddStep(TEXT("at the top"), 0.2f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			const AFTOLift* Top = nullptr;
+			for (TActorIterator<AFTOLift> It(GetWorld()); It && TestLift.IsValid(); ++It)
+			{
+				if (It->GetFloor() == TestLift->GetNumFloors() - 1 && FVector::Dist2D(It->GetActorLocation(), TestLift->GetActorLocation()) < 200.f)
+				{
+					Top = *It;
+				}
+			}
+			const float Off = Cop && Top ? FVector::Dist(Cop->GetActorLocation(), Top->GetArrivalPoint()) : -1.f;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: lift ride: %s (%.0f cm up, %.0f cm from the top stop)."), Top && Off >= 0.f && Off < 150.f ? TEXT("out on the top floor") : TEXT("DIDN'T ARRIVE"),
+				Cop && TestLift.IsValid() ? Cop->GetActorLocation().Z - TestLift->GetActorLocation().Z : 0.f, Off);
+			if (Cop && Top)
+			{
+				// Look round the floor.
+				if (APlayerController* PC = GetPC())
+				{
+					PC->SetControlRotation(Top->GetActorForwardVector().Rotation() + FRotator(-5.f, 30.f, 0.f));
+				}
+			}
+		});
+		AddShot(TEXT("22b_top_floor"), 0.4f);
+		AddStep(TEXT("walk the floor"), 1.5f, [this]()
+		{
+			if (const APawn* Cop = GetPawn())
+			{
+				WalkDirection = Cop->GetActorForwardVector();
+				bWalkOfficer = true;
+			}
+		});
+		AddStep(TEXT("stop walking the floor"), 0.2f, [this]()
+		{
+			bWalkOfficer = false;
+			const APawn* Cop = GetPawn();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: walked across the top floor: %s."),
+				Cop && TestLift.IsValid() && Cop->GetActorLocation().Z - TestLift->GetActorLocation().Z > 300.f ? TEXT("still up there, on a floor") : TEXT("FELL THROUGH"));
+		});
+		AddStep(TEXT("stairs"), 0.2f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			const AFTOCityGenerator* City = GetCity();
+			if (!Cop || !City || City->GetOutsideStairs().IsEmpty())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: stairs: NO STAIRS."));
+				return;
+			}
+			const FTransform& Foot = City->GetOutsideStairs()[0];
+			Cop->TeleportTo(Foot.GetLocation() + FVector(0.f, 0.f, 100.f), Foot.Rotator());
+			StairsFoot = Foot.GetLocation();
+			WalkDirection = Foot.GetRotation().GetForwardVector();
+			bWalkOfficer = true;
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetControlRotation(Foot.Rotator() + FRotator(-10.f, 0.f, 0.f));
+			}
+		});
+		// At the top of the flight: turn in through the doorway.
+		AddWait(TEXT("reach the landing"), 4.f, [this]()
+		{
+			const APawn* Cop = GetPawn();
+			const AFTOCityGenerator* City = GetCity();
+			return !Cop || !City || City->GetOutsideStairTops().IsEmpty() ||
+				FVector::Dist2D(Cop->GetActorLocation(), City->GetOutsideStairTops()[0].GetLocation()) < 70.f;
+		});
+		AddStep(TEXT("through the doorway"), 1.2f, [this]()
+		{
+			if (const AFTOCityGenerator* City = GetCity(); City && !City->GetOutsideStairTops().IsEmpty())
+			{
+				WalkDirection = City->GetOutsideStairTops()[0].GetRotation().GetForwardVector();
+			}
+		});
+		AddStep(TEXT("up the stairs"), 0.3f, [this]()
+		{
+			bWalkOfficer = false;
+			const APawn* Cop = GetPawn();
+			const float Climbed = Cop ? Cop->GetActorLocation().Z - StairsFoot.Z : 0.f;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: stairs: %s (%.0f cm up, %.0f cm from the foot)."), Climbed > 330.f ? TEXT("climbed to the first floor") : TEXT("DIDN'T MAKE IT UP"), Climbed,
+				Cop ? FVector::Dist2D(Cop->GetActorLocation(), StairsFoot) : -1.f);
+			if (Cop)
+			{
+				ViewFrom(StairsFoot + WalkDirection * 300.f + FVector::CrossProduct(FVector::UpVector, WalkDirection) * 700.f + FVector(0.f, 0.f, 450.f), StairsFoot + WalkDirection * 300.f + FVector(0.f, 0.f, 200.f));
+			}
+		});
+		AddShot(TEXT("22c_upstairs"), 0.3f);
 
 		// A tagger at the wall and a vandal going from bin to bin.
 		AddStep(TEXT("graffiti"), 5.f, [this]()
