@@ -161,42 +161,41 @@ FText AFTOCrimeExtra::GetInteractPrompt(const AFTOCharacter* Officer) const
 	return ExtraRole == EFTOExtraRole::Victim ? INVTEXT("Take the victim's statement") : INVTEXT("Talk to them");
 }
 
-void AFTOCrimeExtra::Interact(AFTOCharacter* Officer)
+FString AFTOCrimeExtra::AnswerWhatTheySaw()
 {
-	check(HasAuthority());
-	AFTOPlayerController* PC = Officer ? Cast<AFTOPlayerController>(Officer->GetController()) : nullptr;
-	if (!PC)
-	{
-		return;
-	}
-	Officer->PlayTimedAction(EFTOAnimAction::Interact, 1.5f);
-	Hold();
-	bChatting = true;
-	FaceOfficer(Officer);
-	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOCrimeExtra::Resume, 2.5f, false);
-
+	// A statement: what happened, what the suspect looks like, which way they went.
 	const AFTOPerp* Perp = Incident ? Incident->GetPerp() : nullptr;
-	FString Line;
 	if (ExtraRole != EFTOExtraRole::Victim)
 	{
-		Line = ExtraRole == EFTOExtraRole::Brawler ? TEXT("\"They started it! Well, I finished it. Nearly.\"") : TEXT("\"Officer, tell them it's THEIR turn to do the dishes!\"");
+		return ExtraRole == EFTOExtraRole::Brawler ? TEXT("\"They started it! Well, I finished it. Nearly.\"") : TEXT("\"Officer, tell them it's THEIR turn to do the dishes!\"");
 	}
-	else if (Perp && (Incident->IsSearching() || Perp->IsFleeing()))
+	if (Perp && (Incident->IsSearching() || Perp->IsFleeing()))
 	{
 		// Which way they went: the way they ran off, or where they were last seen once a sighting's moved the search
 		// on (the victim can't know where they are now).
 		const FVector LastSeen = Incident->GetActorLocation();
 		const bool bSightedElsewhere = Incident->IsSearching() && FVector::Dist2D(LastSeen, GetActorLocation()) > 800.f;
 		const FVector Dir = ((bSightedElsewhere ? LastSeen : Perp->GetActorLocation()) - GetActorLocation()).GetSafeNormal2D();
-		Line = FString::Printf(TEXT("\"They ran off %s! %s.\""), Heading(Dir), *Incident->GetInfo().SuspectDescription.ToString());
+		return FString::Printf(TEXT("\"They ran off %s! %s.\""), Heading(Dir), *Incident->GetInfo().SuspectDescription.ToString());
 	}
-	else if (Perp && IsCrimeGoingOn())
+	if (Perp && IsCrimeGoingOn())
 	{
-		Line = TEXT("\"Officer! That's them, right there!\"");
+		return TEXT("\"Officer! That's them, right there!\"");
 	}
-	else
+	return TEXT("\"Thank goodness you're here. I'm fine, just a bit shaken.\"");
+}
+
+FString AFTOCrimeExtra::Contraband()
+{
+	return FString(); // the victim's clean, whatever the officer thinks
+}
+
+FText AFTOCrimeExtra::GetTalkTitle() const
+{
+	switch (ExtraRole)
 	{
-		Line = TEXT("\"Thank goodness you're here. I'm fine, just a bit shaken.\"");
+	case EFTOExtraRole::Victim:  return FText::FromString(FString::Printf(TEXT("Victim: %s"), *DescribeLook()));
+	case EFTOExtraRole::Brawler: return FText::FromString(FString::Printf(TEXT("Brawler: %s"), *DescribeLook()));
+	default:                     return FText::FromString(FString::Printf(TEXT("Caller: %s"), *DescribeLook()));
 	}
-	PC->ClientToast(FText::FromString(Line), FLinearColor(1.f, 0.85f, 0.3f));
 }

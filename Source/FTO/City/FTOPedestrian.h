@@ -4,6 +4,7 @@
 #include "City/FTOPathMover.h"
 #include "Interaction/FTOInteractable.h"
 #include "Animation/FTOAnimatedActor.h"
+#include "Interaction/FTOTalkable.h"
 #include "FTOPedestrian.generated.h"
 
 class AFTOCityGenerator;
@@ -15,11 +16,14 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 
 /**
- * An ambient citizen strolling the sidewalks. Officers can chat to them;
- * sometimes they tip you off about trouble nobody has reported yet.
+ * An ambient citizen strolling the sidewalks. Officers can stop them for a word (IFTOTalkable): ask what they've
+ * seen (a tip-off about trouble nobody's reported, or a sighting of a suspect on the run), pass the time of day, or
+ * search them and arrest them. Some are carrying something they shouldn't (they're arrested for it); arresting
+ * someone who's clean is a wrongful arrest, and the city holds it against the police (searching them costs a
+ * little goodwill too).
  */
 UCLASS()
-class FTO_API AFTOPedestrian : public AFTOPathMover, public IFTOInteractable, public IFTOAnimatedActor
+class FTO_API AFTOPedestrian : public AFTOPathMover, public IFTOInteractable, public IFTOAnimatedActor, public IFTOTalkable
 {
 	GENERATED_BODY()
 
@@ -47,6 +51,20 @@ public:
 	virtual EFTOAnimAction GetAnimAction() const override;
 	virtual float GetAnimSpeed() const override { return GetCurrentSpeed(); }
 
+	// IFTOTalkable
+	virtual FText GetTalkTitle() const override;
+	virtual void GetTalkOptions(const AFTOCharacter* Officer, TArray<FText>& OutOptions) const override;
+	virtual bool TalkChoice(AFTOCharacter* Officer, int32 Index) override;
+	virtual void TalkEnded(AFTOCharacter* Officer) override;
+
+	/** Been searched (every machine), and what turned up (nothing, if empty). */
+	bool WasSearched() const { return bSearched; }
+	const FString& GetFound() const { return Found; }
+
+	/** Chaos for searching someone who turns out to be clean, and for arresting them. */
+	static constexpr float CleanSearchChaos = 0.5f;
+	static constexpr float WrongfulArrestChaos = 4.f;
+
 	virtual bool IsMovementFrozen() const override;
 	UFTOKnockdownComponent* GetKnockdown() const { return Knockdown; }
 
@@ -66,6 +84,30 @@ protected:
 	virtual void FaceOfficer(const AActor* Officer);
 	/** A line for an officer who stops for a chat and has no tip-off coming. */
 	virtual FString GetSmallTalk();
+
+	// ---- Conversations ----
+	/** Server: "Seen anything?": a sighting of a suspect on the run, a tip-off, or nothing. */
+	virtual FString AnswerWhatTheySaw();
+	/** Server: what a search turns up ("a stolen wallet"), or empty if they're clean. Rolled once. */
+	virtual FString Contraband();
+	/** Server: the officer's found something and is arresting them for it (a crime scene springs up right here, with
+	 *  them as its perp, and the arrest goes from there). */
+	virtual void ArrestForWhatWasFound(AFTOCharacter* Officer);
+	/** Server: arrested for nothing: cuffed and walked to the cells, and the city's not happy about it. */
+	void WrongfulArrest(AFTOCharacter* Officer);
+	/** The building we're in (for a crime that turns up indoors), if any. */
+	virtual int32 GetBuildingForCrime() const { return INDEX_NONE; }
+	/** Server: stand still facing the officer while we talk. */
+	void HoldForTalk(AFTOCharacter* Officer);
+	/** Server: hands up for the pat-down, then back to talking. */
+	void EndSearchPose();
+
+	/** Searched, and what turned up (replicated for the conversation panel). */
+	UPROPERTY(Replicated) bool bSearched = false;
+	UPROPERTY(Replicated) FString Found;
+	/** Talking to an officer right now (server). */
+	TWeakObjectPtr<AFTOCharacter> TalkingWith;
+	FTimerHandle SearchPoseTimer;
 
 	UFUNCTION() void OnRep_Look();
 	/** Dress the body from LookSeed (every machine). */

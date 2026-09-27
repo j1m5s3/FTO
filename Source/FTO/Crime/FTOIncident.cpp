@@ -341,6 +341,28 @@ void AFTOIncident::StartSearch(const FVector& LastSeen)
 	RefreshVisuals();
 }
 
+void AFTOIncident::ReportSighting(const FVector& Where)
+{
+	check(HasAuthority());
+	if (!bSearch)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	LastSightingTime = Now;
+	NextSightingTime = Now + FMath::FRandRange(SightingEvery.X, SightingEvery.Y);
+	const FVector2D Off = FMath::RandPointInCircle(SightingSpread * 0.5f);
+	SetActorLocation(Where - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight) + FVector(Off, 0.f));
+}
+
+void AFTOIncident::RefreshSuspectDescription()
+{
+	if (IsValid(Perp))
+	{
+		Info.SuspectDescription = FText::FromString(Perp->DescribeSuspect());
+	}
+}
+
 void AFTOIncident::EndSearch()
 {
 	if (!bSearch)

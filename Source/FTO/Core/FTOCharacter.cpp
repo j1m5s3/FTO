@@ -1,4 +1,7 @@
 #include "Core/FTOCharacter.h"
+#include "Interaction/FTOTalkable.h"
+#include "EnhancedInputSubsystems.h"
+#include "Engine/LocalPlayer.h"
 #include "Audio/FTOFootsteps.h"
 #include "Core/FTOInputConfig.h"
 #include "Core/FTOPlayerController.h"
@@ -137,6 +140,7 @@ void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOCharacter, ReloadEnd);
 	DOREPLIFETIME(AFTOCharacter, bDowned);
 	DOREPLIFETIME(AFTOCharacter, SyncedAction);
+	DOREPLIFETIME_CONDITION(AFTOCharacter, TalkingTo, COND_OwnerOnly);
 }
 
 void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -172,6 +176,116 @@ void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	{
 		EIC->BindAction(Input->Slots[Slot], ETriggerEvent::Started, this, &AFTOCharacter::SelectSlot, Slot);
 	}
+	for (int32 Option = 0; Option < Input->TalkOptions.Num(); ++Option)
+	{
+		EIC->BindAction(Input->TalkOptions[Option], ETriggerEvent::Started, this, &AFTOCharacter::TalkPressed, Option);
+	}
+}
+
+// ------------------------------------------------------------------------------------------
+// Conversations
+// ------------------------------------------------------------------------------------------
+
+void AFTOCharacter::BeginTalk(AActor* Who)
+{
+	check(HasAuthority());
+	if (TalkingTo == Who)
+	{
+		return;
+	}
+	EndTalk();
+	TalkingTo = Who;
+	TalkIdleSince = GetWorld()->GetTimeSeconds();
+	PlayTimedAction(EFTOAnimAction::Interact, 1.f);
+	OnRep_TalkingTo();
+}
+
+void AFTOCharacter::EndTalk()
+{
+	if (!HasAuthority() || !TalkingTo)
+	{
+		return;
+	}
+	AActor* Was = TalkingTo;
+	TalkingTo = nullptr;
+	OnRep_TalkingTo();
+	if (IFTOTalkable* Talkable = Cast<IFTOTalkable>(Was); Talkable && IsValid(Was))
+	{
+		Talkable->TalkEnded(this);
+	}
+}
+
+void AFTOCharacter::UnPossessed()
+{
+	EndTalk();
+	SetTalkKeys(false);
+	Super::UnPossessed();
+}
+
+void AFTOCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	EndTalk();
+	SetTalkKeys(false);
+	Super::EndPlay(EndPlayReason);
+}
+
+void AFTOCharacter::SetTalkKeys(bool bWant)
+{
+	if (bWant == bTalkKeys)
+	{
+		return;
+	}
+	AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetController());
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = PC && PC->GetLocalPlayer() ? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer()) : nullptr;
+	if (!Subsystem)
+	{
+		bTalkKeys = false;
+		return;
+	}
+	bTalkKeys = bWant;
+	if (bWant)
+	{
+		Subsystem->AddMappingContext(PC->GetInputConfig()->TalkContext, 90);
+	}
+	else
+	{
+		Subsystem->RemoveMappingContext(PC->GetInputConfig()->TalkContext);
+	}
+}
+
+void AFTOCharacter::TalkPressed(int32 Index)
+{
+	if (TalkingTo)
+	{
+		ServerTalkChoice(Index);
+	}
+}
+
+void AFTOCharacter::ServerTalkChoice_Implementation(int32 Index)
+{
+	IFTOTalkable* Talkable = Cast<IFTOTalkable>(TalkingTo);
+	if (!Talkable || !IsValid(TalkingTo) || FVector::Dist2D(TalkingTo->GetActorLocation(), GetActorLocation()) > TalkRange + 150.f)
+	{
+		EndTalk();
+		return;
+	}
+	TalkIdleSince = GetWorld()->GetTimeSeconds();
+	AActor* Who = TalkingTo;
+	if (!Talkable->TalkChoice(this, Index) && TalkingTo == Who)
+	{
+		EndTalk();
+	}
+}
+
+void AFTOCharacter::ServerEndTalk_Implementation()
+{
+	EndTalk();
+}
+
+void AFTOCharacter::OnRep_TalkingTo()
+{
+	// The conversation keys (1-4, the d-pad) lie over everything else while there's someone to talk to.
+	SetTalkKeys(TalkingTo != nullptr && IsLocallyControlled());
 }
 
 void AFTOCharacter::BeginPlay()
@@ -413,6 +527,16 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// A conversation's over if either of us goes (or gets in a car, gets shot, or it's gone quiet for a while).
+	if (HasAuthority() && TalkingTo)
+	{
+		const bool bGone = !IsValid(TalkingTo) || FVector::Dist2D(TalkingTo->GetActorLocation(), GetActorLocation()) > TalkRange;
+		if (bGone || CurrentVehicle || bDowned || IsInSyncedAction() || GetWorld()->GetTimeSeconds() - TalkIdleSince > 30.f)
+		{
+			EndTalk();
+		}
+	}
+
 	// (Mid-arrest, E is spoken for: no prompts for anything else.)
 	if (IsLocallyControlled() && !CurrentVehicle && !IsInSyncedAction())
 	{
@@ -537,6 +661,12 @@ void AFTOCharacter::InteractPressed()
 	if (CurrentVehicle)
 	{
 		ServerLeaveVehicle();
+		return;
+	}
+	// Mid-conversation, E says goodbye.
+	if (TalkingTo)
+	{
+		ServerEndTalk();
 		return;
 	}
 	if (IsInSyncedAction())

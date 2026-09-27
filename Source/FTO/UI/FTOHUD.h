@@ -49,6 +49,8 @@ protected:
 	void DrawLobby(const AFTOGameState* GS);
 	void DrawShiftReport(const AFTOGameState* GS);
 	void DrawInteractPrompt();
+	/** Talking to someone: who they are and what the officer can say (1-4). */
+	void DrawTalkPanel();
 	void DrawCruiserPanel();
 	void DrawEscortPanel();
 	/** Crosshair, hit marker, the three weapon slots and their ammo, and the "you're down" banner. */
