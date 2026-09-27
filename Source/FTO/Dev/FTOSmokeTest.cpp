@@ -487,61 +487,65 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddShot(TEXT("05_incident"), 2.f);
 
-	// The clock runs out: the squad votes for overtime (back on duty with more time on the clock)...
-	AddStep(TEXT("clock runs out"), 1.2f, [this]()
+	// The clock runs out: the squad votes for overtime (back on duty with more time on the clock)... The host runs the
+	// vote (a client can't; its HUD hands the camera and controls back once the host is on duty again).
+	if (GetNetMode() != NM_Client)
 	{
-		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOShiftTimeLeft(0.f); }
-	});
-	AddShot(TEXT("05b_overtime_vote"), 0.3f);
-	AddStep(TEXT("vote for overtime"), 1.f, [this]()
-	{
-		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
-		UE_LOG(LogFTO, Display, TEXT("SMOKE: clock ran out: %s."), GS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote ? TEXT("the squad's voting") : TEXT("NO VOTE"));
-		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->FTOVote(TEXT("Overtime")); }
-		// Don't wait on anyone else (a partner who says nothing leaves it to the host).
-		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->GetCrimeDirector()->ResolveOvertimeVote(); }
-	});
-	AddStep(TEXT("overtime"), 0.5f, [this]()
-	{
-		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
-		UE_LOG(LogFTO, Display, TEXT("SMOKE: overtime vote: %s (overtime %d, %.0f s on the clock)."), GS && GS->GetShiftPhase() == EFTOShiftPhase::OnDuty ? TEXT("back on duty") : TEXT("NOT BACK ON DUTY"),
-			GS ? GS->GetOvertimes() : -1, GS ? GS->GetShiftTimeRemaining() : -1.f);
-	});
-	AddShot(TEXT("05c_overtime"), 0.5f);
+		AddStep(TEXT("clock runs out"), 1.2f, [this]()
+		{
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOShiftTimeLeft(0.f); }
+		});
+		AddShot(TEXT("05b_overtime_vote"), 0.3f);
+		AddStep(TEXT("vote for overtime"), 1.f, [this]()
+		{
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: clock ran out: %s."), GS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote ? TEXT("the squad's voting") : TEXT("NO VOTE"));
+			if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->FTOVote(TEXT("Overtime")); }
+			// Don't wait on anyone else (a partner who says nothing leaves it to the host).
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->GetCrimeDirector()->ResolveOvertimeVote(); }
+		});
+		AddStep(TEXT("overtime"), 0.5f, [this]()
+		{
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: overtime vote: %s (overtime %d, %.0f s on the clock)."), GS && GS->GetShiftPhase() == EFTOShiftPhase::OnDuty ? TEXT("back on duty") : TEXT("NOT BACK ON DUTY"),
+				GS ? GS->GetOvertimes() : -1, GS ? GS->GetShiftTimeRemaining() : -1.f);
+		});
+		AddShot(TEXT("05c_overtime"), 0.5f);
 
-	// ...then runs out again and they clock off: the squad lines up outside the precinct and dances while the scoreboard
-	// counts up (the arrest and the booking above should have scored).
-	AddStep(TEXT("end shift"), 1.2f, [this]()
-	{
-		if (const AFTOPlayerState* PS = GetPC() ? GetPC()->GetPlayerState<AFTOPlayerState>() : nullptr)
+		// ...then runs out again and they clock off: the squad lines up outside the precinct and dances while the scoreboard
+		// counts up (the arrest and the booking above should have scored).
+		AddStep(TEXT("end shift"), 1.2f, [this]()
 		{
-			const FFTOOfficerStats& Stats = PS->GetStats();
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: score before the whistle: %d (%d arrests, %d booked, %d caught in the act, best combo x%s)."), Stats.Score, Stats.Arrests,
-				Stats.Booked, Stats.CaughtInAct, *FString::SanitizeFloat(FTOScoring::ComboMultiplier(Stats.BestCombo)));
-		}
-		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOShiftTimeLeft(0.f); }
-	});
-	AddStep(TEXT("clock off"), 4.4f, [this]()
-	{
-		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->FTOVote(TEXT("ClockOff")); }
-		if (AFTOGameMode* GM = GetAuthGameMode()) { GM->GetCrimeDirector()->ResolveOvertimeVote(); }
-	});
-	AddShot(TEXT("06_shift_report"), 0.5f);
-	AddStep(TEXT("after the debrief"), 0.3f, [this]()
-	{
-		if (const AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn()))
+			if (const AFTOPlayerState* PS = GetPC() ? GetPC()->GetPlayerState<AFTOPlayerState>() : nullptr)
+			{
+				const FFTOOfficerStats& Stats = PS->GetStats();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: score before the whistle: %d (%d arrests, %d booked, %d caught in the act, best combo x%s)."), Stats.Score, Stats.Arrests,
+					Stats.Booked, Stats.CaughtInAct, *FString::SanitizeFloat(FTOScoring::ComboMultiplier(Stats.BestCombo)));
+			}
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOShiftTimeLeft(0.f); }
+		});
+		AddStep(TEXT("clock off"), 4.4f, [this]()
 		{
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: debrief: the officer is %s outside the precinct, %s."),
-				Officer->GetAnimAction() == EFTOAnimAction::Dance ? TEXT("dancing") : TEXT("NOT dancing"),
-				GetCity() && FVector::Dist2D(Officer->GetActorLocation(), GetCity()->FindBuilding(EFTOBuildingType::Precinct)->DoorOutside) < 800.f ? TEXT("lined up") : TEXT("NOT LINED UP"));
-		}
-		// The tour goes on: hands back on the controls.
-		if (APlayerController* PC = GetPC())
+			if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC())) { PC->FTOVote(TEXT("ClockOff")); }
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->GetCrimeDirector()->ResolveOvertimeVote(); }
+		});
+		AddShot(TEXT("06_shift_report"), 0.5f);
+		AddStep(TEXT("after the debrief"), 0.3f, [this]()
 		{
-			PC->ResetIgnoreInputFlags();
-			PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
-		}
-	});
+			if (const AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn()))
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: debrief: the officer is %s outside the precinct, %s."),
+					Officer->GetAnimAction() == EFTOAnimAction::Dance ? TEXT("dancing") : TEXT("NOT dancing"),
+					GetCity() && FVector::Dist2D(Officer->GetActorLocation(), GetCity()->FindBuilding(EFTOBuildingType::Precinct)->DoorOutside) < 800.f ? TEXT("lined up") : TEXT("NOT LINED UP"));
+			}
+			// The tour goes on: hands back on the controls.
+			if (APlayerController* PC = GetPC())
+			{
+				PC->ResetIgnoreInputFlags();
+				PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f);
+			}
+		});
+	}
 
 	// Eye level on a busy downtown sidewalk.
 	AddStep(TEXT("sidewalk"), 2.f, [this]()
@@ -2090,12 +2094,15 @@ void AFTOSmokeTest::BuildSteps()
 		}
 		else
 		{
-			// Wait for the host to be parked up at the wheel (they run extra checks first).
-			AddWait(TEXT("find a ride"), 90.f, [this]()
+			// Wait for the host to be parked up at the wheel in the precinct lot (they run extra checks first, and their
+			// test drives across town have a driver too).
+			AddWait(TEXT("find a ride"), 150.f, [this]()
 			{
-				for (TActorIterator<AFTOCruiser> It(GetWorld()); It; ++It)
+				const AFTOCityGenerator* City = GetCity();
+				for (TActorIterator<AFTOCruiser> It(GetWorld()); It && City; ++It)
 				{
-					if (It->HasDriver() && It->GetDriver() != GetPawn() && !It->GetPassenger())
+					if (It->HasDriver() && It->GetDriver() != GetPawn() && !It->GetPassenger() && It->GetVelocity().Size() < 20.f &&
+						FVector::Dist2D(It->GetActorLocation(), City->GetPrecinctLocation()) < 3000.f)
 					{
 						return true;
 					}
