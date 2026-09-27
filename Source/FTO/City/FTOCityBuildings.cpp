@@ -87,7 +87,8 @@ void AFTOCityGenerator::BuildGroundFace(const FFootprint& F, EFace Face, const T
 	}
 }
 
-void AFTOCityGenerator::BuildUpperFloors(const FFootprint& F, int32 Floors, const FLinearColor& Paint, FRandomStream& Rng, bool bWide)
+void AFTOCityGenerator::BuildUpperFloors(const FFootprint& F, int32 Floors, const FLinearColor& Paint, FRandomStream& Rng, bool bWide,
+	int32 SpecialFace, int32 SpecialIndex, const TCHAR* SpecialPiece)
 {
 	for (int32 Floor = 0; Floor < Floors; ++Floor)
 	{
@@ -100,7 +101,14 @@ void AFTOCityGenerator::BuildUpperFloors(const FFootprint& F, int32 Floors, cons
 				// Plain panels at the ends of longer faces frame the windows.
 				const bool bEnd = N > 3 && (i == 0 || i == N - 1);
 				const TCHAR* Piece = bEnd ? TEXT("SM_Wall_U_Plain") : (bWide ? TEXT("SM_Wall_U_Wide") : TEXT("SM_Wall_U_Window"));
-				Place(Piece, PanelTransform(F, Face, i, Z), Paint);
+				if (int32(Face) == SpecialFace && i == SpecialIndex)
+				{
+					Piece = SpecialPiece;
+				}
+				if (Piece)
+				{
+					Place(Piece, PanelTransform(F, Face, i, Z), Paint);
+				}
 			}
 		}
 	}
@@ -296,6 +304,9 @@ void AFTOCityGenerator::BuildTower(const FFTOCityBlock& Block, int32 QuadX, int3
 	const FLinearColor Paint = Building(Rng.RandRange(0, 8));
 	const FLinearColor Brand = Accent(Rng.RandRange(0, 7));
 	const int32 Floors = Rng.RandRange(2, 11); // storeys above the shop
+	// The residents' lift: street doors on the other street face, near the corner.
+	const EFace LiftFace = DoorFace == StreetX ? StreetY : StreetX;
+	const int32 LiftIndex = 1;
 
 	// Ground floor: shop windows on the street, windows round the back, the door mid-front.
 	for (const EFace Face : { EFace::PosX, EFace::NegX, EFace::PosY, EFace::NegY })
@@ -311,6 +322,10 @@ void AFTOCityGenerator::BuildTower(const FFTOCityBlock& Block, int32 QuadX, int3
 		{
 			Panels[DoorIndex] = EPanel::ShopDoor;
 		}
+		if (Face == LiftFace)
+		{
+			Panels[LiftIndex] = EPanel::Plain;
+		}
 		BuildGroundFace(F, Face, Panels, Paint);
 
 		if (bStreet)
@@ -318,8 +333,8 @@ void AFTOCityGenerator::BuildTower(const FFTOCityBlock& Block, int32 QuadX, int3
 			for (int32 i = 0; i < N; ++i)
 			{
 				Place(TEXT("SM_Cornice"), PanelTransform(F, Face, i, GroundHeight));
-				// Awnings over the shop windows, clear of the sign over the door.
-				if (Face != DoorFace || FMath::Abs(i - DoorIndex) >= 2)
+				// Awnings over the shop windows, clear of the sign over the door (and the lift doors).
+				if ((Face != DoorFace || FMath::Abs(i - DoorIndex) >= 2) && !(Face == LiftFace && i == LiftIndex))
 				{
 					Place(TEXT("SM_Awning"), PanelTransform(F, Face, i, 0.f), Brand);
 				}
@@ -328,9 +343,11 @@ void AFTOCityGenerator::BuildTower(const FFTOCityBlock& Block, int32 QuadX, int3
 	}
 	Place(*FString::Printf(TEXT("SM_Sign_%s"), Biz.Sign), PanelTransform(F, DoorFace, DoorIndex, 0.f), Brand);
 
-	BuildUpperFloors(F, Floors, Paint, Rng, Rng.FRand() < 0.4f);
+	BuildUpperFloors(F, Floors, Paint, Rng, Rng.FRand() < 0.4f, int32(LiftFace), LiftIndex, TEXT("SM_Wall_U_Plain"));
 	BuildCorners(F, Floors, Paint);
 	BuildRoof(F, GroundHeight + Floors * UpperHeight, Paint, Rng, true);
+	PlanLift(F, LiftFace, LiftIndex, Floors);
+	BuildUpperStoreys(F, Floors, false, GroundHeight + Floors * UpperHeight - 12.f, QuarterOf(F, PanelTransform(F, LiftFace, LiftIndex, 0.f).GetLocation()), Rng);
 
 	FFTOBuilding& Room = AddRoom(F, DoorFace, DoorIndex, Biz.Type, FString(Biz.Sign).ToUpper(), GroundHeight);
 	Furnish(Room, Rng);
@@ -402,8 +419,15 @@ void AFTOCityGenerator::BuildHouse(const FVector& FrontCenter, EFace Facing, FRa
 	Place(TEXT("SM_Porch"), PanelTransform(F, Facing, DoorIndex, 0.f), RoofTint);
 
 	const int32 Upper = bTwoStorey ? 1 : 0;
-	BuildUpperFloors(F, Upper, Paint, Rng, false);
+	// Upstairs is reached by stairs up the back wall, to a doorway in the corner panel.
+	const EFace Back = Facing == EFace::PosX ? EFace::NegX : Facing == EFace::NegX ? EFace::PosX : Facing == EFace::PosY ? EFace::NegY : EFace::PosY;
+	BuildUpperFloors(F, Upper, Paint, Rng, false, bTwoStorey ? int32(Back) : -1, 0, nullptr);
 	BuildCorners(F, Upper, Paint);
+	if (bTwoStorey)
+	{
+		BuildOutsideStairs(F, Back, 0, Path);
+		BuildUpperStoreys(F, 1, true, GroundHeight + UpperHeight - 2.f, QuarterOf(F, PanelTransform(F, Back, 0, 0.f).GetLocation()), Rng);
+	}
 
 	// Gable roof with its ridge along the street, and a chimney.
 	const float Eaves = GroundHeight + Upper * UpperHeight;
@@ -591,9 +615,11 @@ void AFTOCityGenerator::BuildPrecinct(const FFTOCityBlock& Block)
 		BuildGroundFace(F, Face, Panels, Paint);
 	}
 	FRandomStream Rng(Seed ^ 0xC0DE);
-	BuildUpperFloors(F, 1, Paint, Rng, false);
+	BuildUpperFloors(F, 1, Paint, Rng, false, int32(Front), 2, TEXT("SM_Wall_U_Plain"));
 	BuildCorners(F, 1, Paint);
 	const float RoofZ = GroundHeight + UpperHeight;
+	PlanLift(F, Front, 2, 1);
+	BuildUpperStoreys(F, 1, false, RoofZ - 12.f, QuarterOf(F, PanelTransform(F, Front, 2, 0.f).GetLocation()), Rng);
 	BuildRoof(F, RoofZ, Paint, Rng, true);
 	for (int32 i = 0; i < F.PanelsY; ++i)
 	{
@@ -720,9 +746,11 @@ void AFTOCityGenerator::BuildBank(const FFTOCityBlock& Block)
 		}
 		BuildGroundFace(F, Face, Panels, Paint);
 	}
-	BuildUpperFloors(F, 2, Paint, Rng, false);
+	BuildUpperFloors(F, 2, Paint, Rng, false, int32(Front), 2, TEXT("SM_Wall_U_Plain"));
 	BuildCorners(F, 2, Paint);
 	const float RoofZ = GroundHeight + 2.f * UpperHeight;
+	PlanLift(F, Front, 2, 2);
+	BuildUpperStoreys(F, 2, false, RoofZ - 12.f, QuarterOf(F, PanelTransform(F, Front, 2, 0.f).GetLocation()), Rng);
 	BuildRoof(F, RoofZ, Paint, Rng, true);
 	Place(TEXT("SM_Sign_Bank"), PanelTransform(F, Front, DoorIndex, 0.f), BankGold);
 

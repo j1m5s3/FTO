@@ -1,6 +1,7 @@
 #include "City/FTOCityGenerator.h"
 #include "City/FTOCityPalette.h"
 #include "Crime/FTOCrimeSpawnPoint.h"
+#include "City/FTOLift.h"
 #include "Weapons/FTOArmoryRack.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -373,6 +374,7 @@ void AFTOCityGenerator::BuildGeometry()
 
 	using namespace FTOCityPalette;
 	Buildings.Reset();
+	LiftPlans.Reset();
 	FRandomStream Rng(Seed ^ 0x5EED);
 
 	const float Pitch = BlockSize + RoadWidth;
@@ -445,6 +447,20 @@ void AFTOCityGenerator::SpawnGameplayMarkers()
 {
 	check(HasAuthority());
 	UWorld* World = GetWorld();
+
+	// The lifts: a stop per floor, linked up.
+	for (const FLiftPlan& Plan : LiftPlans)
+	{
+		TArray<AFTOLift*> Stops;
+		for (const FTransform& Stop : Plan.Stops)
+		{
+			FActorSpawnParameters Params;
+			Params.Owner = this;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Stops.Add(World->SpawnActor<AFTOLift>(AFTOLift::StaticClass(), Stop, Params));
+		}
+		AFTOLift::LinkStops(Stops);
+	}
 
 	auto SpawnPoint = [&](const FTransform& Where, const TArray<FName>& Allowed, const FName& District, int32 BuildingIndex)
 	{

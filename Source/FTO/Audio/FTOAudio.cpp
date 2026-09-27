@@ -99,6 +99,11 @@ namespace FTOAudio
 				{
 					return EFTOSurface::Grass;
 				}
+				// Indoors above the ground floor (the upper storeys): the floor covering's colour says what it is.
+				if (ISM->GetFName().ToString().EndsWith(TEXT("_In")))
+				{
+					return R > B * 1.8f ? EFTOSurface::Wood : (B > R * 1.3f ? EFTOSurface::Carpet : EFTOSurface::Tile);
+				}
 			}
 		}
 		return EFTOSurface::Concrete;
