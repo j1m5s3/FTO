@@ -489,7 +489,7 @@ void AFTOSmokeTest::BuildSteps()
 	// The clock runs out: the squad votes for overtime (back on duty with more time on the clock)... The host runs the
 	// vote (a client can't; its HUD hands the camera and controls back once the host is on duty again).
 	if (GetNetMode() != NM_Client)
-		{
+	{
 		AddStep(TEXT("clock runs out"), 1.2f, [this]()
 		{
 			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOShiftTimeLeft(0.f); }
