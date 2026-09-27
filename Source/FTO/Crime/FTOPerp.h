@@ -84,6 +84,11 @@ public:
 	FString DescribeSuspect() const;
 	/** Tests: finish the crime now (a crook with somewhere to be leaves with the goods). */
 	void FinishDeedNow();
+	/** Server: dressed as the citizen they were a moment ago (found with contraband on a stop and search). */
+	void WearLookOf(int32 Seed);
+
+	// IFTOTalkable, lying low: they'll talk (nervously), and a search turns up the goods.
+	virtual bool TalkChoice(AFTOCharacter* Officer, int32 Index) override;
 	/** Wrestling with an officer or being cuffed: the scene's on hold meanwhile. */
 	bool IsInArrest() const { return ArrestState == EFTOPerpArrest::Struggling || ArrestState == EFTOPerpArrest::Cuffing; }
 	/** 0-1: how close the officers are to winning a struggle. */
@@ -158,6 +163,10 @@ protected:
 	virtual void ApplyLook() override;
 	virtual void OnArrived() override;
 	virtual void FaceOfficer(const AActor* Officer) override;
+	virtual FString GetSmallTalk() override;
+	virtual FString AnswerWhatTheySaw() override;
+	virtual FString Contraband() override;
+	virtual void ArrestForWhatWasFound(AFTOCharacter* Officer) override;
 
 	/** Server: armed and cornered: pick an officer, turn to them, and fire now and then. */
 	void TickShooting(float DeltaSeconds);

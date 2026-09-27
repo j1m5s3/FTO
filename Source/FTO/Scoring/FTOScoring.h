@@ -21,7 +21,8 @@ enum class EFTOScore : uint8
 	Ticket,			// a traffic stop written up
 	Revive,			// helped a downed partner up
 	Collateral,		// a citizen hurt by the police (bowled over, shot, zapped)
-	FriendlyFire	// shot a partner
+	FriendlyFire,	// shot a partner
+	WrongfulArrest	// cuffed someone who'd done nothing
 };
 
 /** An officer's tally for the end-of-shift scoreboard. */

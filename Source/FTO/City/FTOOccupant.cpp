@@ -372,12 +372,24 @@ FString AFTOOccupant::GetSmallTalk()
 void AFTOOccupant::Interact(AFTOCharacter* Officer)
 {
 	check(HasAuthority());
-	if (OccupantRole == EFTOOccupantRole::Crook && !bQuestioned && Reaction == EFTOAnimAction::None)
+	Super::Interact(Officer);
+}
+
+bool AFTOOccupant::TalkChoice(AFTOCharacter* Officer, int32 Index)
+{
+	// A crook asked what they're up to: sometimes it all comes out.
+	if (Index == 0 && OccupantRole == EFTOOccupantRole::Crook && !bQuestioned && Reaction == EFTOAnimAction::None)
 	{
 		Question(Officer);
-		return;
+		return IsValid(this) && !IsActorBeingDestroyed();
 	}
-	Super::Interact(Officer);
+	return Super::TalkChoice(Officer, Index);
+}
+
+FString AFTOOccupant::Contraband()
+{
+	// A crook lying low has the goods on them; everyone else is as likely as anyone on the street.
+	return OccupantRole == EFTOOccupantRole::Crook ? FString(TEXT("a pocketful of other people's things")) : Super::Contraband();
 }
 
 void AFTOOccupant::Question(AFTOCharacter* Officer)

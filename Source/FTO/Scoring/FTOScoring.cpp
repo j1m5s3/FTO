@@ -25,6 +25,7 @@ int32 FTOScoring::BasePoints(EFTOScore Event, EFTOCrimeTier Tier)
 	case EFTOScore::Revive:       return 150;
 	case EFTOScore::Collateral:   return -100;
 	case EFTOScore::FriendlyFire: return -200;
+	case EFTOScore::WrongfulArrest: return -150;
 	default:                      return 0;
 	}
 }
@@ -43,13 +44,14 @@ FString FTOScoring::Label(EFTOScore Event)
 	case EFTOScore::Revive:       return TEXT("REVIVE!");
 	case EFTOScore::Collateral:   return TEXT("COLLATERAL");
 	case EFTOScore::FriendlyFire: return TEXT("FRIENDLY FIRE");
+	case EFTOScore::WrongfulArrest: return TEXT("WRONGFUL ARREST");
 	default:                      return FString();
 	}
 }
 
 bool FTOScoring::IsPenalty(EFTOScore Event)
 {
-	return Event == EFTOScore::Collateral || Event == EFTOScore::FriendlyFire;
+	return Event == EFTOScore::Collateral || Event == EFTOScore::FriendlyFire || Event == EFTOScore::WrongfulArrest;
 }
 
 float FTOScoring::ComboMultiplier(int32 Combo)

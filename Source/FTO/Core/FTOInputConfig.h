@@ -55,6 +55,9 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> RadioAim;
 	UPROPERTY() TObjectPtr<UInputAction> RadioAimStick;
 	UPROPERTY() TArray<TObjectPtr<UInputAction>> Callouts;
+	/** Talking to someone: 1-4 (or the d-pad) say one of the options, over the weapon keys. */
+	UPROPERTY() TObjectPtr<UInputMappingContext> TalkContext;
+	UPROPERTY() TArray<TObjectPtr<UInputAction>> TalkOptions;
 	/** End of shift: vote for overtime (Y, left bumper) or to clock off (N, view button). */
 	UPROPERTY() TObjectPtr<UInputAction> VoteOvertime;
 	UPROPERTY() TObjectPtr<UInputAction> VoteClockOff;

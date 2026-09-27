@@ -232,6 +232,7 @@ int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector
 	case EFTOScore::Revive:       ++Stats.Revives; break;
 	case EFTOScore::Collateral:   ++Stats.Collateral; break;
 	case EFTOScore::FriendlyFire: ++Stats.FriendlyFire; break;
+	case EFTOScore::WrongfulArrest: ++Stats.Collateral; break; // (an "oops" on the scoreboard)
 	default: break;
 	}
 	ForceNetUpdate();

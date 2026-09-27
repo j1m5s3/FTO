@@ -49,6 +49,7 @@ public:
 	// IFTOInteractable
 	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
 	virtual void Interact(AFTOCharacter* Officer) override;
+	virtual bool TalkChoice(AFTOCharacter* Officer, int32 Index) override;
 
 	// IFTOAnimatedActor
 	virtual EFTOAnimAction GetAnimAction() const override;
@@ -58,6 +59,8 @@ protected:
 	virtual void ApplyLook() override;
 	virtual void FaceOfficer(const AActor* Officer) override;
 	virtual FString GetSmallTalk() override;
+	virtual FString Contraband() override;
+	virtual int32 GetBuildingForCrime() const override { return BuildingIndex; }
 
 	/** Server: now and then, shuffle about near our spot (standing folk with nothing else going on). */
 	void Fidget();

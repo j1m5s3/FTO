@@ -100,6 +100,8 @@ public:
 	 * cold if nobody finds them in time. Talking to whoever matches (E) is how officers catch them.
 	 */
 	void StartSearch(const FVector& LastSeen);
+	/** Server: someone saw the suspect near Where: the marker moves (roughly) there and the search clock's area resets. */
+	void ReportSighting(const FVector& Where);
 	bool IsSearching() const { return bSearch; }
 	/** Seconds left to find them (every machine). */
 	float GetSearchTimeLeft() const;
