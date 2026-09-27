@@ -73,8 +73,10 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   and siren (offending cars ahead pull over), H honks. C (right stick click) swaps the chase camera for the view from
   the seat, and the mouse / right stick glances around (it eases back to the road). E gets out. Anyone you hit at
   speed goes flying (and hitting citizens costs chaos), and so does street furniture: bins and hydrants at a jog,
-  lamp posts and trees only flat out. Hard crashes dent the car, then it smokes, catches fire and is written off
-  (the motor pool fetches it back to the lot once it's been left empty for a while).
+  lamp posts and trees only flat out. Every knock dents the car right where it landed, as deep as it was hard, with
+  the paint scraped to bare metal round it (another knock there goes deeper), and grinding along a wall scrapes the
+  paint. Cruisers take a beating before they smoke, catch fire and are written off (the motor pool fetches a
+  write-off back to the lot, good as new, once it's been left empty for a while).
 - **Riding shotgun**: the mouse / right stick looks around, Q works the lights and siren, C swaps cameras, E gets out.
 - **Radio** (anywhere, on foot or in a car): hold V (d-pad down) to talk to the squad; teammates hear you through a
   walkie-talkie filter with a squelch at each end, and see who's on air. Hold T (d-pad up) for the callout wheel:
@@ -127,9 +129,11 @@ host). Finally the client checks it sees everything the host broke broken too.
   `Glow` (lights, dials, screens). `SOCKET_*` empties become sockets: `Wheel_*`, `Seat_*` (where a seated character's
   root goes), `Cam_*` (seat-view camera) and the cruiser's `Lightbar`. Seats are sized from the officer's car-seat
   pose (`build_officer.car_legs`); `--preview <dir>` also renders roofless cutaways with posed occupants and the
-  driver's-eye view to check the fit. `--dented` also exports each body's beaten-up twin (`*_Dented`: crumpled nose
-  and tail, a tented bonnet, knocked-in doors; same slots and sockets) that the game swaps in for badly damaged cars
-  (`--dented_only` just those, `--only SM_Car_Taxi,...` just some cars).
+  driver's-eye view to check the fit. Every body is diced so no edge is longer than 14 cm (`dice()`): flat panels
+  need vertices in the middle for the game to push its dents into. `--dented` also exports each body's beaten-up
+  twin (`*_Dented`: crumpled nose and tail, a tented bonnet, knocked-in doors; same slots and sockets) that the game
+  swaps in for a write-off (`--dented_only` just those, `--only SM_Car_Taxi,...` just some cars). The importer gives
+  car bodies the dentable materials (`M_FTOVehicle`, `MI_FTOVehicleGlow`, `M_FTOVehicleGlass`).
 - `Tools/Blender/build_weapons.py` builds the taser, pistol, shotgun and rifle into `Art/Source/Weapons`: barrel along
   +X with the grip at the origin (the game puts the grip in the hand and turns the barrel along the aim) and a
   `SOCKET_Muzzle` where rounds leave. `--preview <dir>` renders each one.
@@ -193,13 +197,18 @@ host). Finally the client checks it sees everything the host broke broken too.
   agree everywhere). Each machine tucks the broken instance away and has `UFTODebris` put on the show: Chaos rigid-body
   chunks, glass shards and knocked-off props, fading bullet-hole decals, and hydrant fountains, all cosmetic and made
   per machine. `UFTOVehicleDamage` gives cars health (server-side) and the look to match everywhere: panels flying off,
-  the dented body, smoke, fire and scorching. What breaks what (speeds, rounds, chaos) is the table in
+  dents, smoke, fire and scorching. Dents are a short replicated list (up to 12: a centre on the paint, found by
+  tracing the body's own triangles; a push; a radius; how much paint's scraped off) that the body's materials turn
+  into moved vertices, bent normals and bare metal, so every machine sees the same crumples; a knock near an old dent
+  deepens it. What breaks what (speeds, rounds, chaos) is the table in
   `FTODestruction.cpp`.
 - **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials`: `M_FTOBase` (vertex colour ×
   `Color` tint, glowing in its own colour by `Emissive`, charred towards black by `Scorch`), `M_FTOGlass` (tinted
   see-through glass), `MI_FTOGlow` (the base material, glowing), `MI_FTOCity` (tinted per instance from custom data,
   for the instanced city), `MI_FTOCityInterior` (the same, a little self-lit for rooms) and `M_FTODecal` (a bullet
-  hole: a deferred decal that fades out). `FTO_MATERIALS=M_FTODecal` builds just the named ones.
+  hole: a deferred decal that fades out), and the dentable car materials `M_FTOVehicle` (M_FTOBase plus up to 12
+  `DentN`/`PushN` dents moving the vertices, bending the normals and scraping the paint), `MI_FTOVehicleGlow` and
+  `M_FTOVehicleGlass`. `FTO_MATERIALS=M_FTODecal` builds just the named ones.
   Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
 - Nearly everything uses `M_FTOBase`. Engine primitives have no vertex colour, so they just take `Color`.
   Blender assets bake flat colours into vertex colours; vertex alpha = 1 marks tintable areas (uniforms, car paint).

@@ -35,33 +35,46 @@ eal = unreal.EditorAssetLibrary
 # How many dents a car's material can carry (UFTOVehicleDamage::MaxDents must match).
 DENTS = 12
 
-# Each dent is a smooth bowl: g = exp(-3 d^2 / r^2) around its centre. The push moves vertices by Push * g; the normal
-# tilts by the slope of that (the gradient of g along the surface, scaled by how far the push goes along the normal).
+# Each dent is a smooth hollow pressed in along its push: a vertex is pushed by Push * g, where g falls off with the
+# distance from the line the push travels along (exp(-3 d^2 / r^2)) and with how far in front of or behind the
+# dent's centre it is, so only the panel that was hit moves, not the far side of the car. The centre is on the paint
+# (UFTOVehicleDamage finds it). The normal tilts by the slope of that; the scrape mask uses the same shape.
+DENT_SHAPE = """float r = max(D.w, 1.0); float3 v = Pos - D.xyz; float3 k = normalize(P.xyz + float3(0, 0, 1e-4)); float a = dot(v, k); float3 q = v - a * k; float g = exp(-3.0 * dot(q, q) / (r * r)) * saturate(1.0 - abs(a) / 45.0);"""
 DENT_HLSL_OFFSET = """
 float3 o = 0;
-#define FTO_DENT(D, P) { float r = max(D.w, 1.0); float3 v = Pos - D.xyz; float g = exp(-3.0 * dot(v, v) / (r * r)); o += P.xyz * g; }
-%s
+#define FTO_DENT(D, P) { %s o += P.xyz * g; }
+%%s
+#undef FTO_DENT
 return o;
-"""
+""" % DENT_SHAPE
 DENT_HLSL_NORMAL = """
 float3 n = normalize(N);
 float3 t = 0;
-#define FTO_DENT(D, P) { float r = max(D.w, 1.0); float3 v = Pos - D.xyz; float g = exp(-3.0 * dot(v, v) / (r * r)); float3 dg = g * (-6.0 / (r * r)) * v; t -= dot(P.xyz, n) * (dg - dot(dg, n) * n); }
-%s
+#define FTO_DENT(D, P) { %s float3 dg = g * (-6.0 / (r * r)) * q; t -= dot(P.xyz, n) * (dg - dot(dg, n) * n); }
+%%s
+#undef FTO_DENT
 return normalize(n + t);
-"""
+""" % DENT_SHAPE
 DENT_HLSL_SCRAPE = """
 float s = 0;
-#define FTO_DENT(D, P) { float r = max(D.w, 1.0); float3 v = Pos - D.xyz; float g = exp(-2.0 * dot(v, v) / (r * r)); s += P.w * g; }
-%s
+#define FTO_DENT(D, P) { %s s += P.w * g; }
+%%s
+#undef FTO_DENT
 return saturate(s);
-"""
+""" % DENT_SHAPE
 
 
 def dent_nodes(mat, x, y):
     """The dent maths: (world offset, world normal, scrape mask) nodes, fed by the DentN/PushN parameters."""
     calls = "\n".join(f"FTO_DENT(D{i}, P{i})" for i in range(DENTS))
-    local_pos = mel.create_material_expression(mat, unreal.MaterialExpressionLocalPosition, x - 900, y)
+    # The vertex in the mesh's own space: its world position (before any offset, this one included) taken back into
+    # the component's frame.
+    world_pos = mel.create_material_expression(mat, unreal.MaterialExpressionWorldPosition, x - 1100, y)
+    world_pos.set_editor_property("world_position_shader_offset", unreal.WorldPositionIncludedOffsets.WPT_EXCLUDE_ALL_SHADER_OFFSETS)
+    local_pos = mel.create_material_expression(mat, unreal.MaterialExpressionTransformPosition, x - 900, y)
+    local_pos.set_editor_property("transform_source_type", unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_WORLD)
+    local_pos.set_editor_property("transform_type", unreal.MaterialPositionTransformSource.TRANSFORMPOSSOURCE_LOCAL)
+    mel.connect_material_expressions(world_pos, "", local_pos, "")
     normal_ws = mel.create_material_expression(mat, unreal.MaterialExpressionVertexNormalWS, x - 1100, y + 150)
     normal_ls = mel.create_material_expression(mat, unreal.MaterialExpressionTransform, x - 900, y + 150)
     normal_ls.set_editor_property("transform_source_type", unreal.MaterialVectorCoordTransformSource.TRANSFORMSOURCE_WORLD)
@@ -78,23 +91,28 @@ def dent_nodes(mat, x, y):
         pnode.set_editor_property("default_value", unreal.LinearColor(0.0, 0.0, 0.0, 0.0))
         params.append((d, pnode))
 
+    def named_input(name):
+        pin = unreal.CustomInput()
+        pin.set_editor_property("input_name", name)
+        return pin
+
     def custom(code, out_type, with_normal, cx, cy):
         node = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, cx, cy)
         node.set_editor_property("code", code % calls)
         node.set_editor_property("output_type", out_type)
-        inputs = [unreal.CustomInput(input_name="Pos")]
+        inputs = [named_input("Pos")]
         if with_normal:
-            inputs.append(unreal.CustomInput(input_name="N"))
+            inputs.append(named_input("N"))
         for i in range(DENTS):
-            inputs.append(unreal.CustomInput(input_name=f"D{i}"))
-            inputs.append(unreal.CustomInput(input_name=f"P{i}"))
+            inputs.append(named_input(f"D{i}"))
+            inputs.append(named_input(f"P{i}"))
         node.set_editor_property("inputs", inputs)
         mel.connect_material_expressions(local_pos, "", node, "Pos")
         if with_normal:
             mel.connect_material_expressions(normal_ls, "", node, "N")
         for i, (d, pnode) in enumerate(params):
-            mel.connect_material_expressions(d, "", node, f"D{i}")
-            mel.connect_material_expressions(pnode, "", node, f"P{i}")
+            mel.connect_material_expressions(d, "RGBA", node, f"D{i}")
+            mel.connect_material_expressions(pnode, "RGBA", node, f"P{i}")
         return node
 
     offset_ls = custom(DENT_HLSL_OFFSET, unreal.CustomMaterialOutputType.CMOT_FLOAT3, False, x - 400, y)
@@ -176,7 +194,7 @@ def build_base_material(name, two_sided=False, dents=False):
         mel.connect_material_property(offset, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
         mel.connect_material_property(normal, "", unreal.MaterialProperty.MP_NORMAL)
         metal = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -200, 300)
-        metal.set_editor_property("constant", unreal.LinearColor(0.42, 0.43, 0.45, 1.0))
+        metal.set_editor_property("constant", unreal.LinearColor(0.3, 0.31, 0.33, 1.0))
         scraped = mel.create_material_expression(mat, unreal.MaterialExpressionLinearInterpolate, 0, 100)
         mel.connect_material_expressions(burnt, "", scraped, "A")
         mel.connect_material_expressions(metal, "", scraped, "B")

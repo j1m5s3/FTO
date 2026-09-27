@@ -106,7 +106,8 @@ public:
 
 	/** Crashes below this speed (cm/s, into whatever it hit) just bump; above, the car takes damage by the speed. */
 	UPROPERTY(EditDefaultsOnly, Category="Damage") float CrashSpeed = 450.f;
-	UPROPERTY(EditDefaultsOnly, Category="Damage") float CrashDamagePerSpeed = 0.035f;
+	/** Damage per cm/s over CrashSpeed (cruisers are built to take a beating). */
+	UPROPERTY(EditDefaultsOnly, Category="Damage") float CrashDamagePerSpeed = 0.022f;
 	/** Seconds a written-off cruiser sits empty before the motor pool fetches it back to the lot. */
 	UPROPERTY(EditDefaultsOnly, Category="Damage") float MotorPoolSeconds = 20.f;
 
@@ -217,6 +218,11 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> EngineAudio;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SirenAudio;
 	/** Tyres squealing in a slide (UpdateSkid). */
+	UPROPERTY() TObjectPtr<UMaterialInterface> VehicleMaterial;
+	/** Grinding along a wall: scraped paint (throttled; the driver's machine tells the server). */
+	void Scrape(const FHitResult& Hit);
+	UFUNCTION(Server, Unreliable) void ServerScrape(FVector_NetQuantize At);
+	float NextScrapeTime = 0.f;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SkidAudio;
 	void UpdateSkid(float DeltaSeconds);
 	FVector SkidLastLocation = FVector::ZeroVector;

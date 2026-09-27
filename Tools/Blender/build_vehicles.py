@@ -616,6 +616,11 @@ def dice(mesh_obj, max_edge=0.14):
         bmesh.ops.subdivide_edges(bm, edges=long_edges, cuts=1, use_grid_fill=True)
     bm.to_mesh(mesh_obj.data)
     bm.free()
+    # The round trip leaves no active colour layer, and the FBX exporter only writes the active one.
+    colors = mesh_obj.data.color_attributes
+    if "Col" in colors:
+        colors.active_color = colors["Col"]
+        colors.render_color_index = colors.active_color_index
     mesh_obj.data.update()
 
 

@@ -32,6 +32,7 @@ void UFTOVehicleDamage::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UFTOVehicleDamage, State);
+	DOREPLIFETIME(UFTOVehicleDamage, Dents);
 }
 
 void UFTOVehicleDamage::SetBody(UStaticMeshComponent* InBody, UStaticMesh* InDented)
@@ -45,7 +46,27 @@ void UFTOVehicleDamage::SetBody(UStaticMeshComponent* InBody, UStaticMesh* InDen
 		PaintMaterials.Reset();
 		CleanPaint.Reset();
 	}
+	// Every section of the body dents together (paint, windows, lights): each needs its own instance to be told
+	// (gathered afresh: a restyled car has new paint).
+	DentMaterials.Reset();
+	if (Body)
+	{
+		for (int32 Slot = 0; Slot < Body->GetNumMaterials(); ++Slot)
+		{
+			UMaterialInterface* Material = Body->GetMaterial(Slot);
+			UMaterialInstanceDynamic* Instance = Cast<UMaterialInstanceDynamic>(Material);
+			if (!Instance && Material)
+			{
+				Instance = Body->CreateDynamicMaterialInstance(Slot, Material);
+			}
+			if (Instance)
+			{
+				DentMaterials.Add(Instance);
+			}
+		}
+	}
 	ApplyState(false);
+	ApplyDents();
 }
 
 EFTOCarDamage UFTOVehicleDamage::GetStage() const
@@ -67,6 +88,14 @@ void UFTOVehicleDamage::ApplyDamage(float Amount, const FVector& At, AController
 	}
 	const float Before = State.Health;
 	State.Health = FMath::Max(0.f, State.Health - Amount);
+
+	// A dent where it landed, pushed towards the middle of the car (mostly sideways: cars get hit side-on and
+	// head-on, rarely from underneath), as deep as the knock was hard.
+	const FVector Middle = Body ? Body->Bounds.Origin : GetOwner()->GetActorLocation();
+	FVector Inward = Middle - At;
+	Inward.Z *= 0.3f;
+	AddDent(At, Inward.GetSafeNormal(), FMath::Clamp(Amount * 0.9f, 4.f, 26.f), FMath::Clamp(35.f + Amount * 1.4f, 40.f, 85.f),
+		FMath::Clamp(Amount / 25.f, 0.25f, 1.f));
 	State.LastHit = GetOwner()->GetActorTransform().InverseTransformPosition(At);
 	State.LastDamage = Amount;
 	++State.Serial;
@@ -95,10 +124,111 @@ void UFTOVehicleDamage::ApplyDamage(float Amount, const FVector& At, AController
 	}
 }
 
+void UFTOVehicleDamage::AddScrape(const FVector& At, const FVector& Along)
+{
+	check(GetOwner()->HasAuthority());
+	// Paint off, barely a dent: a long, shallow mark.
+	const FVector Middle = Body ? Body->Bounds.Origin : GetOwner()->GetActorLocation();
+	FVector Inward = Middle - At;
+	Inward.Z = 0.f;
+	AddDent(At, Inward.GetSafeNormal(), 0.8f, 45.f, 0.5f);
+}
+
+void UFTOVehicleDamage::AddDent(const FVector& At, const FVector& Dir, float Depth, float Radius, float Scrape)
+{
+	if (!Body)
+	{
+		return;
+	}
+	const FTransform Frame = Body->GetComponentTransform();
+	FFTODent Dent;
+	Dent.Center = Frame.InverseTransformPosition(At);
+	Dent.Push = Frame.InverseTransformVectorNoScale(Dir) * Depth;
+	Dent.Radius = Radius;
+	Dent.Scrape = Scrape;
+
+	// Where the knock landed isn't quite on the paint (it's on the collision box, or a round's hit point): find the
+	// paint itself along the line of the push, against the body's own triangles (switched on for queries just for the
+	// trace: the rest of the time the body's only for looking at), and fall back to the edge of its bounds.
+	{
+		const FVector Dir = Frame.TransformVectorNoScale(FVector(Dent.Push).GetSafeNormal());
+		FHitResult Paint;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(FTODent), true);
+		const ECollisionEnabled::Type Was = Body->GetCollisionEnabled();
+		Body->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		const bool bFound = !Dir.IsNearlyZero() && Body->LineTraceComponent(Paint, At - Dir * 300.f, At + Dir * 300.f, Params);
+		Body->SetCollisionEnabled(Was);
+		if (bFound)
+		{
+			Dent.Center = Frame.InverseTransformPosition(Paint.ImpactPoint);
+		}
+		else if (const UStaticMesh* Mesh = Body->GetStaticMesh())
+		{
+			const FBox Box = Mesh->GetBounds().GetBox();
+			const FVector Local = FVector(Dent.Center);
+			Dent.Center = Box.GetClosestPointTo(Local) == Local ? Local : Box.GetClosestPointTo(Local);
+		}
+	}
+
+	// Another knock where there's already a dent goes deeper (up to a point); when the list's full, the nearest takes it.
+	int32 Nearest = INDEX_NONE;
+	float NearestDist = TNumericLimits<float>::Max();
+	for (int32 i = 0; i < Dents.Num(); ++i)
+	{
+		const float Dist = FVector::Dist(Dents[i].Center, Dent.Center);
+		if (Dist < NearestDist)
+		{
+			NearestDist = Dist;
+			Nearest = i;
+		}
+	}
+	if (Nearest != INDEX_NONE && (NearestDist < Dents[Nearest].Radius * 0.6f || Dents.Num() >= MaxDents))
+	{
+		FFTODent& Into = Dents[Nearest];
+		Into.Push = (FVector(Into.Push) + FVector(Dent.Push)).GetClampedToMaxSize(32.f);
+		Into.Radius = FMath::Min(FMath::Max(Into.Radius, Dent.Radius) + 4.f, 90.f);
+		Into.Scrape = FMath::Min(1.f, Into.Scrape + Dent.Scrape);
+	}
+	else
+	{
+		Dents.Add(Dent);
+	}
+	GetOwner()->ForceNetUpdate();
+	ApplyDents();
+}
+
+void UFTOVehicleDamage::OnRep_Dents()
+{
+	ApplyDents();
+}
+
+void UFTOVehicleDamage::ApplyDents()
+{
+	for (UMaterialInstanceDynamic* Material : DentMaterials)
+	{
+		if (!Material)
+		{
+			continue;
+		}
+		for (int32 i = 0; i < MaxDents; ++i)
+		{
+			const bool bUsed = Dents.IsValidIndex(i);
+			const FFTODent Dent = bUsed ? Dents[i] : FFTODent();
+			// Unused slots sit far away with nothing pushed.
+			Material->SetVectorParameterValue(*FString::Printf(TEXT("Dent%d"), i),
+				bUsed ? FLinearColor(Dent.Center.X, Dent.Center.Y, Dent.Center.Z, Dent.Radius) : FLinearColor(0.f, 0.f, -100000.f, 1.f));
+			Material->SetVectorParameterValue(*FString::Printf(TEXT("Push%d"), i),
+				bUsed ? FLinearColor(Dent.Push.X, Dent.Push.Y, Dent.Push.Z, Dent.Scrape) : FLinearColor(0.f, 0.f, 0.f, 0.f));
+		}
+	}
+}
+
 void UFTOVehicleDamage::Repair()
 {
 	check(GetOwner()->HasAuthority());
 	State = FFTOCarHealth();
+	Dents.Reset();
+	ApplyDents();
 	LastInstigator.Reset();
 	GetOwner()->ForceNetUpdate();
 	OnRep_State();
@@ -136,8 +266,9 @@ void UFTOVehicleDamage::ApplyState(bool bFreshKnock)
 		}
 	}
 
-	// Dents: the beaten-up body (same sockets, so wheels and people stay put).
-	UStaticMesh* Wanted = Stage >= EFTOCarDamage::Dented && Dented ? Dented.Get() : Pristine.Get();
+	// A write-off is crumpled all over: the beaten-up body (same sockets, so wheels and people stay put). Before that
+	// the dents are wherever it was actually hit (ApplyDents).
+	UStaticMesh* Wanted = Stage >= EFTOCarDamage::Wrecked && Dented ? Dented.Get() : Pristine.Get();
 	if (Wanted && Body->GetStaticMesh() != Wanted)
 	{
 		Body->SetStaticMesh(Wanted);

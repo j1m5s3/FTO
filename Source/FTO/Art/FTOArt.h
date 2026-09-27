@@ -16,6 +16,8 @@ namespace FTOArt
 {
 	/** Asset path for ConstructorHelpers (so the material is a hard, cookable reference). */
 	inline constexpr const TCHAR* BaseMaterialPath = TEXT("/Game/FTO/Materials/M_FTOBase.M_FTOBase");
+	/** M_FTOBase plus dents, for car bodies (UFTOVehicleDamage). */
+	inline constexpr const TCHAR* VehicleMaterialPath = TEXT("/Game/FTO/Materials/M_FTOVehicle.M_FTOVehicle");
 
 	/** Makes a tinted instance of Base (or the slot's current material if Base is null) and assigns it. */
 	FTO_API UMaterialInstanceDynamic* ApplyColor(UPrimitiveComponent* Component, UMaterialInterface* Base, const FLinearColor& Color, float Emissive = 0.f, int32 Slot = 0);

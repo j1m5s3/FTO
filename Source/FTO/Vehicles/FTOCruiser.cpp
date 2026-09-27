@@ -49,6 +49,8 @@ AFTOCruiser::AFTOCruiser()
 	RootComponent = Collision;
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VehicleMat(FTOArt::VehicleMaterialPath);
+	VehicleMaterial = VehicleMat.Object;
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CruiserMesh(TEXT("/Game/FTO/Vehicles/SM_Car_Cruiser.SM_Car_Cruiser"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> CruiserDented(TEXT("/Game/FTO/Vehicles/SM_Car_Cruiser_Dented.SM_Car_Cruiser_Dented"));
 	DentedMesh = CruiserDented.Object;
@@ -139,7 +141,7 @@ void AFTOCruiser::BeginPlay()
 {
 	Super::BeginPlay();
 
-	PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, StripeColor, 0.f, FTOArt::BodySlot(Body));
+	PaintMaterial = FTOArt::ApplyColor(Body, VehicleMaterial ? VehicleMaterial.Get() : BaseMaterial.Get(), StripeColor, 0.f, FTOArt::BodySlot(Body));
 	const FFTOSoundSet& Sounds = AFTOGameState::Sounds();
 	EngineAudio->SetSound(Sounds.EngineLoop);
 	EngineAudio->AttenuationSettings = Sounds.World;
@@ -680,6 +682,10 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 		{
 			Crash(Hit, Into);
 		}
+		else if (FMath::Abs(FVector::DotProduct(Velocity, FVector::CrossProduct(FVector::UpVector, Normal))) > 350.f)
+		{
+			Scrape(Hit); // grinding along it
+		}
 		Velocity = (Velocity - 1.4f * FVector::DotProduct(Velocity, Normal) * Normal) * 0.5f;
 	}
 	SetActorRotation(NewRotation);
@@ -796,6 +802,32 @@ void AFTOCruiser::Crash(const FHitResult& Hit, float Into)
 	else
 	{
 		ServerCrash(Hit.GetActor(), Into, Hit.ImpactPoint);
+	}
+}
+
+void AFTOCruiser::Scrape(const FHitResult& Hit)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextScrapeTime)
+	{
+		return;
+	}
+	NextScrapeTime = Now + 0.3f;
+	if (HasAuthority())
+	{
+		ServerScrape_Implementation(Hit.ImpactPoint);
+	}
+	else
+	{
+		ServerScrape(Hit.ImpactPoint);
+	}
+}
+
+void AFTOCruiser::ServerScrape_Implementation(FVector_NetQuantize At)
+{
+	if (Damage && FVector::DistSquared(FVector(At), GetActorLocation()) < FMath::Square(900.f))
+	{
+		Damage->AddScrape(At, GetVelocity());
 	}
 }
 
