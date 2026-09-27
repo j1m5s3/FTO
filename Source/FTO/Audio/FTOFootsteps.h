@@ -31,6 +31,9 @@ public:
 	/** Only heard within this of the local camera (0 = always): for the crowd. */
 	UPROPERTY(EditAnywhere, Category="Footsteps") float CrowdRange = 0.f;
 
+	/** Tests: steps played on this machine so far, by EFTOSurface. */
+	static int32 StepsOn(uint8 Surface) { return Surface < UE_ARRAY_COUNT(StepCount) ? StepCount[Surface] : 0; }
+
 protected:
 	virtual void BeginPlay() override;
 
@@ -45,4 +48,5 @@ protected:
 	FVector LastLocation = FVector::ZeroVector;
 	float Travelled = 0.f;
 	bool bHaveLast = false;
+	static int32 StepCount[6];
 };

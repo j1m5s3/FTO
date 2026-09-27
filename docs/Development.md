@@ -175,6 +175,14 @@ host). Finally the client checks it sees everything the host broke broken too.
     `SW_Rubble_01..04`, `SW_WallBreak_01..03`, `SW_Collapse_01` (about 10 s).
   - Buildings and city: `SW_DoorOpen`, `SW_DoorClose`, `SW_ElevatorDing`, plus the loops above.
   - `--list` prints every name with its loop flag.
+  - In the game (`Source/FTO/Audio`): `FTOAudio::Vary` swaps any sound with numbered takes for a random one (every
+    world sound goes through it, so gunshots, crashes and breaking glass never repeat exactly), `FTOAudio::Pick`
+    picks from a family by name. `UFTOFootsteps` (on officers and everyone in the crowd) plays a step per stride on
+    whatever's underfoot: rooms by what the building is (homes and bars wood, offices carpet, warehouses concrete,
+    the rest tile), green ground grass, cars metal, everything else concrete; running steps are heavier and a jump
+    lands with a thud. The crowd's steps are only heard close up. Cruisers squeal their tyres in a slide, crashes are
+    a light or heavy impact (heavy ones with the metal groaning after), knockdowns land with a body fall, and the
+    city hums under everything.
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
   idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) crossfading straight
   into one another, and an upper-body layer on top (aiming, or hands cuffed behind the back). Actors animating several

@@ -48,7 +48,7 @@ namespace FTOAudio
 	{
 		static const TCHAR* Names[] = { TEXT("Concrete"), TEXT("Wood"), TEXT("Tile"), TEXT("Carpet"), TEXT("Metal"), TEXT("Grass") };
 		const TCHAR* Name = Names[FMath::Clamp(int32(Surface), 0, int32(UE_ARRAY_COUNT(Names)) - 1)];
-		return Pick(FName(*FString::Printf(bRunning ? TEXT("StepRun_%s") : TEXT("Step_%s"), Name)));
+		return Pick(FName(*FString::Printf(TEXT("%s_%s"), bRunning ? TEXT("StepRun") : TEXT("Step"), Name)));
 	}
 
 	EFTOSurface SurfaceOf(const FHitResult& Ground)

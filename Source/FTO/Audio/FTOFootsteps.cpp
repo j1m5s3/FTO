@@ -8,6 +8,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Physics/FTOKnockdownComponent.h"
 
+int32 UFTOFootsteps::StepCount[6] = {};
+
 UFTOFootsteps::UFTOFootsteps()
 {
 	PrimaryComponentTick.bCanEverTick = true;
@@ -112,6 +114,7 @@ void UFTOFootsteps::PlayStep(bool bRunning, bool bLanding)
 			Sound = Thud;
 		}
 	}
+	++StepCount[FMath::Clamp(int32(Surface), 0, 5)];
 	if (Sound)
 	{
 		const float Loud = Volume * (bLanding ? 1.4f : (bRunning ? 1.15f : 1.f));
