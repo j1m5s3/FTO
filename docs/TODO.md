@@ -27,7 +27,7 @@ Each item is one PR, reviewed before it's merged.
   leave with the goods, and a getaway becomes a search for the suspect by description.
 - [x] **Sound** (upgrade 4): footsteps by surface, heavier and more realistic synthesised effects, more variety.
 - [x] **Tougher cars** (upgrade 3): more health, persistent dents and scrapes where they're hit, BeamNG-style wear.
-- [ ] **Talking to people** (upgrade 7): conversations for information and chit-chat, stop and search, arrests (with
+- [x] **Talking to people** (upgrade 7): conversations for information and chit-chat, stop and search, arrests (with
   a chaos cost for arresting someone who's clean).
 - [ ] **Upper floors** (upgrade 6): stairs and lifts in multi-storey buildings.
 - [ ] **Building destruction** (upgrade 2): walls broken systematically, cars through walls, buildings levelled.

@@ -38,9 +38,9 @@ public:
 
 	EFTOExtraRole GetRole() const { return ExtraRole; }
 
-	// IFTOInteractable
+	// IFTOInteractable (talking to them: the victim's statement is what they saw)
 	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
-	virtual void Interact(AFTOCharacter* Officer) override;
+	virtual FText GetTalkTitle() const override;
 
 	// IFTOAnimatedActor
 	virtual EFTOAnimAction GetAnimAction() const override;
@@ -52,6 +52,8 @@ public:
 
 protected:
 	virtual void OnArrived() override;
+	virtual FString AnswerWhatTheySaw() override;
+	virtual FString Contraband() override;
 
 	/** Is the perp still at it, right here (not caught, not gone)? */
 	bool IsCrimeGoingOn() const;

@@ -357,6 +357,16 @@ void AFTOArrestee::OnRep_State()
 
 void AFTOArrestee::Book()
 {
+	// Nothing to book them for: the desk sergeant lets them go, and nobody earns anything.
+	if (bWrongful)
+	{
+		if (AFTOPlayerController* PC = Escort ? Cast<AFTOPlayerController>(Escort->GetController()) : nullptr)
+		{
+			PC->ClientToast(INVTEXT("The desk sergeant let them go: they hadn't done anything."), FLinearColor(1.f, 0.6f, 0.3f));
+		}
+		Destroy();
+		return;
+	}
 	State = EFTOArresteeState::Booked;
 	AnimSpeed = 0.f;
 	Trail.Reset();

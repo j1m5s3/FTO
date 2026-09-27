@@ -134,6 +134,17 @@ void UFTOInputConfig::Build()
 		WheelContext->MapKey(Callouts[i], CalloutKeys[i]);
 	}
 
+	// Conversations
+	TalkContext = NewObject<UInputMappingContext>(this, TEXT("IMC_FTOTalk"));
+	const FKey TalkKeys[] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four };
+	const FKey TalkPads[] = { EKeys::Gamepad_DPad_Up, EKeys::Gamepad_DPad_Right, EKeys::Gamepad_DPad_Down, EKeys::Gamepad_DPad_Left };
+	for (int32 i = 0; i < UE_ARRAY_COUNT(TalkKeys); ++i)
+	{
+		TalkOptions.Add(MakeAction(*FString::Printf(TEXT("IA_Talk%d"), i + 1), (int32)EInputActionValueType::Boolean));
+		TalkContext->MapKey(TalkOptions[i], TalkKeys[i]);
+		TalkContext->MapKey(TalkOptions[i], TalkPads[i]);
+	}
+
 	// End of shift
 	VoteOvertime = MakeAction(TEXT("IA_VoteOvertime"), (int32)EInputActionValueType::Boolean);
 	VoteClockOff = MakeAction(TEXT("IA_VoteClockOff"), (int32)EInputActionValueType::Boolean);

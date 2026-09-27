@@ -54,6 +54,8 @@ public:
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void OnRep_PlayerState() override;
 	virtual void PossessedBy(AController* NewController) override;
+	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual void Tick(float DeltaSeconds) override;
@@ -91,6 +93,18 @@ public:
 
 	/** Server: play a full-body action for a while (ticket writing, chatting). */
 	void PlayTimedAction(EFTOAnimAction Action, float Duration);
+
+	// ---- Conversations (IFTOTalkable) ----
+	/** Server: start talking to Who (someone IFTOTalkable), ending any other conversation. */
+	void BeginTalk(AActor* Who);
+	/** Server: that's the end of the conversation (the other side hears TalkEnded). */
+	void EndTalk();
+	/** Who this officer's talking to, if anyone (the owner's machine and the server). */
+	AActor* GetTalkingTo() const { return TalkingTo; }
+	/** Local player: say option Index (what 1-4 do while talking; also for the smoke test). */
+	void TalkPressed(int32 Index);
+	/** How far an officer can wander off before a conversation's over. */
+	static constexpr float TalkRange = 400.f;
 
 	// IFTOAnimatedActor
 	virtual EFTOAnimAction GetAnimAction() const override;
@@ -260,6 +274,18 @@ protected:
 
 	UFUNCTION(Server, Reliable)
 	void ServerInteract(AActor* Target);
+
+	UFUNCTION(Server, Reliable)
+	void ServerTalkChoice(int32 Index);
+	UFUNCTION(Server, Reliable)
+	void ServerEndTalk();
+	UFUNCTION() void OnRep_TalkingTo();
+	UPROPERTY(ReplicatedUsing=OnRep_TalkingTo) TObjectPtr<AActor> TalkingTo;
+	/** Server: when the conversation was last moving (it ends if it sits idle). */
+	float TalkIdleSince = 0.f;
+	/** Local: the conversation keys are live (their mapping context is on). */
+	bool bTalkKeys = false;
+	void SetTalkKeys(bool bWant);
 
 	TWeakObjectPtr<AActor> FocusedInteractable;
 	float FocusAccumulator = 0.f;

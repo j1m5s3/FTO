@@ -1,10 +1,16 @@
 #include "City/FTOPedestrian.h"
+#include "EngineUtils.h"
 #include "Audio/FTOFootsteps.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Crime/FTOIncident.h"
+#include "Crime/FTOArrestee.h"
+#include "Crime/FTOCrimeDirector.h"
+#include "Crime/FTOPerp.h"
+#include "Core/FTOGameMode.h"
+#include "Scoring/FTOScoring.h"
 #include "Components/CapsuleComponent.h"
 #include "Animation/FTOCharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -110,6 +116,8 @@ void AFTOPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AFTOPedestrian, LookSeed);
 	DOREPLIFETIME(AFTOPedestrian, bChatting);
 	DOREPLIFETIME(AFTOPedestrian, bHandsUp);
+	DOREPLIFETIME(AFTOPedestrian, bSearched);
+	DOREPLIFETIME(AFTOPedestrian, Found);
 }
 
 void AFTOPedestrian::BeginPlay()
@@ -259,69 +267,256 @@ void AFTOPedestrian::FreezeFor(const AActor* Officer, float Seconds)
 
 bool AFTOPedestrian::CanInteract(const AFTOCharacter* Officer) const
 {
-	return Officer != nullptr;
+	return Officer != nullptr && !(Knockdown && Knockdown->IsDown());
 }
 
 FText AFTOPedestrian::GetInteractPrompt(const AFTOCharacter* Officer) const
 {
-	return INVTEXT("Chat with citizen");
+	return INVTEXT("Talk to citizen");
 }
 
 void AFTOPedestrian::Interact(AFTOCharacter* Officer)
 {
 	check(HasAuthority());
-	AFTOPlayerController* PC = Officer ? Cast<AFTOPlayerController>(Officer->GetController()) : nullptr;
-	if (!PC)
+	if (!Officer)
 	{
 		return;
 	}
+	Officer->BeginTalk(this);
+	HoldForTalk(Officer);
+}
 
-	Officer->PlayTimedAction(EFTOAnimAction::Interact, 1.5f);
-
-	// Stop and face the officer for a moment.
+void AFTOPedestrian::HoldForTalk(AFTOCharacter* Officer)
+{
+	TalkingWith = Officer;
+	GetWorldTimerManager().ClearTimer(ResumeTimer);
 	Hold();
 	bChatting = true;
 	FaceOfficer(Officer);
-	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::Resume, 2.5f, false);
+}
+
+void AFTOPedestrian::TalkEnded(AFTOCharacter* Officer)
+{
+	// Still talking to another officer: carry on with them.
+	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+	{
+		if (*It != Officer && It->GetTalkingTo() == this)
+		{
+			TalkingWith = *It;
+			return;
+		}
+	}
+	TalkingWith.Reset();
+	GetWorldTimerManager().ClearTimer(SearchPoseTimer);
+	bHandsUp = false;
+	bChatting = false;
+	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::Resume, 1.f, false);
+}
+
+FText AFTOPedestrian::GetTalkTitle() const
+{
+	return FText::FromString(FString::Printf(TEXT("Citizen: %s"), *DescribeLook()));
+}
+
+void AFTOPedestrian::GetTalkOptions(const AFTOCharacter* Officer, TArray<FText>& OutOptions) const
+{
+	OutOptions.Add(INVTEXT("Seen anything unusual round here?"));
+	OutOptions.Add(INVTEXT("How's your day going?"));
+	if (!bSearched)
+	{
+		OutOptions.Add(INVTEXT("I'm going to search you."));
+	}
+	else
+	{
+		OutOptions.Add(Found.IsEmpty() ? INVTEXT("You're under arrest. (They're clean: the city won't like it.)") : INVTEXT("You're under arrest."));
+	}
+	OutOptions.Add(INVTEXT("That's all, have a good day."));
+}
+
+bool AFTOPedestrian::TalkChoice(AFTOCharacter* Officer, int32 Index)
+{
+	check(HasAuthority());
+	AFTOPlayerController* PC = Officer ? Cast<AFTOPlayerController>(Officer->GetController()) : nullptr;
+	if (!PC)
+	{
+		return false;
+	}
+	HoldForTalk(Officer);
+	switch (Index)
+	{
+	case 0:
+		Officer->PlayTimedAction(EFTOAnimAction::Interact, 1.2f);
+		PC->ClientToast(FText::FromString(AnswerWhatTheySaw()), FLinearColor(1.f, 0.85f, 0.3f));
+		return true;
+
+	case 1:
+		Officer->PlayTimedAction(EFTOAnimAction::Talk, 1.5f);
+		PC->ClientToast(FText::FromString(GetSmallTalk()), FLinearColor::White);
+		return true;
+
+	case 2:
+		if (!bSearched)
+		{
+			// Hands up for the pat-down.
+			bSearched = true;
+			Found = Contraband();
+			Officer->PlayTimedAction(EFTOAnimAction::Interact, 2.2f);
+			bHandsUp = true;
+			GetWorldTimerManager().SetTimer(SearchPoseTimer, this, &AFTOPedestrian::EndSearchPose, 2.2f, false);
+			if (Found.IsEmpty())
+			{
+				// Stopped and searched for nothing: people notice.
+				if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+				{
+					GS->AddChaos(CleanSearchChaos);
+				}
+				PC->ClientToast(INVTEXT("They're clean. And not happy about being searched."), FLinearColor(0.85f, 0.85f, 0.85f));
+			}
+			else
+			{
+				PC->ClientToast(FText::FromString(FString::Printf(TEXT("Found %s!"), *Found)), FLinearColor(1.f, 0.6f, 0.25f));
+			}
+			return true;
+		}
+		// Arrest: for what turned up, or (if nothing did) for nothing at all.
+		if (Found.IsEmpty())
+		{
+			WrongfulArrest(Officer);
+		}
+		else
+		{
+			ArrestForWhatWasFound(Officer);
+		}
+		return false;
+
+	default:
+		return false;
+	}
+}
+
+void AFTOPedestrian::EndSearchPose()
+{
+	bHandsUp = false;
+}
+
+FString AFTOPedestrian::AnswerWhatTheySaw()
+{
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	if (!GS)
+	{
+		return TEXT("\"Nothing, officer.\"");
+	}
+	// A suspect lying low who passed this way: they'll have noticed (and the search moves to where they saw them).
+	for (AFTOIncident* Incident : GS->GetIncidents())
+	{
+		const AFTOPedestrian* Suspect = Incident && Incident->IsSearching() ? Incident->GetPerp() : nullptr;
+		if (Suspect && Suspect != this && FVector::Dist2D(Suspect->GetActorLocation(), GetActorLocation()) < 2500.f)
+		{
+			Incident->ReportSighting(Suspect->GetActorLocation());
+			const FVector Dir = (Suspect->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+			return FString::Printf(TEXT("\"Someone like that? %s? Yes, they went %s, not long ago.\""), *Incident->GetInfo().SuspectDescription.ToString(), CompassWord(Dir));
+		}
+	}
 
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now >= ChatCooldownUntil)
 	{
 		ChatCooldownUntil = Now + 30.f;
-
 		// Tip-off: the nearest crime nobody has called in yet.
-		if (const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+		AFTOIncident* Best = nullptr;
+		float BestDist = 6000.f;
+		for (AFTOIncident* Incident : GS->GetIncidents())
 		{
-			AFTOIncident* Best = nullptr;
-			float BestDist = 6000.f;
-			for (AFTOIncident* Incident : GS->GetIncidents())
+			if (Incident && Incident->GetState() == EFTOIncidentState::Unreported)
 			{
-				if (Incident && Incident->GetState() == EFTOIncidentState::Unreported)
+				const float Dist = FVector::Dist2D(Incident->GetActorLocation(), GetActorLocation());
+				if (Dist < BestDist)
 				{
-					const float Dist = FVector::Dist2D(Incident->GetActorLocation(), GetActorLocation());
-					if (Dist < BestDist)
-					{
-						Best = Incident;
-						BestDist = Dist;
-					}
+					Best = Incident;
+					BestDist = Dist;
 				}
 			}
-
-			if (Best)
-			{
-				Best->ForceReport();
-				const FVector Dir = (Best->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
-				const int32 Meters = FMath::RoundToInt(BestDist / 100.f);
-				const FString Line = Rng.FRand() < 0.5f
-					? FString::Printf(TEXT("\"Psst... something shady going on %s, about %dm away.\""), CompassWord(Dir), Meters)
-					: FString::Printf(TEXT("\"I saw someone acting weird %s. Like, %dm that way.\""), CompassWord(Dir), Meters);
-				PC->ClientToast(FText::FromString(Line), FLinearColor(1.f, 0.85f, 0.3f));
-				return;
-			}
+		}
+		if (Best)
+		{
+			Best->ForceReport();
+			const FVector Dir = (Best->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+			const int32 Meters = FMath::RoundToInt(BestDist / 100.f);
+			return Rng.FRand() < 0.5f
+				? FString::Printf(TEXT("\"Psst... something shady going on %s, about %dm away.\""), CompassWord(Dir), Meters)
+				: FString::Printf(TEXT("\"I saw someone acting weird %s. Like, %dm that way.\""), CompassWord(Dir), Meters);
 		}
 	}
+	return TEXT("\"Nothing, officer. Quiet day. Suspiciously quiet.\"");
+}
 
-	PC->ClientToast(FText::FromString(GetSmallTalk()), FLinearColor::White);
+FString AFTOPedestrian::Contraband()
+{
+	// One in eight is carrying something they shouldn't (the same one every time you ask).
+	static const TCHAR* Items[] =
+	{
+		TEXT("a stolen wallet (it isn't even theirs, the photo's of a dog)"),
+		TEXT("a bag of someone else's phones"),
+		TEXT("a crowbar and a map of the bank"),
+		TEXT("forty-seven fake designer watches"),
+		TEXT("a very illegal amount of fireworks"),
+		TEXT("a flick knife"),
+	};
+	FRandomStream Pockets(LookSeed * 31 + 7);
+	return Pockets.FRand() < 0.125f ? FString(Items[Pockets.RandRange(0, UE_ARRAY_COUNT(Items) - 1)]) : FString();
+}
+
+void AFTOPedestrian::ArrestForWhatWasFound(AFTOCharacter* Officer)
+{
+	AFTOGameMode* GM = GetWorld()->GetAuthGameMode<AFTOGameMode>();
+	if (!GM || !Officer)
+	{
+		return;
+	}
+	// A crime right here, with the same face as its perp, caught red-handed; then the arrest goes as any other would.
+	const FTransform Where(FRotator(0.f, (Officer->GetActorLocation() - GetActorLocation()).Rotation().Yaw, 0.f), GetActorLocation() - FVector(0.f, 0.f, HalfHeight));
+	AFTOIncident* Caught = GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("StolenGoods"), Where, GetBuildingForCrime(), true);
+	if (!Caught)
+	{
+		return;
+	}
+	Caught->ReportByOfficer();
+	if (AFTOPerp* Perp = Caught->GetPerp())
+	{
+		Perp->WearLookOf(LookSeed);
+		Caught->RefreshSuspectDescription();
+		Destroy();
+		Perp->Interact(Officer);
+		return;
+	}
+	Destroy();
+}
+
+void AFTOPedestrian::WrongfulArrest(AFTOCharacter* Officer)
+{
+	AFTOPlayerController* PC = Officer ? Cast<AFTOPlayerController>(Officer->GetController()) : nullptr;
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->AddChaos(WrongfulArrestChaos);
+	}
+	FTOScoring::Award(Officer, EFTOScore::WrongfulArrest, GetActorLocation());
+	if (PC)
+	{
+		PC->ClientToast(INVTEXT("Arrested for... nothing? That's a wrongful arrest: the city's not happy."), FLinearColor(1.f, 0.4f, 0.3f));
+	}
+	// Cuffed all the same, and walked to the cells (booking them does the city no good).
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (AFTOArrestee* Cuffed = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), GetActorLocation(), GetActorRotation(), Params))
+	{
+		Cuffed->Init(Officer, 0.f, INVTEXT("Wrongful arrest"));
+		Cuffed->MarkWrongful();
+		if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+		{
+			GS->MulticastPlaySound(AFTOGameState::Sounds().Cuffs, GetActorLocation(), 1.f);
+		}
+	}
+	Destroy();
 }
 
 EFTOAnimAction AFTOPedestrian::GetAnimAction() const

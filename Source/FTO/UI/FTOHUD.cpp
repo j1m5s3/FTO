@@ -1,4 +1,5 @@
 #include "UI/FTOHUD.h"
+#include "Interaction/FTOTalkable.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerState.h"
 #include "Crime/FTOIncident.h"
@@ -92,6 +93,7 @@ void AFTOHUD::DrawHUD()
 		DrawDispatchBoard(GS);
 		DrawOnSceneProgress(GS);
 		DrawInteractPrompt();
+		DrawTalkPanel();
 		DrawCruiserPanel();
 		DrawEscortPanel();
 		DrawWeaponPanel();
@@ -666,10 +668,40 @@ void AFTOHUD::DrawToasts()
 	}
 }
 
+void AFTOHUD::DrawTalkPanel()
+{
+	const AFTOCharacter* Officer = Cast<AFTOCharacter>(GetOwningPawn());
+	const AActor* Who = Officer ? Officer->GetTalkingTo() : nullptr;
+	const IFTOTalkable* Talkable = Cast<IFTOTalkable>(Who);
+	if (!Talkable)
+	{
+		return;
+	}
+	TArray<FText> Options;
+	Talkable->GetTalkOptions(Officer, Options);
+
+	// Beside them, a little right of the middle of the screen.
+	const float S = UIScale();
+	UFont* Title = GEngine->GetMediumFont();
+	UFont* Font = GEngine->GetSmallFont();
+	const float W = 460.f * S;
+	const float LineH = 26.f * S;
+	const float X = Canvas->ClipX * 0.58f;
+	const float Y = Canvas->ClipY * 0.36f;
+	DrawPanel(X - 12.f * S, Y - 10.f * S, W + 24.f * S, 44.f * S + Options.Num() * LineH + 24.f * S, FLinearColor(0.03f, 0.06f, 0.16f, 0.85f));
+	DrawText(Talkable->GetTalkTitle().ToString(), FLinearColor(0.6f, 0.85f, 1.f), X, Y, Title, S * 1.05f);
+	static const TCHAR* Keys[] = { TEXT("1"), TEXT("2"), TEXT("3"), TEXT("4") };
+	for (int32 i = 0; i < Options.Num() && i < UE_ARRAY_COUNT(Keys); ++i)
+	{
+		DrawText(FString::Printf(TEXT("[%s]  %s"), Keys[i], *Options[i].ToString()), FLinearColor::White, X, Y + 36.f * S + i * LineH, Font, S * 1.2f);
+	}
+	DrawText(TEXT("(d-pad on a gamepad; E or walk away to leave)"), FLinearColor(0.6f, 0.6f, 0.6f), X, Y + 40.f * S + Options.Num() * LineH, Font, S);
+}
+
 void AFTOHUD::DrawInteractPrompt()
 {
 	const AFTOCharacter* Officer = Cast<AFTOCharacter>(GetOwningPawn());
-	AActor* Target = Officer ? Officer->GetFocusedInteractable() : nullptr;
+	AActor* Target = Officer && !Officer->GetTalkingTo() ? Officer->GetFocusedInteractable() : nullptr; // (mid-conversation: the panel has it)
 	const IFTOInteractable* Interactable = Cast<IFTOInteractable>(Target);
 	if (!Interactable)
 	{

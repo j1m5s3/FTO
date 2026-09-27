@@ -698,6 +698,7 @@ void AFTOSmokeTest::BuildSteps()
 			// Along the aisle, over the officer's shoulder.
 			ViewFrom(Front + Crook->GetActorForwardVector() * 260.f + FVector(0.f, 0.f, 170.f), Crook->GetActorLocation());
 			Crook->Interact(Officer);
+			Crook->TalkChoice(Officer, 0); // "Seen anything unusual round here?"
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: questioned a crook: %s."), IsValid(Crook) && !Crook->IsActorBeingDestroyed() ? TEXT("they kept schtum") : TEXT("they confessed"));
 		});
 		AddShot(TEXT("15e_questioned"), 0.3f);
@@ -1497,8 +1498,14 @@ void AFTOSmokeTest::BuildSteps()
 			Cop->TeleportTo(At + Back * 150.f + FVector(0.f, 0.f, 6.f), (-Back).Rotation());
 			const bool bCould = TestPerp->CanInteract(Cop);
 			const FString Prompt = TestPerp->GetInteractPrompt(Cop).ToString();
+			// Stop them for a word, search them (the goods turn up), and arrest them.
 			TestPerp->Interact(Cop);
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: found the mugger (prompt \"%s\"): %s."), *Prompt,
+			const bool bTalking = Cop->GetTalkingTo() == TestPerp.Get();
+			TestPerp->TalkChoice(Cop, 2);
+			const FString Found = TestPerp->GetFound();
+			TestPerp->TalkChoice(Cop, 2);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: found the mugger (prompt \"%s\", %s, the search turned up \"%s\"): %s."), *Prompt,
+				bTalking ? TEXT("talking") : TEXT("NO CONVERSATION"), *Found,
 				bCould && TestPerp->GetArrestState() == EFTOPerpArrest::Cuffing ? TEXT("cuffing them") : TEXT("NOT ARRESTED"));
 		});
 		AddStep(TEXT("mugger cuffed"), 0.2f, [this]()
@@ -1510,6 +1517,151 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: the mugger %s."), Cuffed > 0 ? TEXT("is cuffed") : TEXT("WAS NOT ARRESTED"));
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		// A word with a passer-by: the conversation panel.
+		AddStep(TEXT("stop a citizen"), 1.2f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOPedestrian* Nearest = nullptr;
+			for (TActorIterator<AFTOPedestrian> It(GetWorld()); It && Cop; ++It)
+			{
+				if (It->GetClass() == AFTOPedestrian::StaticClass() &&
+					(!Nearest || FVector::DistSquared(It->GetActorLocation(), Cop->GetActorLocation()) < FVector::DistSquared(Nearest->GetActorLocation(), Cop->GetActorLocation())))
+				{
+					Nearest = *It;
+				}
+			}
+			if (!Nearest)
+			{
+				return;
+			}
+			const FVector Front = Nearest->GetActorLocation() + Nearest->GetActorForwardVector() * 160.f;
+			Cop->TeleportTo(Front + FVector(0.f, 0.f, 6.f), (Nearest->GetActorLocation() - Front).Rotation());
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetViewTargetWithBlend(Cop, 0.f);
+				PC->SetControlRotation((Nearest->GetActorLocation() - Front).Rotation() + FRotator(-10.f, 0.f, 0.f));
+			}
+			Nearest->Interact(Cop);
+			Nearest->TalkChoice(Cop, 1);
+		});
+		AddShot(TEXT("21e_conversation"), 0.3f);
+
+		// Stop and search on the street: talk to citizens, search them, and arrest one who's carrying (and one who isn't).
+		AddStep(TEXT("stop and search"), 3.f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop)
+			{
+				return;
+			}
+			TArray<AFTOPedestrian*> Crowd;
+			for (TActorIterator<AFTOPedestrian> It(GetWorld()); It; ++It)
+			{
+				if (It->GetClass() == AFTOPedestrian::StaticClass() && !It->IsActorBeingDestroyed())
+				{
+					Crowd.Add(*It);
+				}
+			}
+			Crowd.Sort([Cop](const AFTOPedestrian& A, const AFTOPedestrian& B)
+			{
+				return FVector::DistSquared(A.GetActorLocation(), Cop->GetActorLocation()) < FVector::DistSquared(B.GetActorLocation(), Cop->GetActorLocation());
+			});
+			TWeakObjectPtr<AFTOPedestrian> Carrying;
+			TWeakObjectPtr<AFTOPedestrian> Clean;
+			int32 Searched = 0;
+			for (AFTOPedestrian* Citizen : Crowd)
+			{
+				if (Searched >= 40 || (Carrying.IsValid() && Clean.IsValid()))
+				{
+					break;
+				}
+				const FVector At = Citizen->GetActorLocation();
+				Cop->TeleportTo(At + Citizen->GetActorForwardVector() * 140.f + FVector(0.f, 0.f, 6.f), (-Citizen->GetActorForwardVector()).Rotation());
+				Citizen->Interact(Cop);
+				if (Searched == 0)
+				{
+					Citizen->TalkChoice(Cop, 0);
+					Citizen->TalkChoice(Cop, 1);
+					TArray<FText> Options;
+					Citizen->GetTalkOptions(Cop, Options);
+					UE_LOG(LogFTO, Display, TEXT("SMOKE: talking to a citizen (\"%s\"): %d options, %s."), *Citizen->GetTalkTitle().ToString(), Options.Num(),
+						Cop->GetTalkingTo() == Citizen ? TEXT("still talking") : TEXT("CONVERSATION ENDED"));
+				}
+				Citizen->TalkChoice(Cop, 2);
+				++Searched;
+				TWeakObjectPtr<AFTOPedestrian>& Keep = Citizen->GetFound().IsEmpty() ? Clean : Carrying;
+				if (!Keep.IsValid())
+				{
+					Keep = Citizen;
+				}
+				Citizen->TalkChoice(Cop, 3);
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: searched %d citizens: %s carrying something, %s clean."), Searched,
+				Carrying.IsValid() ? TEXT("one") : TEXT("NONE"), Clean.IsValid() ? TEXT("one") : TEXT("NONE"));
+
+			// The one with contraband: arrested for it (a crime scene springs up with them as the perp).
+			if (AFTOPedestrian* Citizen = Carrying.Get())
+			{
+				Cop->TeleportTo(Citizen->GetActorLocation() + Citizen->GetActorForwardVector() * 140.f + FVector(0.f, 0.f, 6.f), (-Citizen->GetActorForwardVector()).Rotation());
+				const FString Found = Citizen->GetFound();
+				Citizen->Interact(Cop);
+				Citizen->TalkChoice(Cop, 2);
+				int32 Caught = 0;
+				for (TActorIterator<AFTOPerp> It(GetWorld()); It; ++It)
+				{
+					Caught += It->GetIncident() && It->GetIncident()->GetInfo().TemplateId == TEXT("StolenGoods") && It->GetArrestState() != EFTOPerpArrest::None ? 1 : 0;
+				}
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: arrested a citizen carrying %s: %s."), *Found, Caught > 0 ? TEXT("they're a suspect now") : TEXT("NO ARREST"));
+			}
+			// The clean one: a wrongful arrest, and the city minds.
+			if (AFTOPedestrian* Citizen = Clean.Get())
+			{
+				const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+				const float Before = GS ? GS->GetChaos() : 0.f;
+				Cop->TeleportTo(Citizen->GetActorLocation() + Citizen->GetActorForwardVector() * 140.f + FVector(0.f, 0.f, 6.f), (-Citizen->GetActorForwardVector()).Rotation());
+				Citizen->Interact(Cop);
+				Citizen->TalkChoice(Cop, 2);
+				int32 Wrongful = 0;
+				for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+				{
+					Wrongful += It->GetCrime().ToString().Contains(TEXT("Wrongful")) ? 1 : 0;
+				}
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: arrested a clean citizen: %s, chaos %+.1f."), Wrongful > 0 ? TEXT("cuffed for nothing") : TEXT("NOT ARRESTED"),
+					GS ? GS->GetChaos() - Before : 0.f);
+			}
+		});
+
+		AddStep(TEXT("tidy up the stop and search"), 0.3f, [this]()
+		{
+			// Whatever came of those arrests (cuffed, a scuffle, a runner), the station takes it from here, so the officer's
+			// hands are free for what's next.
+			for (TActorIterator<AFTOIncident> It(GetWorld()); It; ++It)
+			{
+				if (It->GetInfo().TemplateId == TEXT("StolenGoods"))
+				{
+					It->Destroy();
+				}
+			}
+			for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+			{
+				if (It->GetCrime().ToString().Contains(TEXT("Wrongful")) || It->GetCrime().ToString().Contains(TEXT("Stolen")))
+				{
+					It->Destroy();
+				}
+			}
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+			{
+				if (Cop->IsInSyncedAction())
+				{
+					Cop->EndSyncedAction();
+				}
+				if (Cop->GetKnockdown() && Cop->GetKnockdown()->IsDown())
+				{
+					Cop->GetKnockdown()->Recover();
+				}
+			}
 		});
 
 		// A tagger at the wall and a vandal going from bin to bin.

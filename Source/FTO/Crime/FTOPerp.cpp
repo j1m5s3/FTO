@@ -486,6 +486,74 @@ void AFTOPerp::BeginDeed()
 	}
 }
 
+void AFTOPerp::WearLookOf(int32 Seed)
+{
+	LookSeed = Seed;
+	bStreetClothes = true;
+	ApplyLook();
+}
+
+bool AFTOPerp::TalkChoice(AFTOCharacter* Officer, int32 Index)
+{
+	if (ArrestState != EFTOPerpArrest::Hiding)
+	{
+		return false; // (only a suspect lying low is up for a chat)
+	}
+	// Nerves: the questions might be too much for them.
+	if ((Index == 0 || Index == 1) && ForcedResponse == EFTOArrestResponse::Roll && Rng.FRand() < 0.2f)
+	{
+		ToastOfficersNear(FText::Format(INVTEXT("They panicked and ran: that's the {0} suspect! Sprint (Shift) and tackle (F)!"), Incident->GetInfo().Title), Warning, 3000.f);
+		BeginFleeing(Officer);
+		return false;
+	}
+	return Super::TalkChoice(Officer, Index);
+}
+
+FString AFTOPerp::GetSmallTalk()
+{
+	if (ArrestState != EFTOPerpArrest::Hiding)
+	{
+		return Super::GetSmallTalk();
+	}
+	static const TCHAR* Nervous[] =
+	{
+		TEXT("\"Fine! Great. Normal day. Very normal. Why?\""),
+		TEXT("\"Just out for a walk. With this sack. Of... laundry.\""),
+		TEXT("\"Officer! Lovely to see you. Is that the time? I must dash.\""),
+	};
+	return Nervous[Rng.RandRange(0, UE_ARRAY_COUNT(Nervous) - 1)];
+}
+
+FString AFTOPerp::AnswerWhatTheySaw()
+{
+	if (ArrestState != EFTOPerpArrest::Hiding)
+	{
+		return Super::AnswerWhatTheySaw();
+	}
+	return Rng.FRand() < 0.5f ? TEXT("\"Seen anything? Me? No. Nothing. Nobody like me, anyway.\"") : TEXT("\"A suspicious... someone? Went that way. Definitely that way. Not me.\"");
+}
+
+FString AFTOPerp::Contraband()
+{
+	if (ArrestState != EFTOPerpArrest::Hiding || !Incident)
+	{
+		return Super::Contraband();
+	}
+	return FString::Printf(TEXT("the loot from the %s"), *Incident->GetInfo().Title.ToString().ToLower());
+}
+
+void AFTOPerp::ArrestForWhatWasFound(AFTOCharacter* Officer)
+{
+	if (ArrestState != EFTOPerpArrest::Hiding || !Incident)
+	{
+		Super::ArrestForWhatWasFound(Officer);
+		return;
+	}
+	// Found them: the arrest goes as any other (they might still come quietly, fight or run).
+	ToastOfficersNear(FText::Format(INVTEXT("That's the {0} suspect!"), Incident->GetInfo().Title), ArrestBlue, 3000.f);
+	TryArrest(Officer);
+}
+
 void AFTOPerp::FinishDeedNow()
 {
 	if (HasAuthority() && bCriminal && ArrestState == EFTOPerpArrest::None && Incident && Incident->IsActive())
@@ -845,7 +913,7 @@ FText AFTOPerp::GetInteractPrompt(const AFTOCharacter* Officer) const
 	{
 	case EFTOPerpArrest::Surrendered: return INVTEXT("Cuff the suspect");
 	case EFTOPerpArrest::Struggling:  return INVTEXT("Help your partner! (mash)");
-	case EFTOPerpArrest::Hiding:      return INVTEXT("Chat with citizen"); // they don't look any different
+	case EFTOPerpArrest::Hiding:      return INVTEXT("Talk to citizen"); // they don't look any different
 	default:                          return INVTEXT("Arrest the suspect");
 	}
 }
@@ -862,13 +930,8 @@ void AFTOPerp::Interact(AFTOCharacter* Officer)
 	case EFTOPerpArrest::Surrendered: BeginCuffing(Officer); break;
 	case EFTOPerpArrest::Struggling:  Mash(Officer); break;
 	case EFTOPerpArrest::Hiding:
-		// Found them.
-		Officer->PlayTimedAction(EFTOAnimAction::Interact, 1.f);
-		if (AFTOPlayerController* PC = PCOf(Officer))
-		{
-			PC->ClientToast(FText::Format(INVTEXT("Hang on... they match the description! ({0})"), Incident->GetInfo().Title), ArrestBlue);
-		}
-		TryArrest(Officer);
+		// Just a word with a passer-by, as far as they're concerned (the officer might know better).
+		Super::Interact(Officer);
 		break;
 	default:                          TryArrest(Officer); break;
 	}
@@ -1049,6 +1112,13 @@ void AFTOPerp::EndStruggle(bool bOfficersWon)
 
 void AFTOPerp::BeginFleeing(const AActor* From)
 {
+	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+	{
+		if (It->GetTalkingTo() == this)
+		{
+			It->EndTalk();
+		}
+	}
 	GetWorldTimerManager().ClearTimer(ResumeTimer);
 	ReleaseArrester();
 	bHandsUp = false;

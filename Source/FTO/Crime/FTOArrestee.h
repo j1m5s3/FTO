@@ -40,6 +40,8 @@ public:
 
 	/** Server: cuff and start following Officer. Relief is paid out on booking. */
 	void Init(AFTOCharacter* Officer, float InBookingRelief, const FText& InCrime);
+	/** Server: arrested for nothing (a wrongful arrest): booking them earns nothing, and they're let go at the desk. */
+	void MarkWrongful() { bWrongful = true; }
 
 	UFUNCTION(BlueprintPure, Category="Arrest") AFTOCharacter* GetEscort() const { return Escort; }
 	UFUNCTION(BlueprintPure, Category="Arrest") EFTOArresteeState GetArrestState() const { return State; }
@@ -108,6 +110,7 @@ protected:
 	UPROPERTY(Transient) TObjectPtr<AFTOCityGenerator> City;
 
 	float BookingRelief = 4.f;
+	bool bWrongful = false;
 	float AloneTime = 0.f;
 	/** Server: where the escort has walked, oldest first. */
 	TArray<FVector> Trail;
