@@ -52,6 +52,8 @@ AFTOTrafficCar::AFTOTrafficCar()
 
 	static ConstructorHelpers::FObjectFinder<UMaterialInterface> BaseMat(FTOArt::BaseMaterialPath);
 	BaseMaterial = BaseMat.Object;
+	static ConstructorHelpers::FObjectFinder<UMaterialInterface> VehicleMat(FTOArt::VehicleMaterialPath);
+	VehicleMaterial = VehicleMat.Object;
 
 	// In-house vehicle models (Tools/Blender/build_vehicles.py): origin on the ground, facing +X.
 	for (const TCHAR* Style : { TEXT("SM_Car_Sedan"), TEXT("SM_Car_Hatchback"), TEXT("SM_Car_Van"), TEXT("SM_Car_Pickup"), TEXT("SM_Car_Taxi"), TEXT("SM_Car_IceCream") })
@@ -187,7 +189,7 @@ void AFTOTrafficCar::OnRep_Look()
 	const FLinearColor Paint = FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 190, 240);
 	if (!PaintMaterial)
 	{
-		PaintMaterial = FTOArt::ApplyColor(Body, BaseMaterial, Paint, 0.f, FTOArt::BodySlot(Body));
+		PaintMaterial = FTOArt::ApplyColor(Body, VehicleMaterial ? VehicleMaterial.Get() : BaseMaterial.Get(), Paint, 0.f, FTOArt::BodySlot(Body));
 	}
 	FTOArt::SetColor(PaintMaterial, Paint);
 	Damage->SetBody(Body, DentedStyles.IsValidIndex(Style) ? DentedStyles[Style].Get() : nullptr);

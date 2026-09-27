@@ -130,6 +130,7 @@ protected:
 	void SeatOccupants(FRandomStream& LookRng, int32 Style);
 
 	UPROPERTY() TObjectPtr<UMaterialInterface> BaseMaterial;
+	UPROPERTY() TObjectPtr<UMaterialInterface> VehicleMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> PaintMaterial;
 	UPROPERTY(Transient) TObjectPtr<AFTOCityGenerator> City;
 

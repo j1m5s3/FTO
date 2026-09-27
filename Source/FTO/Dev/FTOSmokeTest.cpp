@@ -382,6 +382,7 @@ void AFTOSmokeTest::BuildSteps()
 				if (AFTOPerp* Shoplifter = Shoplifting->GetPerp())
 				{
 					Shoplifter->SetForcedResponse(EFTOArrestResponse::Comply); // no running off before the cuffs
+					TestPerp = Shoplifter;
 				}
 			}
 		}
@@ -391,8 +392,13 @@ void AFTOSmokeTest::BuildSteps()
 		// Walk up and cuff them (this one comes quietly; the ones who don't come later in the tour). The server does
 		// the arresting (a client's staged nothing here anyway).
 		AFTOCharacter* Officer = GetAuthGameMode() ? Cast<AFTOCharacter>(GetPawn()) : nullptr;
-		AFTOPerp* Shoplifter = nullptr;
-		for (TActorIterator<AFTOPerp> It(GetWorld()); It && Officer; ++It)
+		AFTOPerp* Shoplifter = TestPerp.IsValid() && Officer ? TestPerp.Get() : nullptr;
+		if (!Shoplifter)
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the staged shoplifter's gone (%s): arresting the nearest crook instead."), TestPerp.IsStale() ? TEXT("destroyed") : TEXT("never staged"));
+		}
+		const bool bStaged = Shoplifter != nullptr;
+		for (TActorIterator<AFTOPerp> It(GetWorld()); It && Officer && !bStaged; ++It)
 		{
 			if (It->IsCriminal() && (!Shoplifter ||
 				FVector::DistSquared(It->GetActorLocation(), Officer->GetActorLocation()) < FVector::DistSquared(Shoplifter->GetActorLocation(), Officer->GetActorLocation())))
@@ -1927,8 +1933,8 @@ void AFTOSmokeTest::BuildSteps()
 				TestCruiser->SetAutopilot(false);
 				TestCruiser->StopDead();
 				const UFTOVehicleDamage* Damage = TestCruiser->GetDamage();
-				UE_LOG(LogFTO, Display, TEXT("SMOKE: cruiser crashed: health %.0f, %s."), Damage ? Damage->GetHealth() : -1.f,
-					Damage ? *StaticEnum<EFTOCarDamage>()->GetNameStringByValue(int64(Damage->GetStage())) : TEXT("NO DAMAGE"));
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: cruiser crashed: health %.0f, %s, %d dent(s)."), Damage ? Damage->GetHealth() : -1.f,
+					Damage ? *StaticEnum<EFTOCarDamage>()->GetNameStringByValue(int64(Damage->GetStage())) : TEXT("NO DAMAGE"), Damage ? Damage->GetDents().Num() : 0);
 			});
 			if (RunUp > 700.f)
 			{
@@ -1945,6 +1951,57 @@ void AFTOSmokeTest::BuildSteps()
 			}
 		}
 
+		// A citizen's car side-swiped: a dent in the door right where it was hit, paint scraped to the metal.
+		AddStep(TEXT("dent a citizen's car"), 0.8f, [this]()
+		{
+			const APawn* Cop = GetPawn();
+			AFTOTrafficCar* Car = nullptr;
+			for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It && Cop; ++It)
+			{
+				if (It->GetCarState() == EFTOCarState::Driving &&
+					(!Car || FVector::DistSquared(It->GetActorLocation(), Cop->GetActorLocation()) < FVector::DistSquared(Car->GetActorLocation(), Cop->GetActorLocation())))
+				{
+					Car = *It;
+				}
+			}
+			UFTOVehicleDamage* Damage = Car ? Car->FindComponentByClass<UFTOVehicleDamage>() : nullptr;
+			if (!Damage)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: dent: NO CAR."));
+				return;
+			}
+			Car->Hold(); // stood still for the photo
+			// A knock in the door and a harder one on the front corner.
+			const FVector Side = Car->GetActorLocation() + Car->GetActorRightVector() * 95.f + FVector(0.f, 0.f, 20.f);
+			Damage->ApplyDamage(18.f, Side, nullptr);
+			Damage->ApplyDamage(12.f, Side + Car->GetActorForwardVector() * 40.f, nullptr);
+			Damage->ApplyDamage(30.f, Car->GetActorLocation() + Car->GetActorForwardVector() * 210.f + Car->GetActorRightVector() * 70.f + FVector(0.f, 0.f, 10.f), nullptr);
+			// (And the same on the other side, so whichever way the camera looks there's a dent in shot.)
+			Damage->ApplyDamage(12.f, Car->GetActorLocation() - Car->GetActorRightVector() * 95.f + FVector(0.f, 0.f, 20.f), nullptr);
+			Damage->ApplyDamage(14.f, Car->GetActorLocation() + Car->GetActorForwardVector() * 210.f - Car->GetActorRightVector() * 70.f + FVector(0.f, 0.f, 10.f), nullptr);
+			TestCar = Car;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: side-swiped a citizen's car: %d dent(s), health %.0f."), Damage->GetDents().Num(), Damage->GetHealth());
+		});
+		AddStep(TEXT("film the dent"), 0.1f, [this]()
+		{
+			if (TestCar.IsValid())
+			{
+				const AActor* Car = TestCar.Get();
+				ViewFrom(Car->GetActorLocation() + Car->GetActorRightVector() * 330.f + Car->GetActorForwardVector() * 380.f + FVector(0.f, 0.f, 140.f),
+					Car->GetActorLocation() + Car->GetActorRightVector() * 60.f + Car->GetActorForwardVector() * 90.f);
+			}
+		});
+		AddShot(TEXT("20g_dented_door"), 0.3f);
+		AddStep(TEXT("film the other side"), 0.1f, [this]()
+		{
+			if (TestCar.IsValid())
+			{
+				const AActor* Car = TestCar.Get();
+				ViewFrom(Car->GetActorLocation() - Car->GetActorRightVector() * 330.f + Car->GetActorForwardVector() * 380.f + FVector(0.f, 0.f, 140.f),
+					Car->GetActorLocation() - Car->GetActorRightVector() * 60.f + Car->GetActorForwardVector() * 90.f);
+			}
+		});
+		AddShot(TEXT("20g2_dented_other_side"), 0.3f);
 		AddStep(TEXT("write off a citizen's car"), 1.4f, [this]()
 		{
 			const APawn* Cop = GetPawn();
