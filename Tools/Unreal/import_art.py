@@ -56,7 +56,11 @@ STATICS = [
                 "SM_Car_Taxi_Dented", "SM_Car_IceCream_Dented", "SM_Car_Cruiser_Dented"],
      "sockets": ["Wheel_FL", "Wheel_FR", "Wheel_RL", "Wheel_RR", "Seat_Driver", "Seat_Passenger", "Seat_RearL",
                  "Seat_RearR", "Cam_Driver", "Cam_Passenger", "Lightbar"],
-     "dest": "/Game/FTO/Vehicles"},
+     "dest": "/Game/FTO/Vehicles",
+     # Car bodies dent where they're hit (UFTOVehicleDamage), windows and lights along with the paint.
+     "base": "/Game/FTO/Materials/M_FTOVehicle",
+     "slot_materials": {"glass": "/Game/FTO/Materials/M_FTOVehicleGlass", "glow": "/Game/FTO/Materials/MI_FTOVehicleGlow"},
+     "plain": ["SM_Wheel"]},
     {"key": "weapons", "folder": "Weapons",
      "meshes": ["SM_Taser", "SM_Pistol", "SM_Shotgun", "SM_Rifle"],
      "sockets": ["Muzzle"],
@@ -158,8 +162,11 @@ def static_options(nanite=False):
 def import_statics(group):
     source = os.path.join(ART, group["folder"])
     destination = group["dest"]
-    base = eal.load_asset(BASE_MATERIAL)
     for name in group["meshes"]:
+        plain = name in group.get("plain", [])
+        base_path = BASE_MATERIAL if plain else group.get("base", BASE_MATERIAL)
+        table = SLOT_MATERIALS if plain else group.get("slot_materials", SLOT_MATERIALS)
+        base = eal.load_asset(base_path)
         if MESHES and name not in MESHES:
             continue
         # Start fresh: a reimport keeps the old material slots, which then pile up in front of the new ones.
@@ -173,8 +180,8 @@ def import_statics(group):
         slots = []
         for index, slot in enumerate(mesh.get_editor_property("static_materials")):
             slot_name = str(slot.get_editor_property("material_slot_name"))
-            path = SLOT_MATERIALS.get(slot_name.lower(), BASE_MATERIAL)
-            mesh.set_material(index, eal.load_asset(path) if path != BASE_MATERIAL else base)
+            path = table.get(slot_name.lower(), base_path)
+            mesh.set_material(index, eal.load_asset(path) if path != base_path else base)
             slots.append(f"{index}:{slot_name}->{path.rsplit('/', 1)[-1]}")
         eal.save_loaded_asset(mesh)
         bounds = mesh.get_bounds()
