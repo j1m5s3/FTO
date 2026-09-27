@@ -827,7 +827,7 @@ void AFTOCruiser::ServerScrape_Implementation(FVector_NetQuantize At)
 {
 	if (Damage && FVector::DistSquared(FVector(At), GetActorLocation()) < FMath::Square(900.f))
 	{
-		Damage->AddScrape(At, GetVelocity());
+		Damage->AddScrape(At);
 	}
 }
 

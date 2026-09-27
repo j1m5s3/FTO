@@ -94,8 +94,9 @@ void UFTOVehicleDamage::ApplyDamage(float Amount, const FVector& At, AController
 	const FVector Middle = Body ? Body->Bounds.Origin : GetOwner()->GetActorLocation();
 	FVector Inward = Middle - At;
 	Inward.Z *= 0.3f;
-	AddDent(At, Inward.GetSafeNormal(), FMath::Clamp(Amount * 0.9f, 4.f, 26.f), FMath::Clamp(35.f + Amount * 1.4f, 40.f, 85.f),
-		FMath::Clamp(Amount / 25.f, 0.25f, 1.f));
+	// (A round's a small ding; a crash is a crumple.)
+	AddDent(At, Inward.GetSafeNormal(), FMath::Clamp(Amount * 0.9f, 1.5f, 26.f), FMath::Clamp(15.f + Amount * 2.2f, 18.f, 85.f),
+		FMath::Clamp(Amount / 25.f, 0.2f, 1.f));
 	State.LastHit = GetOwner()->GetActorTransform().InverseTransformPosition(At);
 	State.LastDamage = Amount;
 	++State.Serial;
@@ -124,14 +125,36 @@ void UFTOVehicleDamage::ApplyDamage(float Amount, const FVector& At, AController
 	}
 }
 
-void UFTOVehicleDamage::AddScrape(const FVector& At, const FVector& Along)
+void UFTOVehicleDamage::AddScrape(const FVector& At)
 {
 	check(GetOwner()->HasAuthority());
-	// Paint off, barely a dent: a long, shallow mark.
-	const FVector Middle = Body ? Body->Bounds.Origin : GetOwner()->GetActorLocation();
-	FVector Inward = Middle - At;
-	Inward.Z = 0.f;
-	AddDent(At, Inward.GetSafeNormal(), 0.8f, 45.f, 0.5f);
+	if (!Body || IsWrecked())
+	{
+		return;
+	}
+	// Paint off, not a dent: grinding over an old mark only scrapes it barer.
+	const FVector Local = Body->GetComponentTransform().InverseTransformPosition(At);
+	for (FFTODent& Dent : Dents)
+	{
+		if (FVector::Dist(Dent.Center, Local) < Dent.Radius)
+		{
+			if (Dent.Scrape < 1.f)
+			{
+				Dent.Scrape = FMath::Min(1.f, Dent.Scrape + 0.15f);
+				GetOwner()->ForceNetUpdate();
+				ApplyDents();
+			}
+			return;
+		}
+	}
+	// A fresh scrape (while there's room: scrapes never take over a real dent's place).
+	if (Dents.Num() < MaxDents)
+	{
+		const FVector Middle = Body->Bounds.Origin;
+		FVector Inward = Middle - At;
+		Inward.Z = 0.f;
+		AddDent(At, Inward.GetSafeNormal(), 0.3f, 45.f, 0.5f);
+	}
 }
 
 void UFTOVehicleDamage::AddDent(const FVector& At, const FVector& Dir, float Depth, float Radius, float Scrape)
@@ -151,22 +174,43 @@ void UFTOVehicleDamage::AddDent(const FVector& At, const FVector& Dir, float Dep
 	// paint itself along the line of the push, against the body's own triangles (switched on for queries just for the
 	// trace: the rest of the time the body's only for looking at), and fall back to the edge of its bounds.
 	{
-		const FVector Dir = Frame.TransformVectorNoScale(FVector(Dent.Push).GetSafeNormal());
+		const FVector PushDir = Frame.TransformVectorNoScale(FVector(Dent.Push).GetSafeNormal());
 		FHitResult Paint;
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(FTODent), true);
 		const ECollisionEnabled::Type Was = Body->GetCollisionEnabled();
 		Body->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		const bool bFound = !Dir.IsNearlyZero() && Body->LineTraceComponent(Paint, At - Dir * 300.f, At + Dir * 300.f, Params);
+		const bool bFound = !PushDir.IsNearlyZero() && Body->LineTraceComponent(Paint, At - PushDir * 300.f, At + PushDir * 300.f, Params);
 		Body->SetCollisionEnabled(Was);
+		if (Was == ECollisionEnabled::NoCollision)
+		{
+			Body->RecreatePhysicsState(); // (and the body the trace needed goes again)
+		}
 		if (bFound)
 		{
 			Dent.Center = Frame.InverseTransformPosition(Paint.ImpactPoint);
 		}
-		else if (const UStaticMesh* Mesh = Body->GetStaticMesh())
+		else if (const UStaticMesh* Mesh = Body->GetStaticMesh(); Mesh && !FVector(Dent.Push).IsNearlyZero())
 		{
+			// Where the line along the push enters the body's bounds.
 			const FBox Box = Mesh->GetBounds().GetBox();
-			const FVector Local = FVector(Dent.Center);
-			Dent.Center = Box.GetClosestPointTo(Local) == Local ? Local : Box.GetClosestPointTo(Local);
+			const FVector From = Dent.Center;
+			const FVector Along = FVector(Dent.Push).GetSafeNormal();
+			float Enter = -TNumericLimits<float>::Max();
+			float Exit = TNumericLimits<float>::Max();
+			for (int32 Axis = 0; Axis < 3; ++Axis)
+			{
+				if (FMath::Abs(Along[Axis]) > KINDA_SMALL_NUMBER)
+				{
+					const float A = (Box.Min[Axis] - From[Axis]) / Along[Axis];
+					const float B = (Box.Max[Axis] - From[Axis]) / Along[Axis];
+					Enter = FMath::Max(Enter, FMath::Min(A, B));
+					Exit = FMath::Min(Exit, FMath::Max(A, B));
+				}
+			}
+			if (Enter <= Exit && Enter > -TNumericLimits<float>::Max())
+			{
+				Dent.Center = From + Along * Enter;
+			}
 		}
 	}
 
@@ -184,9 +228,11 @@ void UFTOVehicleDamage::AddDent(const FVector& At, const FVector& Dir, float Dep
 	}
 	if (Nearest != INDEX_NONE && (NearestDist < Dents[Nearest].Radius * 0.6f || Dents.Num() >= MaxDents))
 	{
+		// (Folded into a dent it doesn't overlap only because the list is full: it counts for less.)
 		FFTODent& Into = Dents[Nearest];
-		Into.Push = (FVector(Into.Push) + FVector(Dent.Push)).GetClampedToMaxSize(32.f);
-		Into.Radius = FMath::Min(FMath::Max(Into.Radius, Dent.Radius) + 4.f, 90.f);
+		const bool bOverlaps = NearestDist < Into.Radius * 0.6f;
+		Into.Push = (FVector(Into.Push) + FVector(Dent.Push) * (bOverlaps ? 1.f : 0.4f)).GetClampedToMaxSize(32.f);
+		Into.Radius = FMath::Min(FMath::Max(Into.Radius, Dent.Radius) + (bOverlaps ? 4.f : 0.f), 90.f);
 		Into.Scrape = FMath::Min(1.f, Into.Scrape + Dent.Scrape);
 	}
 	else
@@ -336,7 +382,7 @@ void UFTOVehicleDamage::Scorch(float Amount)
 		{
 			UMaterialInterface* Material = Body->GetMaterial(Slot);
 			const UMaterial* Master = Material ? Material->GetMaterial() : nullptr;
-			if (!Master || Master->GetName() != TEXT("M_FTOBase"))
+			if (!Master || (Master->GetName() != TEXT("M_FTOBase") && Master->GetName() != TEXT("M_FTOVehicle")))
 			{
 				continue;
 			}

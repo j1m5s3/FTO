@@ -217,12 +217,13 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCameraComponent> InteriorCamera;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> EngineAudio;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SirenAudio;
-	/** Tyres squealing in a slide (UpdateSkid). */
+	/** The dentable paint (M_FTOVehicle). */
 	UPROPERTY() TObjectPtr<UMaterialInterface> VehicleMaterial;
 	/** Grinding along a wall: scraped paint (throttled; the driver's machine tells the server). */
 	void Scrape(const FHitResult& Hit);
 	UFUNCTION(Server, Unreliable) void ServerScrape(FVector_NetQuantize At);
 	float NextScrapeTime = 0.f;
+	/** Tyres squealing in a slide (UpdateSkid). */
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UAudioComponent> SkidAudio;
 	void UpdateSkid(float DeltaSeconds);
 	FVector SkidLastLocation = FVector::ZeroVector;

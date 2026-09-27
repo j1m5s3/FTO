@@ -79,8 +79,8 @@ public:
 	/** Server: good as new (the motor pool's been at it). */
 	void Repair();
 
-	/** Server: paint scraped off where the car grinds along something (At, moving Along), without a knock. */
-	void AddScrape(const FVector& At, const FVector& Along);
+	/** Server: paint scraped off where the car grinds along something (At), without a knock. */
+	void AddScrape(const FVector& At);
 
 	const TArray<FFTODent>& GetDents() const { return Dents; }
 	/** Dents a car's materials can show at once (M_FTOVehicle's DENTS in Tools/Unreal/create_materials.py). */
