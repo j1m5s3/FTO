@@ -477,7 +477,7 @@ void AFTOPedestrian::ArrestForWhatWasFound(AFTOCharacter* Officer)
 	Caught->ReportByOfficer();
 	if (AFTOPerp* Perp = Caught->GetPerp())
 	{
-		Perp->WearLookOf(LookSeed, Found);
+		Perp->WearLookOf(LookSeed);
 		Destroy();
 		Perp->Interact(Officer);
 		return;

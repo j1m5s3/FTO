@@ -45,10 +45,19 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 
 ## Controls
 - **On foot**: WASD / left stick to move, Shift to sprint, Space to jump. Q blows the police whistle (citizens
-  freeze, nearby crimes get called in). E interacts: tickets, chats (with anyone, indoors or out), questioning a
-  suspicious character, taking a cruiser, or riding shotgun in one someone's already driving. F (B on a gamepad) is
+  freeze, nearby crimes get called in). E interacts: tickets, talking to people, taking a cruiser, or riding shotgun
+  in one someone's already driving. F (B on a gamepad) is
   a flying tackle that bowls over whoever's in front (citizens cost a little chaos). Cuffed suspects follow in your
   footsteps: walk them into the precinct's holding cells to book them.
+- **Talking to people**: E on anyone (in the street, indoors, a victim at a scene) stops them for a word, and 1-4 (the
+  d-pad) pick what to say: *Seen anything unusual?* (a tip-off about trouble nobody's reported, a sighting of a
+  suspect you're searching for, which moves the search, or a victim's statement), *How's your day?* (chit-chat), *I'm
+  going to search you* (hands up for a pat-down) then *You're under arrest*, and *That's all* (E, or walking away,
+  also ends it). About one in eight people is carrying something they shouldn't; arresting them for it makes them a
+  suspect caught red-handed (they may still come quietly, fight or run). A search that finds nothing costs the city a
+  little goodwill (chaos), and arresting someone who's clean is a wrongful arrest: much more chaos and a score penalty.
+  A suspect lying low talks like anyone else (if nervously; they may bolt), and a search turns up the goods. A crook
+  lying low indoors may confess when asked what they've seen.
 - **Arrests**: E on a suspect arrests them. One who's given up (talked down by standing at the scene, run to ground,
   or put on the floor) kneels and you step in behind them to cuff them. One who hasn't may come quietly, or fight
   back (mash E to wrestle them down before the meter drains; partners can pile in with E; lose and you're shoved
@@ -104,7 +113,8 @@ hold-up and a bar brawl, questions a crook, walks through front doors, checks th
 drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (then
 cuffs them where they fell), has a downed officer helped up (the radio calls it in), makes the arrests that don't go
 quietly: a brawler wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who
-gives up beside their car, watches a mugger walk off with the goods and tracks them down in the crowd, films a tagger
+gives up beside their car, watches a mugger walk off with the goods and tracks them down in the crowd (a word, a search, the cuffs), stops
+and searches citizens (arresting one caught carrying and, wrongly, one who was clean), films a tagger
 and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
 hydrant, knocks a lamp post flat with a cruiser, crashes the cruiser until it's a burning wreck, and writes off a
 citizen's car; the log (`SMOKE:` lines) reports each check.
