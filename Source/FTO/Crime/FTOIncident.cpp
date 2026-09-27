@@ -1,7 +1,9 @@
 #include "Crime/FTOIncident.h"
 #include "Crime/FTOPerp.h"
+#include "Crime/FTOCrimeExtra.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOCharacter.h"
+#include "Core/FTOPlayerController.h"
 #include "City/FTOCityGenerator.h"
 #include "City/FTOTrafficCar.h"
 #include "EngineUtils.h"
@@ -66,6 +68,9 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, Perp);
 	DOREPLIFETIME(AFTOIncident, bSubdued);
 	DOREPLIFETIME(AFTOIncident, bFootChase);
+	DOREPLIFETIME(AFTOIncident, bSearch);
+	DOREPLIFETIME(AFTOIncident, SearchStartTime);
+	DOREPLIFETIME(AFTOIncident, LastSightingTime);
 }
 
 void AFTOIncident::SetBuilding(int32 Index)
@@ -88,6 +93,17 @@ void AFTOIncident::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		Perp->Destroy();
 	}
+	// So do the victim and the other brawlers (any still about).
+	if (HasAuthority())
+	{
+		for (AActor* Extra : Extras)
+		{
+			if (IsValid(Extra))
+			{
+				Extra->Destroy();
+			}
+		}
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -109,8 +125,52 @@ void AFTOIncident::InitIncident(const FFTOIncidentInfo& InInfo, bool bInWillBeRe
 	if (Perp)
 	{
 		Perp->Setup(this, Info.bArrest, Info.bArmed, GetTypeHash(GetActorLocation()) + int32(StartTime * 100.f));
+		Info.SuspectDescription = FText::FromString(Perp->DescribeSuspect());
 	}
+	SpawnExtras();
 	RefreshVisuals();
+}
+
+void AFTOIncident::SpawnExtras()
+{
+	// Who else is in it: someone to rob, someone to fight, someone to row with. They stand facing the perp, who
+	// faces the way the incident does.
+	const FName Crime = Info.TemplateId;
+	int32 Count = 0;
+	EFTOExtraRole ExtraRole = EFTOExtraRole::Victim;
+	if (Crime == TEXT("Mugging") || Crime == TEXT("PettyTheft")) { Count = 1; ExtraRole = EFTOExtraRole::Victim; }
+	else if (Crime == TEXT("BarFight")) { Count = 1; ExtraRole = EFTOExtraRole::Brawler; }
+	else if (Crime == TEXT("Riot")) { Count = 3; ExtraRole = EFTOExtraRole::Brawler; }
+	else if (Crime == TEXT("DomesticDispute")) { Count = 1; ExtraRole = EFTOExtraRole::Arguer; }
+	if (Count == 0 || !IsValid(Perp))
+	{
+		return;
+	}
+
+	const FVector PerpAt = Perp->GetActorLocation();
+	const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
+	const FVector Side = FVector::CrossProduct(FVector::UpVector, Fwd);
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		// One squares up in front; a brawl's others round them in a ring.
+		const float Angle = Count == 1 ? 0.f : (i - (Count - 1) * 0.5f) * 55.f;
+		const FVector Dir = Fwd.RotateAngleAxis(Angle, FVector::UpVector);
+		FVector At = PerpAt + Dir * (Crime == TEXT("Riot") ? 140.f : 115.f);
+		FVector Face = PerpAt;
+		if (Crime == TEXT("PettyTheft"))
+		{
+			// The mark has their back to the pickpocket, none the wiser.
+			At = PerpAt + Fwd * 70.f;
+			Face = At + Fwd * 100.f + Side * 30.f;
+		}
+		if (AFTOCrimeExtra* Extra = GetWorld()->SpawnActor<AFTOCrimeExtra>(AFTOCrimeExtra::StaticClass(), At, Dir.Rotation(), Params))
+		{
+			Extra->SetupExtra(this, ExtraRole, At, Face, GetTypeHash(At) + i * 7919);
+			Extras.Add(Extra);
+		}
+	}
 }
 
 float AFTOIncident::GetAge() const
@@ -189,6 +249,12 @@ void AFTOIncident::Subdue(AController* ByPolice)
 	// Caught red-handed counts as witnessed (and as reported, if nobody had called it in yet). Handled once the
 	// cuffs are on (CompleteArrest).
 	bSubdued = true;
+	if (bSearch && IsValid(Perp))
+	{
+		// Tracked down: the scene's where they're kneeling.
+		SetActorLocation(Perp->GetActorLocation() - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight));
+	}
+	EndSearch();
 	if (State == EFTOIncidentState::Unreported)
 	{
 		bWitnessed = true;
@@ -218,6 +284,7 @@ void AFTOIncident::StartFootChase()
 	{
 		return;
 	}
+	EndSearch(); // found them, and they're off again
 	// The call's out of the building now (the people inside can relax), and the marker runs with the suspect.
 	bFootChase = true;
 	BuildingIndex = INDEX_NONE;
@@ -225,6 +292,81 @@ void AFTOIncident::StartFootChase()
 	AttachToActor(Perp, FAttachmentTransformRules::KeepWorldTransform);
 	SetActorRelativeLocation(FVector(0.f, 0.f, -AFTOPedestrian::HalfHeight));
 	RefreshVisuals();
+}
+
+void AFTOIncident::StartSearch(const FVector& LastSeen)
+{
+	check(HasAuthority());
+	if (!IsActive() || bSubdued)
+	{
+		return;
+	}
+	// Off the perp (if we were chasing along behind them) and onto the spot they were last seen: out in the street.
+	if (bFootChase)
+	{
+		DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+		bFootChase = false;
+	}
+	SetReplicateMovement(true);
+	SetActorLocation(LastSeen);
+	BuildingIndex = INDEX_NONE;
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!bSearch)
+	{
+		SearchStartTime = Now;
+	}
+	bSearch = true;
+	LastSightingTime = Now;
+	NextSightingTime = Now + FMath::FRandRange(SightingEvery.X, SightingEvery.Y);
+	Progress = 0.f;
+	if (IsValid(Perp))
+	{
+		Info.SuspectDescription = FText::FromString(Perp->DescribeSuspect());
+	}
+	// Someone saw them go: it's on the board now, whoever was going to call it in.
+	ForceReport();
+	SetState(EFTOIncidentState::Reported);
+
+	const FText Message = FText::Format(INVTEXT("{0}: the suspect's slipped away! Look out for: {1}."), Info.Title, Info.SuspectDescription);
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(It->Get()))
+		{
+			PC->ClientToast(Message, FLinearColor(1.f, 0.6f, 0.25f));
+		}
+	}
+	RefreshVisuals();
+}
+
+void AFTOIncident::EndSearch()
+{
+	if (!bSearch)
+	{
+		return;
+	}
+	bSearch = false;
+	RefreshVisuals();
+}
+
+float AFTOIncident::GetSearchTimeLeft() const
+{
+	if (!bSearch)
+	{
+		return 0.f;
+	}
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
+	const float Now = GS ? GS->GetServerWorldTimeSeconds() : (World ? World->GetTimeSeconds() : 0.f);
+	return FMath::Max(0.f, SearchSeconds - (Now - SearchStartTime));
+}
+
+float AFTOIncident::GetSearchRadius() const
+{
+	// Walking pace since the last sighting, on top of how rough a sighting is.
+	const UWorld* World = GetWorld();
+	const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
+	const float Now = GS ? GS->GetServerWorldTimeSeconds() : (World ? World->GetTimeSeconds() : 0.f);
+	return FMath::Min(SightingSpread + 140.f * FMath::Max(0.f, Now - LastSightingTime), 6000.f);
 }
 
 void AFTOIncident::PerpGotAway()
@@ -351,6 +493,38 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 				OnReported.Broadcast(this);
 			}
 		}
+	}
+
+	// A suspect lying low: citizens phone in sightings till someone finds them, or the trail goes cold.
+	if (bSearch)
+	{
+		if (!IsValid(Perp) || Perp->GetArrestState() != EFTOPerpArrest::Hiding)
+		{
+			// Found (being arrested, or wrestling an officer): the scene's wherever they are now.
+			if (IsValid(Perp))
+			{
+				SetActorLocation(Perp->GetActorLocation() - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight));
+			}
+			EndSearch();
+			return;
+		}
+		OfficersOnScene = 0;
+		if (Now - SearchStartTime >= SearchSeconds)
+		{
+			Perp->ToastOfficersNear(FText::Format(INVTEXT("{0}: the trail's gone cold."), Info.Title), FLinearColor(1.f, 0.4f, 0.3f), 1000000.f);
+			PerpGotAway();
+			return;
+		}
+		if (Now >= NextSightingTime)
+		{
+			NextSightingTime = Now + FMath::FRandRange(SightingEvery.X, SightingEvery.Y);
+			LastSightingTime = Now;
+			const FVector2D Off = FMath::RandPointInCircle(SightingSpread);
+			SetActorLocation(Perp->GetActorLocation() - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight) + FVector(Off, 0.f));
+			Perp->ToastOfficersNear(FText::Format(INVTEXT("Caller reports someone matching the {0} suspect nearby: {1}."), Info.Title, Info.SuspectDescription),
+				FLinearColor(1.f, 0.85f, 0.3f), 1000000.f);
+		}
+		return;
 	}
 
 	// A perp on the run: the chase is on while an officer's close behind (and nobody's talked down meanwhile).
@@ -569,6 +743,10 @@ void AFTOIncident::RefreshVisuals()
 		else if (bFootChase)
 		{
 			LabelText = FText::Format(INVTEXT("{0}\nON THE RUN!"), Info.Title);
+		}
+		else if (bSearch)
+		{
+			LabelText = FText::Format(INVTEXT("{0}\nLAST SEEN HERE"), Info.Title);
 		}
 		break;
 	}

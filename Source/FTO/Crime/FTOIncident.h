@@ -94,6 +94,21 @@ public:
 	/** Whoever's at the heart of it (null for car chases, the perp being in the car). */
 	AFTOPerp* GetPerp() const { return Perp; }
 
+	/**
+	 * Server: the suspect's slipped away and is lying low in the crowd: the marker stays where they were last seen and
+	 * the board carries their description. Citizens phone in sightings now and then (moving the marker), and it goes
+	 * cold if nobody finds them in time. Talking to whoever matches (E) is how officers catch them.
+	 */
+	void StartSearch(const FVector& LastSeen);
+	bool IsSearching() const { return bSearch; }
+	/** Seconds left to find them (every machine). */
+	float GetSearchTimeLeft() const;
+	/** How far from the marker they could be by now (every machine): the area to search. */
+	float GetSearchRadius() const;
+
+	/** Everyone else caught up in it (the victim, the other brawlers); tidied away with the incident. */
+	void AddExtra(AActor* Extra) { Extras.Add(Extra); }
+
 	/** Server: this one's happening inside building Index (AFTOCityGenerator::GetBuildings). */
 	void SetBuilding(int32 Index);
 	int32 GetBuildingIndex() const { return BuildingIndex; }
@@ -121,6 +136,18 @@ public:
 	/** On-scene radius while following a fleeing car; cruisers count too. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
 	float ChaseRadius = 1100.f;
+
+	/** How long the squad has to find a suspect who's slipped away before the trail goes cold. */
+	UPROPERTY(EditDefaultsOnly, Category="Incident|Search")
+	float SearchSeconds = 240.f;
+
+	/** Seconds between citizens phoning in a sighting (a range). */
+	UPROPERTY(EditDefaultsOnly, Category="Incident|Search")
+	FVector2D SightingEvery = FVector2D(25.f, 40.f);
+
+	/** A sighting's only roughly where they are: the marker lands within this of them. */
+	UPROPERTY(EditDefaultsOnly, Category="Incident|Search")
+	float SightingSpread = 600.f;
 
 	/** Officers within this radius with line of sight witness an unreported incident. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
@@ -175,6 +202,18 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bSubdued = false;
 	/** The perp's running and we're riding along with them. */
 	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bFootChase = false;
+	/** The perp's slipped away into the crowd and we're where they were last seen. */
+	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bSearch = false;
+	/** Server world times the search started and the last sighting came in. */
+	UPROPERTY(Replicated) float SearchStartTime = 0.f;
+	UPROPERTY(Replicated) float LastSightingTime = 0.f;
+
+	/** Server: back off the search (they've been found and are running again, or they're caught). */
+	void EndSearch();
+	/** Server: the victim, the brawlers... (Setup). */
+	void SpawnExtras();
+	UPROPERTY(Transient) TArray<TObjectPtr<AActor>> Extras;
+	float NextSightingTime = 0.f;
 
 	// Server-only
 	mutable TWeakObjectPtr<AFTOCityGenerator> City;

@@ -50,6 +50,9 @@ public:
 	virtual bool IsMovementFrozen() const override;
 	UFTOKnockdownComponent* GetKnockdown() const { return Knockdown; }
 
+	/** What we look like, the way a witness would put it ("green top, bald with a beard"). */
+	FString DescribeLook() const;
+
 	/** Capsule half-height; the path runs this far above the sidewalk. */
 	static constexpr float HalfHeight = 92.f;
 
