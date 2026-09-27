@@ -441,7 +441,7 @@ def outfit_hoodie(an, pants=DENIM, shoe=WHITE):
                          S.box((0, -10, 101), (9.0, 12, 7.5), rounding=2.0))
     return [
         Layer("top", S.union(body, hem, *cuffs, hood, pocket), TOP, tint=True),
-        Layer("trousers", trousers(an, 1.0, 8.0), pants),
+        Layer("trousers", trousers(an, 1.0, 8.0, top_z=92.0), pants),   # all under the hoodie above its hem
         Layer("shoes", shoes(an, 1.2, 8.5), shoe),
         Layer("sole", sole(an, 1.6), OFFWHITE, bias=0.05),
     ]
@@ -493,9 +493,10 @@ def outfit_overalls(an):
 
 def outfit_suit(an):
     jacket = top_shell(an, 1.3, 84.0, 1.93)
-    jacket = S.union(jacket, S.intersect(S.offset(an.core, 1.3), zband(84.0, 100.0)))
-    lapel_v = S.intersect(S.halfspace((0, -4.0, 0), (0, 1, 0)), S.halfspace((0, 0, 151.0), unit((0, 0.2, -1.0))),
-                          S.halfspace((0, 0, 118.0), unit((0.0, 0, 1.0))),
+    # The tails hang straight across the hips instead of wrapping each thigh.
+    jacket = S.smooth_union(3.0, jacket, skirt_tube((0, -0.5, 104.0), (0, -0.5, 83.0), (18.6, 13.0), (19.8, 13.0)))
+    lapel_v = S.intersect(S.halfspace((0, -4.0, 0), (0, 1, 0)), S.halfspace((0, 0, 151.0), unit((0, 0.2, 1.0))),
+                          S.halfspace((0, 0, 118.0), unit((0.0, 0, -1.0))),
                           S.halfspace((0, 0, 118.0), unit((1.0, 0, -0.3))),
                           S.halfspace((0, 0, 118.0), unit((-1.0, 0, -0.3))))
     jacket = S.subtract(jacket, lapel_v)
@@ -512,7 +513,7 @@ def outfit_suit(an):
         Layer("top", jacket, TOP, tint=True, bias=0.02),
         Layer("shirt", S.union(shirt, *cuffs), WHITE),
         Layer("tie", S.union(tie, knot), RED, bias=0.05),
-        Layer("trousers", trousers(an, 1.0, 8.5), CHARCOAL),
+        Layer("trousers", trousers(an, 1.0, 8.5, top_z=86.0), CHARCOAL),   # all under the jacket above its tails
         Layer("shoes", shoes(an, 1.0, 8.0), BROWN),
         Layer("sole", sole(an, 1.4), NEAR_BLACK, bias=0.05),
     ]
