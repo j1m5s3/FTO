@@ -218,7 +218,14 @@ void AFTOHUD::DrawDispatchBoard(const AFTOGameState* GS)
 	const float RowH = 58.f * S;
 
 	const int32 Rows = FMath::Min(Calls.Num(), MaxDispatchRows);
-	DrawPanel(X - 8.f * S, Y - 40.f * S, W + 16.f * S, 44.f * S + FMath::Max(1, Rows) * RowH);
+	// Searches take an extra line for the description.
+	const float SearchLineH = 18.f * S;
+	float RowsH = FMath::Max(1, Rows) * RowH;
+	for (int32 i = 0; i < Rows; ++i)
+	{
+		RowsH += Calls[i]->IsSearching() ? SearchLineH : 0.f;
+	}
+	DrawPanel(X - 8.f * S, Y - 40.f * S, W + 16.f * S, 44.f * S + RowsH);
 	DrawText(FString::Printf(TEXT("DISPATCH  (%d open)"), Calls.Num()), FLinearColor(0.6f, 0.8f, 1.f), X, Y - 32.f * S, TitleFont, S);
 
 	if (Calls.Num() == 0)
@@ -233,22 +240,38 @@ void AFTOHUD::DrawDispatchBoard(const AFTOGameState* GS)
 		const FFTOIncidentInfo Info = Incident->GetInfo();
 		const FLinearColor TierColor = FTOCrime::TierColor(Info.Tier);
 
-		DrawRect(TierColor, X, Y + 4.f * S, 8.f * S, RowH - 12.f * S);
+		DrawRect(TierColor, X, Y + 4.f * S, 8.f * S, RowH - 12.f * S + (Incident->IsSearching() ? SearchLineH : 0.f));
 
 		const float Distance = Me ? FVector::Dist2D(Me->GetActorLocation(), Incident->GetActorLocation()) / 100.f : 0.f;
 		DrawText(Info.Title.ToString(), FLinearColor::White, X + 18.f * S, Y + 2.f * S, TitleFont, S * 0.9f);
 
-		const FString Detail = FString::Printf(TEXT("%s  |  %d/%d officers  |  %dm%s"),
-			*FTOCrime::TierName(Info.Tier).ToString(), Incident->GetOfficersOnScene(), Info.OfficersRequired,
-			FMath::RoundToInt(Distance), Incident->WasWitnessed() ? TEXT("  |  SPOTTED") : TEXT(""));
-		DrawText(Detail, FLinearColor(0.8f, 0.8f, 0.8f), X + 18.f * S, Y + 26.f * S, SmallFont, S * 1.1f);
+		// A suspect lying low: the board carries what they look like and how long's left to find them.
+		const bool bSearch = Incident->IsSearching();
+		const float ThisRowH = RowH + (bSearch ? SearchLineH : 0.f);
+		const int32 SearchLeft = FMath::CeilToInt(Incident->GetSearchTimeLeft());
+		const FString Detail = bSearch
+			? FString::Printf(TEXT("SUSPECT FLED  |  search %d:%02d left  |  last seen %dm"), SearchLeft / 60, SearchLeft % 60, FMath::RoundToInt(Distance))
+			: FString::Printf(TEXT("%s  |  %d/%d officers  |  %dm%s"),
+				*FTOCrime::TierName(Info.Tier).ToString(), Incident->GetOfficersOnScene(), Info.OfficersRequired,
+				FMath::RoundToInt(Distance), Incident->WasWitnessed() ? TEXT("  |  SPOTTED") : TEXT(""));
+		DrawText(Detail, bSearch ? FLinearColor(1.f, 0.8f, 0.45f) : FLinearColor(0.8f, 0.8f, 0.8f), X + 18.f * S, Y + 26.f * S, SmallFont, S * 1.1f);
+		if (bSearch)
+		{
+			// What they look like, cut to fit the panel (the scene panel and the toasts have it in full).
+			FString Look = Info.SuspectDescription.ToString();
+			if (Look.Len() > 62)
+			{
+				Look = Look.Left(60).TrimEnd() + TEXT("...");
+			}
+			DrawText(Look, FLinearColor::White, X + 18.f * S, Y + 44.f * S, SmallFont, S);
+		}
 
-		// Urgency fuse along the bottom of the row.
-		const float Urgency = Incident->GetUrgency();
-		DrawRect(FLinearColor(0.2f, 0.2f, 0.2f, 0.8f), X + 18.f * S, Y + RowH - 12.f * S, W - 26.f * S, 4.f * S);
-		DrawRect(ChaosColor(Urgency), X + 18.f * S, Y + RowH - 12.f * S, (W - 26.f * S) * Urgency, 4.f * S);
+		// Urgency fuse along the bottom of the row (a search's is its clock running down).
+		const float Urgency = bSearch ? 1.f - Incident->GetSearchTimeLeft() / FMath::Max(1.f, Incident->SearchSeconds) : Incident->GetUrgency();
+		DrawRect(FLinearColor(0.2f, 0.2f, 0.2f, 0.8f), X + 18.f * S, Y + ThisRowH - 12.f * S, W - 26.f * S, 4.f * S);
+		DrawRect(ChaosColor(Urgency), X + 18.f * S, Y + ThisRowH - 12.f * S, (W - 26.f * S) * Urgency, 4.f * S);
 
-		Y += RowH;
+		Y += ThisRowH;
 	}
 }
 
@@ -321,7 +344,8 @@ void AFTOHUD::DrawIncidentMarkers(const AFTOGameState* GS)
 		if (Me)
 		{
 			const int32 Meters = FMath::RoundToInt(FVector::Dist2D(Me->GetActorLocation(), Incident->GetActorLocation()) / 100.f);
-			const FString Title = bRunning ? Info.Title.ToString() + TEXT(" (on the run)") : Info.Title.ToString();
+			const FString Title = bRunning ? Info.Title.ToString() + TEXT(" (on the run)")
+				: (Incident->IsSearching() ? Info.Title.ToString() + TEXT(" (last seen)") : Info.Title.ToString());
 			const FString Label = bOnScreen ? FString::Printf(TEXT("%s  %dm"), *Title, Meters) : FString::Printf(TEXT("%dm"), Meters);
 			DrawCenteredText(Label, Screen.X, Screen.Y + Size + 4.f * S, FLinearColor::White, Font, S);
 		}
@@ -502,6 +526,12 @@ void AFTOHUD::DrawOnSceneProgress(const AFTOGameState* GS)
 	{
 		Status = TEXT("They're getting away! Sprint (Shift) and tackle (F)");
 		StatusColor = FLinearColor(1.f, 0.6f, 0.2f);
+	}
+	else if (Nearest->IsSearching())
+	{
+		Status = FString::Printf(TEXT("Last seen round here, within about %dm. Look for: %s. Talk to them (E)"),
+			FMath::RoundToInt(Nearest->GetSearchRadius() / 100.f), *Info.SuspectDescription.ToString());
+		StatusColor = FLinearColor(1.f, 0.8f, 0.45f);
 	}
 	else if (bUnderstaffed)
 	{

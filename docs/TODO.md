@@ -20,6 +20,21 @@ Details live in the [Phase 2 plan](Phase2Plan.md) and the [game design](GameDesi
   - [ ] Owner: register FTO's own Steam App ID (Steamworks, $100) and swap it in for release.
   - [ ] Owner: test on two PCs with two Steam accounts (Steam won't run two logins on one machine).
 
+## Phase 3: James's eight upgrades
+Each item is one PR, reviewed before it's merged.
+- [ ] **Crimes that play out** (upgrade 5): longer response windows; crooks visibly commit the crime (victims,
+  brawlers, graffiti, vandals smashing street furniture, shoplifters filling a sack); some run from the police or
+  leave with the goods, and a getaway becomes a search for the suspect by description.
+- [ ] **Sound** (upgrade 4): footsteps by surface, heavier and more realistic synthesised effects, more variety.
+- [ ] **Tougher cars** (upgrade 3): more health, persistent dents and scrapes where they're hit, BeamNG-style wear.
+- [ ] **Talking to people** (upgrade 7): conversations for information and chit-chat, stop and search, arrests (with
+  a chaos cost for arresting someone who's clean).
+- [ ] **Upper floors** (upgrade 6): stairs and lifts in multi-storey buildings.
+- [ ] **Building destruction** (upgrade 2): walls broken systematically, cars through walls, buildings levelled.
+- [ ] **Characters** (upgrade 1): detailed in-house models on the UE5 mannequin skeleton with Epic's free
+  animations, plus weapon-handling fixes.
+- [ ] **Hand-to-hand fighting** (upgrade 8): punches, kicks, grabs and throws with weighty, physical reactions.
+
 ## Backlog (later ideas)
 - [ ] Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame
 - [ ] Day/night shifts and weather; night-time lights and headlights

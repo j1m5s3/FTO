@@ -19,6 +19,10 @@ namespace
 		FTemplateBuilder& Spawn(float Weight, float MinChaos = 0.f, bool bUnique = false) { Tpl.Weight = Weight; Tpl.MinChaos = MinChaos; Tpl.bUnique = bUnique; return *this; }
 		FTemplateBuilder& NoArrest() { Tpl.bArrest = false; return *this; }
 		FTemplateBuilder& Armed() { Tpl.bArmed = true; return *this; }
+		/** Might run when the police come (EscapeChance), and leaves with the goods after DeedSeconds (0 = never). */
+		FTemplateBuilder& Getaway(float EscapeChance, float DeedSeconds = 0.f) { Tpl.EscapeChance = EscapeChance; Tpl.DeedSeconds = DeedSeconds; return *this; }
+		/** A classic cartoon crook in the striped jumper (robbers, burglars, heist crews), not someone in street clothes. */
+		FTemplateBuilder& Crook() { Tpl.bStreetClothes = false; return *this; }
 	};
 
 	FTemplateBuilder Add(TArray<FFTOCrimeTemplate>& Out, FName Id, const TCHAR* Title, EFTOCrimeTier Tier)
@@ -43,94 +47,101 @@ void UFTOCrimeCatalog::PopulateDefaults()
 
 	using E = EFTOCrimeTier;
 
+	// Response windows (Escalate) are generous: the city's big and a cruiser takes a while to cross it. Unattended
+	// crimes still bleed chaos the whole time, so leaving them is never free.
+
 	// ---- Petty: small day-to-day calls ------------------------------------------------
 	Add(Templates, "CatInTree", TEXT("Cat Stuck in Tree"), E::Petty)
 		.Flavor({ TEXT("Caller says the cat is 'judging everyone'."), TEXT("It's the same cat as yesterday.") })
-		.Chaos(0.03f, 2.f, 1.f).Work(3.f, 1).Report(1.f, 2.f, 6.f).Escalate(90.f).Spawn(1.2f).NoArrest();
+		.Chaos(0.02f, 2.f, 1.f).Work(3.f, 1).Report(1.f, 2.f, 6.f).Escalate(240.f).Spawn(1.2f).NoArrest();
 
 	Add(Templates, "LostTourist", TEXT("Lost Tourist"), E::Petty)
 		.Flavor({ TEXT("Tourist is holding the map upside down."), TEXT("They're looking for 'the famous statue'. There is no statue.") })
-		.Chaos(0.02f, 1.5f, 1.f).Work(2.f, 1).Report(0.3f, 1.f, 3.f).Escalate(60.f).Spawn(1.f).NoArrest();
+		.Chaos(0.015f, 1.5f, 1.f).Work(2.f, 1).Report(0.3f, 1.f, 3.f).Escalate(210.f).Spawn(1.f).NoArrest();
 
 	Add(Templates, "NoiseComplaint", TEXT("Noise Complaint"), E::Petty)
 		.Flavor({ TEXT("Neighbour has been practising the bagpipes since 6am."), TEXT("Karaoke night got out of hand.") })
-		.Chaos(0.04f, 2.f, 2.f).Work(3.f, 1).Report(1.f, 3.f, 8.f).Escalate(75.f, "BarFight").Spawn(1.2f).NoArrest();
+		.Chaos(0.025f, 2.f, 2.f).Work(3.f, 1).Report(1.f, 3.f, 8.f).Escalate(210.f, "BarFight").Spawn(1.2f).NoArrest();
 
 	Add(Templates, "Jaywalking", TEXT("Jaywalking"), E::Petty)
-		.Flavor({ TEXT("Pedestrian doing cartwheels across the intersection.") })
-		.Chaos(0.03f, 1.5f, 1.f).Work(2.f, 1).Report(0.f, 0.f, 0.f).Escalate(30.f).Spawn(1.f).NoArrest();
+		.Flavor({ TEXT("Pedestrian doing cartwheels across the intersection."), TEXT("Someone keeps crossing the road without looking. Back and forth. For fun.") })
+		.Chaos(0.02f, 1.5f, 1.f).Work(2.f, 1).Report(0.f, 0.f, 0.f).Escalate(120.f).Spawn(1.f).NoArrest();
 
 	Add(Templates, "Graffiti", TEXT("Graffiti in Progress"), E::Petty)
 		.Flavor({ TEXT("Tagger is spelling their own name wrong."), TEXT("It's actually quite good. Still illegal.") })
-		.Chaos(0.05f, 2.5f, 2.f).Work(3.f, 1).Report(0.4f, 5.f, 12.f).Escalate(50.f, "Vandalism").Spawn(1.f);
+		.Chaos(0.03f, 2.5f, 2.f).Work(3.f, 1).Report(0.5f, 5.f, 12.f).Escalate(180.f, "Vandalism").Spawn(1.f).Getaway(0.5f, 150.f);
 
 	Add(Templates, "Shoplifting", TEXT("Shoplifting"), E::Petty)
-		.Flavor({ TEXT("Suspect has 14 rotisserie chickens under their coat."), TEXT("Suspect fled with a single grape.") })
-		.Chaos(0.06f, 3.f, 2.f).Work(3.f, 1).Report(0.8f, 2.f, 6.f).Escalate(45.f, "ArmedRobbery").Spawn(1.2f);
+		.Flavor({ TEXT("Suspect has 14 rotisserie chickens under their coat."), TEXT("Suspect is filling a sack with scratch cards.") })
+		.Chaos(0.035f, 3.f, 2.f).Work(3.f, 1).Report(0.8f, 2.f, 6.f).Escalate(180.f, "ArmedRobbery").Spawn(1.2f).Getaway(0.45f, 90.f);
 
 	// Never rolled: it's what a crook lying low in a building confesses to when an officer questions them.
 	Add(Templates, "StolenGoods", TEXT("Possession of Stolen Goods"), E::Petty)
 		.Flavor({ TEXT("Forty garden gnomes in the back room. 'They followed me home.'"), TEXT("Pockets full of other people's spoons.") })
-		.Chaos(0.02f, 3.f, 1.f).Work(3.f, 1).Report(1.f, 0.f, 0.f).Escalate(90.f).Spawn(0.f);
+		.Chaos(0.02f, 3.f, 1.f).Work(3.f, 1).Report(1.f, 0.f, 0.f).Escalate(240.f).Spawn(0.f);
 
 	Add(Templates, "IllegalParking", TEXT("Illegal Parking"), E::Petty)
 		.Flavor({ TEXT("Car parked on the roof of another car."), TEXT("Food truck blocking a fire hydrant again.") })
-		.Chaos(0.03f, 1.5f, 1.f).Work(2.f, 1).Report(0.6f, 3.f, 10.f).Escalate(90.f).Spawn(0.8f).NoArrest();
+		.Chaos(0.02f, 1.5f, 1.f).Work(2.f, 1).Report(0.6f, 3.f, 10.f).Escalate(240.f).Spawn(0.8f).NoArrest();
 
 	// ---- Minor: the daily grind --------------------------------------------------------
 	Add(Templates, "DomesticDispute", TEXT("Domestic Dispute"), E::Minor)
 		.Flavor({ TEXT("Argument about whose turn it was to do the dishes."), TEXT("Two roommates, one TV remote.") })
-		.Chaos(0.10f, 5.f, 4.f).Work(5.f, 2).Report(0.9f, 2.f, 5.f).Escalate(60.f, "Standoff").Spawn(1.f);
+		.Chaos(0.06f, 5.f, 4.f).Work(5.f, 2).Report(0.9f, 2.f, 5.f).Escalate(180.f, "Standoff").Spawn(1.f).Getaway(0.15f);
 
 	Add(Templates, "BarFight", TEXT("Bar Fight"), E::Minor)
 		.Flavor({ TEXT("Dispute over trivia night answers."), TEXT("Someone said pineapple belongs on pizza.") })
-		.Chaos(0.12f, 5.f, 4.f).Work(5.f, 2).Report(0.9f, 1.f, 4.f).Escalate(50.f, "Riot").Spawn(0.9f);
+		.Chaos(0.07f, 5.f, 4.f).Work(5.f, 2).Report(0.9f, 1.f, 4.f).Escalate(180.f, "Riot").Spawn(0.9f).Getaway(0.3f);
 
 	Add(Templates, "Vandalism", TEXT("Vandalism"), E::Minor)
-		.Flavor({ TEXT("Someone is hot-gluing googly eyes to every mailbox.") })
-		.Chaos(0.09f, 4.f, 3.f).Work(4.f, 1).Report(0.6f, 4.f, 10.f).Escalate(60.f).Spawn(0.8f);
+		.Flavor({ TEXT("Someone is kicking over every bin on the street."), TEXT("Suspect is 'redecorating' the street furniture.") })
+		.Chaos(0.055f, 4.f, 3.f).Work(4.f, 1).Report(0.6f, 4.f, 10.f).Escalate(180.f).Spawn(0.8f).Getaway(0.5f, 120.f);
+
+	Add(Templates, "Mugging", TEXT("Mugging"), E::Minor)
+		.Flavor({ TEXT("Suspect demanding a pensioner's crossword. And their wallet."), TEXT("Victim says the mugger 'had very nice shoes'.") })
+		.Chaos(0.07f, 5.f, 4.f).Work(4.f, 1).Report(0.8f, 1.f, 4.f).Escalate(180.f).Spawn(0.9f).Getaway(0.6f, 45.f);
 
 	Add(Templates, "Speeding", TEXT("Reckless Driver"), E::Minor)
 		.Flavor({ TEXT("Driver doing donuts in the mall car park."), TEXT("Grandma in a sports car. Again.") })
-		.Chaos(0.10f, 4.f, 3.f).Work(3.f, 1).Report(0.2f, 1.f, 3.f).Escalate(40.f, "CarChase").Spawn(1.f).NoArrest();
+		.Chaos(0.06f, 4.f, 3.f).Work(3.f, 1).Report(0.2f, 1.f, 3.f).Escalate(150.f, "CarChase").Spawn(1.f).NoArrest();
 
-	Add(Templates, "PettyTheft", TEXT("Bike Theft"), E::Minor)
-		.Flavor({ TEXT("Suspect is riding away very, very slowly.") })
-		.Chaos(0.08f, 4.f, 3.f).Work(4.f, 1).Report(0.7f, 2.f, 6.f).Escalate(60.f).Spawn(0.9f);
+	Add(Templates, "PettyTheft", TEXT("Pickpocket"), E::Minor)
+		.Flavor({ TEXT("Suspect is going through a tourist's backpack. The tourist hasn't noticed."), TEXT("Someone's lifting wallets at the bus stop.") })
+		.Chaos(0.05f, 4.f, 3.f).Work(4.f, 1).Report(0.7f, 2.f, 6.f).Escalate(180.f).Spawn(0.9f).Getaway(0.7f, 60.f);
 
 	// ---- Major: needs a team -----------------------------------------------------------
 	Add(Templates, "ArmedRobbery", TEXT("Armed Robbery"), E::Major)
 		.Flavor({ TEXT("Corner store held up with a suspiciously banana-shaped weapon."), TEXT("Robber demanded 'all the scratch cards'.") })
-		.Chaos(0.25f, 10.f, 8.f).Work(7.f, 2).Report(1.f, 1.f, 3.f).Escalate(60.f, "HostageSituation").Spawn(0.6f, 15.f).Armed();
+		.Chaos(0.15f, 10.f, 8.f).Work(7.f, 2).Report(1.f, 1.f, 3.f).Escalate(180.f, "HostageSituation").Spawn(0.6f, 15.f).Armed().Crook().Getaway(0.4f, 75.f);
 
 	Add(Templates, "CarChase", TEXT("Car Chase"), E::Major)
 		.Flavor({ TEXT("Getaway vehicle is an ice cream truck. The music is still playing.") })
-		.Chaos(0.30f, 10.f, 8.f).Work(6.f, 2).Report(1.f, 0.f, 2.f).Escalate(45.f).Spawn(0.5f, 20.f);
+		.Chaos(0.18f, 10.f, 8.f).Work(6.f, 2).Report(1.f, 0.f, 2.f).Escalate(150.f).Spawn(0.5f, 20.f);
 
 	Add(Templates, "Standoff", TEXT("Barricaded Suspect"), E::Major)
 		.Flavor({ TEXT("Suspect has barricaded themselves inside a bouncy castle.") })
-		.Chaos(0.25f, 12.f, 10.f).Work(8.f, 3).Report(1.f, 0.f, 2.f).Escalate(60.f, "HostageSituation").Spawn(0.3f, 25.f).Armed();
+		.Chaos(0.15f, 12.f, 10.f).Work(8.f, 3).Report(1.f, 0.f, 2.f).Escalate(210.f, "HostageSituation").Spawn(0.3f, 25.f).Armed();
 
 	Add(Templates, "Riot", TEXT("Street Brawl"), E::Major)
-		.Flavor({ TEXT("Two rival barbershop quartets. Harmonies have turned violent.") })
-		.Chaos(0.35f, 12.f, 10.f).Work(8.f, 3).Report(1.f, 0.f, 1.f).Escalate(60.f).Spawn(0.3f, 30.f);
+		.Flavor({ TEXT("Two rival barbershop quartets. Harmonies have turned violent."), TEXT("A disagreement about the best sandwich has become a street fight.") })
+		.Chaos(0.2f, 12.f, 10.f).Work(8.f, 3).Report(1.f, 0.f, 1.f).Escalate(180.f).Spawn(0.3f, 30.f).Getaway(0.3f);
 
 	Add(Templates, "Burglary", TEXT("Burglary"), E::Major)
-		.Flavor({ TEXT("Burglar is only stealing left shoes.") })
-		.Chaos(0.20f, 8.f, 6.f).Work(6.f, 2).Report(0.5f, 5.f, 15.f).Escalate(70.f).Spawn(0.6f, 10.f);
+		.Flavor({ TEXT("Burglar is only stealing left shoes."), TEXT("Neighbour reports someone 'tiptoeing very loudly'.") })
+		.Chaos(0.12f, 8.f, 6.f).Work(6.f, 2).Report(0.6f, 5.f, 15.f).Escalate(210.f).Spawn(0.6f, 10.f).Crook().Getaway(0.5f, 100.f);
 
 	// ---- Critical: whole-team set pieces -----------------------------------------------
 	Add(Templates, "BankHeist", TEXT("Bank Heist"), E::Critical)
 		.Flavor({ TEXT("Crew in matching clown masks. One is a real clown."), TEXT("Vault drill is plugged into the bank's own extension cord.") })
-		.Chaos(0.6f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(120.f).Spawn(0.25f, 40.f, true).Armed();
+		.Chaos(0.35f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(300.f).Spawn(0.25f, 40.f, true).Armed().Crook();
 
 	Add(Templates, "HostageSituation", TEXT("Hostage Situation"), E::Critical)
 		.Flavor({ TEXT("Hostage is a very calm goldfish. Demands include a bigger bowl.") })
-		.Chaos(0.6f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(120.f).Spawn(0.15f, 50.f, true).Armed();
+		.Chaos(0.35f, 25.f, 20.f).Work(12.f, 4).Report(1.f, 0.f, 1.f).Escalate(300.f).Spawn(0.15f, 50.f, true).Armed().Crook();
 
 	Add(Templates, "TerrorPlot", TEXT("Evil Masterplan"), E::Critical)
 		.Flavor({ TEXT("A villain is threatening to release 10,000 bees at City Hall."), TEXT("Suspicious device ticking downtown. It might be a very loud clock.") })
-		.Chaos(0.8f, 35.f, 30.f).Work(15.f, 4).Report(1.f, 0.f, 1.f).Escalate(150.f).Spawn(0.1f, 60.f, true);
+		.Chaos(0.45f, 35.f, 30.f).Work(15.f, 4).Report(1.f, 0.f, 1.f).Escalate(300.f).Spawn(0.1f, 60.f, true).Crook();
 
 	// ---- Modifiers ---------------------------------------------------------------------
 	auto AddMod = [this](FName Id, const TCHAR* Prefix, const TCHAR* Note, float Chaos, float Resolve, int32 Extra, EFTOCrimeTier MinTier, float Weight)
@@ -168,6 +179,9 @@ FFTOIncidentInfo UFTOCrimeCatalog::RollIncident(const FFTOCrimeTemplate& Templat
 	Info.EscalatesTo = Template.EscalatesTo;
 	Info.bArrest = Template.bArrest;
 	Info.bArmed = Template.bArmed;
+	Info.EscapeChance = Template.bArrest ? Template.EscapeChance : 0.f;
+	Info.DeedSeconds = Template.bArrest ? Template.DeedSeconds : 0.f;
+	Info.bStreetClothes = Template.bStreetClothes;
 
 	FString Description = Template.Flavor.Num() > 0
 		? Template.Flavor[Rng.RandRange(0, Template.Flavor.Num() - 1)].ToString()
@@ -200,6 +214,8 @@ FFTOIncidentInfo UFTOCrimeCatalog::RollIncident(const FFTOCrimeTemplate& Templat
 				Info.OfficersRequired = FMath::Clamp(Info.OfficersRequired + M.ExtraOfficers, 1, 4);
 				Info.bArmed |= M.Id == TEXT("Armed") && Info.bArrest;
 				Info.Twist = M.Id;
+				// On the move: they'll run from the police for sure.
+				Info.EscapeChance = M.Id == TEXT("Fleeing") ? 1.f : Info.EscapeChance;
 				break;
 			}
 		}

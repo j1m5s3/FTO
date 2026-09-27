@@ -53,8 +53,16 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   or put on the floor) kneels and you step in behind them to cuff them. One who hasn't may come quietly, or fight
   back (mash E to wrestle them down before the meter drains; partners can pile in with E; lose and you're shoved
   over) or bolt on foot (sprint after them and tackle with F, or run them over; the whistle stops them for a moment).
-  A suspect left kneeling with nobody about, or who outruns everyone, gets away. Car chases end with the driver
+  A suspect left kneeling with nobody about, or who outruns everyone, gets away into the crowd. Car chases end with the driver
   climbing out and kneeling beside their car.
+- **Crimes play out**: crooks get on with it (a tagger sprays the wall a letter at a time, a vandal goes from bin to
+  bench kicking them over, a shoplifter works the shelves filling a sack, a mugger has a victim with their hands up,
+  brawlers trade blows) and some finish before you arrive and walk off with the goods. Others run when they see the
+  police. A suspect who gets clean away lies low in the crowd: the call becomes a **search** (the board shows what
+  they look like and how long's left, the marker sits where they were last seen and moves when a citizen phones in a
+  sighting). Suspects in street clothes look like anyone else, so find whoever matches and talk to them (E); crooks
+  ditch the striped jumper. Take a victim's statement (E) for the description and which way they ran. Lying low, a
+  suspect may bolt if an officer gets close.
 - **Weapons** (on foot): every officer carries a taser; the precinct armory racks hand out a pistol, a shotgun and a
   rifle (three slots; E at a rack takes one, swaps it for the one in hand when you're full, or restocks its ammo).
   1, 2, 3 or the mouse wheel pick a weapon (the same number again puts it away), right mouse raises the last one
@@ -94,7 +102,8 @@ hold-up and a bar brawl, questions a crook, walks through front doors, checks th
 drives into three citizens, tackles one, signs a shotgun out of the armory, trades fire with an armed robber (then
 cuffs them where they fell), has a downed officer helped up (the radio calls it in), makes the arrests that don't go
 quietly: a brawler wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who
-gives up beside their car, then opens the callout wheel and keys the radio, then shoots out a shop window and a
+gives up beside their car, watches a mugger walk off with the goods and tracks them down in the crowd, films a tagger
+and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
 hydrant, knocks a lamp post flat with a cruiser, crashes the cruiser until it's a burning wreck, and writes off a
 citizen's car; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`

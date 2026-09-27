@@ -5,6 +5,8 @@
 #include "FTOPerp.generated.h"
 
 class AFTOIncident;
+class AFTOGraffitiTag;
+class UInstancedStaticMeshComponent;
 class UStaticMeshComponent;
 
 /** Where an arrest stands, from the perp's side. */
@@ -15,7 +17,8 @@ enum class EFTOPerpArrest : uint8
 	Surrendered,	// on their knees, hands on head, waiting for the cuffs
 	Struggling,		// fighting off an officer, who mashes Interact to win
 	Fleeing,		// legging it on foot
-	Cuffing			// kneeling while an officer puts the cuffs on
+	Cuffing,		// kneeling while an officer puts the cuffs on
+	Hiding			// got away: strolling about like anyone else, till someone recognises them
 };
 
 /** How a suspect takes an officer's attempt to arrest them. */
@@ -35,6 +38,11 @@ enum class EFTOArrestResponse : uint8
  *
  * Armed perps (hold-ups, stand-offs, the "Armed" twist) carry a pistol and shoot at officers who come close, until
  * they're outnumbered or talked down.
+ *
+ * Crooks don't just stand there: they get on with it (a tagger sprays the wall, a vandal goes from bin to bin, a
+ * shoplifter works along the shelves filling a sack), and some are done before the police arrive and walk off with
+ * the goods. Others make a run for it when the police turn up. One who gets away blends into the crowd (Hiding):
+ * the incident becomes a search by description, and an officer who talks to the right person has them.
  *
  * Arrests: an officer walks up and presses Interact. A suspect who's given up (talked down, run to ground, or put on
  * the floor by a shot, the taser, a tackle or a bumper) kneels for the cuffs: the officer steps in behind them and
@@ -69,6 +77,13 @@ public:
 	bool IsCriminal() const { return bCriminal; }
 	EFTOPerpArrest GetArrestState() const { return ArrestState; }
 	bool IsFleeing() const { return ArrestState == EFTOPerpArrest::Fleeing; }
+	bool IsHiding() const { return ArrestState == EFTOPerpArrest::Hiding; }
+	/** Walking off with a sack of somebody else's things. */
+	bool HasLoot() const { return bHasLoot; }
+	/** What a witness would tell dispatch about us ("striped jumper, carrying a sack"). */
+	FString DescribeSuspect() const;
+	/** Tests: finish the crime now (a crook with somewhere to be leaves with the goods). */
+	void FinishDeedNow();
 	/** Wrestling with an officer or being cuffed: the scene's on hold meanwhile. */
 	bool IsInArrest() const { return ArrestState == EFTOPerpArrest::Struggling || ArrestState == EFTOPerpArrest::Cuffing; }
 	/** 0-1: how close the officers are to winning a struggle. */
@@ -128,8 +143,16 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category="Arrest") float GetAwaySeconds = 5.f;
 	/** Left kneeling with no officer about for this long, they slip away. */
 	UPROPERTY(EditDefaultsOnly, Category="Arrest") float WaitForCuffsSeconds = 45.f;
-	/** A suspect "on the move" (the Fleeing twist) bolts as soon as an officer gets this close. */
-	UPROPERTY(EditDefaultsOnly, Category="Arrest") float SpookDistance = 900.f;
+	/** A suspect who's going to run (the incident's EscapeChance) bolts as soon as an officer in sight gets this close. */
+	UPROPERTY(EditDefaultsOnly, Category="Arrest") float SpookDistance = 1300.f;
+
+	/** Walking off from the scene, then strolling about while lying low. */
+	UPROPERTY(EditDefaultsOnly, Category="Getaway") float LeaveSpeed = 230.f;
+	UPROPERTY(EditDefaultsOnly, Category="Getaway") float HideSpeed = 150.f;
+	/** Lying low, they might bolt if an officer in sight comes this close... */
+	UPROPERTY(EditDefaultsOnly, Category="Getaway") float NervousDistance = 500.f;
+	/** ...with this chance per second. */
+	UPROPERTY(EditDefaultsOnly, Category="Getaway") float BoltChancePerSecond = 0.35f;
 
 protected:
 	virtual void ApplyLook() override;
@@ -141,6 +164,19 @@ protected:
 	bool IsStillFighting() const;
 	AActor* FindTarget() const;
 	void Shoot();
+
+	/** Server: getting on with the crime (walking the shelves, going from bin to bin, spraying the wall). */
+	void TickDeed(float DeltaSeconds);
+	/** Server: set the crime up (where they'll go, the wall to tag) once we know what it is. */
+	void BeginDeed();
+	/** Server: the next stop in a crime that moves about (a shelf, a bin to kick, the far kerb). */
+	void NextDeedStop();
+	/** A breakable bit of street furniture near Around, still standing: its component, instance and where it is. */
+	bool FindSomethingToSmash(const FVector& Around, UInstancedStaticMeshComponent*& OutISM, int32& OutInstance, FVector& OutWhere) const;
+	/** Server: slip off into the crowd: walking from the scene (bSeen: running, and the police saw us go). */
+	void GoIntoHiding(bool bSeen);
+	/** Server: lying low: the next leg round the sidewalks. */
+	void ContinueHiding();
 
 	/** Server: the arrest side of things (struggles, chases, waiting for the cuffs). */
 	void TickArrest(float DeltaSeconds);
@@ -159,19 +195,28 @@ protected:
 	bool IsArresterWithUs() const;
 	/** The nearest officer (on foot or at the wheel) and how far away. */
 	AActor* FindNearestOfficer(float& OutDistance) const;
+	/** A clear line from our eyes to them. */
+	bool CanSee(const AActor* Other) const;
 	AFTOCityGenerator* FindCity();
 	/** Cosmetic, every machine: a cartoon dust cloud around a struggle. */
 	void UpdateScuffleCloud(float DeltaSeconds);
 
 	UFUNCTION() void OnRep_Armed();
+	UFUNCTION() void OnRep_Loot();
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Gun;
+	/** The swag bag. */
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Loot;
 	UPROPERTY() TObjectPtr<USkeletalMesh> SuspectLook;
 	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> ScuffleCloud;
 
 	UPROPERTY(Replicated) TObjectPtr<AFTOIncident> Incident;
 	UPROPERTY(ReplicatedUsing=OnRep_Look) bool bCriminal = true;
 	UPROPERTY(ReplicatedUsing=OnRep_Armed) bool bArmed = false;
+	/** Dressed like anyone else (the incident's bStreetClothes), or ditched the striped jumper to lie low. */
+	UPROPERTY(ReplicatedUsing=OnRep_Look) bool bStreetClothes = false;
+	UPROPERTY(ReplicatedUsing=OnRep_Look) bool bDisguised = false;
+	UPROPERTY(ReplicatedUsing=OnRep_Loot) bool bHasLoot = false;
 	/** Gun up at an officer right now. */
 	UPROPERTY(Replicated) bool bShooting = false;
 	UPROPERTY(Replicated) float AimPitch = 0.f;
@@ -184,6 +229,30 @@ protected:
 
 	FVector Home = FVector::ZeroVector;
 	float HomeYaw = 0.f;
+
+	// Server: the crime in progress.
+	/** Roll at setup: will they run when the police come? */
+	bool bWillRun = false;
+	/** Server time they're done and leave with the goods (0 = they're not going anywhere). */
+	float DeedEndTime = 0.f;
+	/** Stops for a crime that moves about, and which one's next. */
+	TArray<FVector> DeedStops;
+	int32 DeedStop = 0;
+	/** Paused at a stop (or walking to the next) until then. */
+	float DeedPauseUntil = 0.f;
+	bool bDeedWalking = false;
+	/** The vandal's next target, and when they hit it. */
+	TWeakObjectPtr<UInstancedStaticMeshComponent> SmashISM;
+	int32 SmashInstance = INDEX_NONE;
+	FVector SmashAt = FVector::ZeroVector;
+	float SmashTime = 0.f;
+	TWeakObjectPtr<AFTOGraffitiTag> Tag;
+	float DeedCheckAccumulator = 0.f;
+	float DeedStartTime = 0.f;
+	/** Lying low: strolling the block like a pedestrian (after getting clear of the scene). */
+	bool bWandering = false;
+	/** How fast the current getaway leg goes. */
+	float RunSpeed = 620.f;
 	TWeakObjectPtr<AActor> Target;
 	float NextShotTime = 0.f;
 	float ShootCheckAccumulator = 0.f;

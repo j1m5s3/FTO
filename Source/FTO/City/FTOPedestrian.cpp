@@ -29,6 +29,32 @@ namespace
 		TEXT("\"I've never jaywalked in my life. Today.\""),
 	};
 
+	/** What sets each of Tools/Blender/build_civilians.py's variants apart, in SK_Civilian_01..08 order. */
+	const TCHAR* LookNotes[] =
+	{
+		TEXT("short brown hair, jeans"),
+		TEXT("black hair in a bun, glasses"),
+		TEXT("bald, with a beard"),
+		TEXT("blonde bob, red trousers, a shoulder bag"),
+		TEXT("spiky black hair, red shoes"),
+		TEXT("baseball cap, ginger beard"),
+		TEXT("grey beanie, glasses, green trousers"),
+		TEXT("pink bob, a shoulder bag"),
+	};
+
+	/** The shirt tint (FLinearColor::MakeFromHSV8 hue) in words. */
+	const TCHAR* HueWord(uint8 Hue)
+	{
+		if (Hue < 12 || Hue >= 244) return TEXT("red");
+		if (Hue < 32) return TEXT("orange");
+		if (Hue < 54) return TEXT("yellow");
+		if (Hue < 110) return TEXT("green");
+		if (Hue < 145) return TEXT("light blue");
+		if (Hue < 190) return TEXT("blue");
+		if (Hue < 222) return TEXT("purple");
+		return TEXT("pink");
+	}
+
 	const TCHAR* CompassWord(const FVector& Dir)
 	{
 		const float Yaw = Dir.Rotation().Yaw;
@@ -110,6 +136,16 @@ void AFTOPedestrian::ApplyLook()
 
 	// Every variant tints its shirt (vertex alpha 1) with a random cheerful colour.
 	PaintBody(FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 170, 235));
+}
+
+FString AFTOPedestrian::DescribeLook() const
+{
+	// The same rolls as ApplyLook.
+	FRandomStream LookRng(LookSeed);
+	const int32 Variant = LookRng.RandRange(0, FMath::Max(0, Looks.Num() - 1));
+	const uint8 Hue = uint8(LookRng.RandRange(0, 255));
+	const TCHAR* Notes = Looks.Num() == UE_ARRAY_COUNT(LookNotes) ? LookNotes[Variant] : TEXT("");
+	return *Notes ? FString::Printf(TEXT("%s top, %s"), HueWord(Hue), Notes) : FString::Printf(TEXT("%s top"), HueWord(Hue));
 }
 
 void AFTOPedestrian::PaintBody(const FLinearColor& Color)
