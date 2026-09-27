@@ -1,4 +1,5 @@
 #include "City/FTOPedestrian.h"
+#include "Audio/FTOFootsteps.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameState.h"
@@ -94,6 +95,11 @@ AFTOPedestrian::AFTOPedestrian()
 	Body->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
 
 	Knockdown = CreateDefaultSubobject<UFTOKnockdownComponent>(TEXT("Knockdown"));
+
+	// Softer steps than an officer's, and only close to (a crowd's worth of shoes would be a din).
+	Footsteps = CreateDefaultSubobject<UFTOFootsteps>(TEXT("Footsteps"));
+	Footsteps->Volume = 0.4f;
+	Footsteps->CrowdRange = 1800.f;
 
 	TurnRate = 540.f;
 }

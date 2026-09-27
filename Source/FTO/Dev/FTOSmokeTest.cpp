@@ -1,4 +1,5 @@
 #include "Dev/FTOSmokeTest.h"
+#include "Audio/FTOFootsteps.h"
 #include "City/FTOCityGenerator.h"
 #include "City/FTOInteriorLife.h"
 #include "City/FTOOccupant.h"
@@ -1561,6 +1562,12 @@ void AFTOSmokeTest::BuildSteps()
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});
 
+		AddStep(TEXT("footsteps"), 0.f, [this]()
+		{
+			// Everyone walking about has been heard, on what they were walking on.
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: footsteps so far: %d on concrete, %d wood, %d tile, %d carpet, %d metal, %d grass."),
+				UFTOFootsteps::StepsOn(0), UFTOFootsteps::StepsOn(1), UFTOFootsteps::StepsOn(2), UFTOFootsteps::StepsOn(3), UFTOFootsteps::StepsOn(4), UFTOFootsteps::StepsOn(5));
+		});
 		AddStep(TEXT("arrest scores"), 0.f, [this]()
 		{
 			if (const AFTOPlayerState* PS = GetPC() ? GetPC()->GetPlayerState<AFTOPlayerState>() : nullptr)

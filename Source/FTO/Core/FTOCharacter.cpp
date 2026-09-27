@@ -1,4 +1,5 @@
 #include "Core/FTOCharacter.h"
+#include "Audio/FTOFootsteps.h"
 #include "Core/FTOInputConfig.h"
 #include "Core/FTOPlayerController.h"
 #include "Core/FTOPlayerState.h"
@@ -63,6 +64,7 @@ AFTOCharacter::AFTOCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	Knockdown = CreateDefaultSubobject<UFTOKnockdownComponent>(TEXT("Knockdown"));
+	Footsteps = CreateDefaultSubobject<UFTOFootsteps>(TEXT("Footsteps"));
 
 	// The weapon in hand (or on the hip, or slung): placed in world space every frame (see UpdateWeaponMesh).
 	WeaponMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMesh"));

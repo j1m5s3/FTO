@@ -91,6 +91,7 @@ protected:
 	UFUNCTION() void OnRep_State();
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCapsuleComponent> Capsule;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<class UFTOFootsteps> Footsteps;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USkeletalMeshComponent> Body;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UTextRenderComponent> Tag;
 

@@ -169,6 +169,9 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	TObjectPtr<UFTOKnockdownComponent> Knockdown;
 
+	UPROPERTY(VisibleAnywhere, Category="Components")
+	TObjectPtr<class UFTOFootsteps> Footsteps;
+
 	void HandleKnockedDown();
 	void HandleRecovered();
 

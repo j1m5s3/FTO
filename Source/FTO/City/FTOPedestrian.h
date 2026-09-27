@@ -76,6 +76,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UCapsuleComponent> Capsule;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USkeletalMeshComponent> Body;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UFTOKnockdownComponent> Knockdown;
+	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<class UFTOFootsteps> Footsteps;
 
 	void HandleRecovered();
 

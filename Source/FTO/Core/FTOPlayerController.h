@@ -103,6 +103,10 @@ public:
 	void CalloutPicked(int32 Index);
 
 protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	/** The city's hum (local player only). */
+	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> CityAmbience;
+
 	void SendCallout(EFTOCallout Callout);
 
 	UFUNCTION(Server, Reliable)
