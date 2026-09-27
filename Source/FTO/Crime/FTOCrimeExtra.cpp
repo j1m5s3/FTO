@@ -183,7 +183,11 @@ void AFTOCrimeExtra::Interact(AFTOCharacter* Officer)
 	}
 	else if (Perp && (Incident->IsSearching() || Perp->IsFleeing()))
 	{
-		const FVector Dir = (Perp->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+		// Which way they went: the way they ran off, or where they were last seen once a sighting's moved the search
+		// on (the victim can't know where they are now).
+		const FVector LastSeen = Incident->GetActorLocation();
+		const bool bSightedElsewhere = Incident->IsSearching() && FVector::Dist2D(LastSeen, GetActorLocation()) > 800.f;
+		const FVector Dir = ((bSightedElsewhere ? LastSeen : Perp->GetActorLocation()) - GetActorLocation()).GetSafeNormal2D();
 		Line = FString::Printf(TEXT("\"They ran off %s! %s.\""), Heading(Dir), *Incident->GetInfo().SuspectDescription.ToString());
 	}
 	else if (Perp && IsCrimeGoingOn())

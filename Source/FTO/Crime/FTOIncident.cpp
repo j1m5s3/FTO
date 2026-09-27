@@ -297,10 +297,13 @@ void AFTOIncident::StartFootChase()
 void AFTOIncident::StartSearch(const FVector& LastSeen)
 {
 	check(HasAuthority());
-	if (!IsActive() || bSubdued)
+	if (!IsActive())
 	{
 		return;
 	}
+	// A suspect who'd given up (knelt for the cuffs, or was being cuffed) and slipped off isn't subdued any more.
+	bSubdued = false;
+	SubduedBy.Reset();
 	// Off the perp (if we were chasing along behind them) and onto the spot they were last seen: out in the street.
 	if (bFootChase)
 	{
@@ -467,6 +470,13 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 	// The shift clock's run out and the squad's voting: the city holds its breath (nothing escalates or goes cold).
 	if (const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>(); GS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote)
 	{
+		// A search's clock stops too.
+		if (bSearch)
+		{
+			SearchStartTime += DeltaSeconds;
+			LastSightingTime += DeltaSeconds;
+			NextSightingTime += DeltaSeconds;
+		}
 		return;
 	}
 

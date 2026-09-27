@@ -6,8 +6,8 @@
 
 namespace
 {
-	const TCHAR* Words[] = { TEXT("GARY"), TEXT("ZAP!"), TEXT("B00M"), TEXT("4EVA"), TEXT("KAOS"), TEXT("YO!"), TEXT("DUDE"), TEXT("BLAM"), TEXT("SK8"), TEXT("WOW") };
-	const FColor Paints[] = { FColor(255, 60, 170), FColor(60, 220, 255), FColor(255, 220, 40), FColor(120, 255, 90), FColor(255, 120, 30), FColor(180, 90, 255) };
+	const TCHAR* TagWords[] = { TEXT("GARY"), TEXT("ZAP!"), TEXT("B00M"), TEXT("4EVA"), TEXT("KAOS"), TEXT("YO!"), TEXT("DUDE"), TEXT("BLAM"), TEXT("SK8"), TEXT("WOW") };
+	const FColor TagPaints[] = { FColor(255, 60, 170), FColor(60, 220, 255), FColor(255, 220, 40), FColor(120, 255, 90), FColor(255, 120, 30), FColor(180, 90, 255) };
 }
 
 AFTOGraffitiTag::AFTOGraffitiTag()
@@ -70,8 +70,8 @@ AFTOGraffitiTag* AFTOGraffitiTag::Spray(UWorld* World, const FVector& OnWall, co
 	if (Tag)
 	{
 		FRandomStream Rng(Seed);
-		Tag->Word = Words[Rng.RandRange(0, UE_ARRAY_COUNT(Words) - 1)];
-		Tag->Paint = Paints[Rng.RandRange(0, UE_ARRAY_COUNT(Paints) - 1)];
+		Tag->Word = TagWords[Rng.RandRange(0, UE_ARRAY_COUNT(TagWords) - 1)];
+		Tag->Paint = TagPaints[Rng.RandRange(0, UE_ARRAY_COUNT(TagPaints) - 1)];
 		Tag->SetActorRotation(Tag->GetActorRotation() + FRotator(0.f, 0.f, Rng.FRandRange(-8.f, 8.f)));
 		Tag->OnRep_Tag();
 	}

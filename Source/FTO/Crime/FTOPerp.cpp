@@ -500,6 +500,14 @@ void AFTOPerp::TickDeed(float DeltaSeconds)
 	{
 		return;
 	}
+	// The city holds its breath while the squad votes on overtime: nobody finishes a crime meanwhile.
+	if (const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>(); GS && GS->GetShiftPhase() == EFTOShiftPhase::OvertimeVote)
+	{
+		DeedStartTime += DeltaSeconds;
+		DeedEndTime += DeedEndTime > 0.f ? DeltaSeconds : 0.f;
+		DeedPauseUntil += DeltaSeconds;
+		return;
+	}
 	if (Incident->GetState() == EFTOIncidentState::Responding || Incident->IsSubdued())
 	{
 		// The police are here: whatever they were up to stops.
@@ -825,7 +833,7 @@ bool AFTOPerp::CanInteract(const AFTOCharacter* Officer) const
 	case EFTOPerpArrest::Struggling:
 		return Officer != Arrester; // pile in and help
 	case EFTOPerpArrest::Hiding:
-		return true; // any officer can stop anyone for a word
+		return !(Knockdown && Knockdown->IsDown()); // any officer can stop anyone for a word
 	default:
 		return false;
 	}
@@ -1234,6 +1242,13 @@ void AFTOPerp::TickArrest(float DeltaSeconds)
 {
 	if (!Incident || !Incident->IsActive())
 	{
+		// The call's over (gone cold, say) mid-arrest: let the officer go rather than leave them locked to us.
+		if (ArrestState == EFTOPerpArrest::Cuffing || ArrestState == EFTOPerpArrest::Struggling)
+		{
+			GetWorldTimerManager().ClearTimer(CuffTimer);
+			ReleaseArrester();
+			ArrestState = EFTOPerpArrest::Surrendered;
+		}
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
