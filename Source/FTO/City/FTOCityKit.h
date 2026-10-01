@@ -16,12 +16,12 @@ namespace FTOKit
 	constexpr float UpperHeight = 320.f;
 	constexpr float WallThickness = 30.f;
 
-	/** Top of the kit's chairs, benches and booths (build_kit.py SEAT): low, for a cast that's short in the leg. */
-	constexpr float SeatHeight = 31.f;
-	/** Sitting (A_Officer_Sit): the root is this far below the seat top... */
-	constexpr float SitDrop = 33.f;
+	/** Top of the kit's chairs, benches and booths (build_kit.py SEAT): an ordinary chair. */
+	constexpr float SeatHeight = 45.f;
+	/** Sitting (A_FTO_Sit, made for a 45 cm chair, hip joints 53 cm up): the root is this far below the seat top... */
+	constexpr float SitDrop = 45.f;
 	/** ...and this far in front of whatever they lean back on. */
-	constexpr float SitBack = 27.f;
+	constexpr float SitBack = 18.f;
 }
 
 /** What goes on inside a building's ground floor. */

@@ -13,7 +13,7 @@
 ## Pitch
 A 4-player online co-op party game. You and three friends run a city police precinct for one shift. Crimes pop up all over a living, medium-sized city — from someone stealing a garden gnome to a full-blown bank heist to a (cartoonishly incompetent) terrorist plot. Every call you ignore, every traffic violation you let slide, pushes the city's **Chaos Meter** up. Hit 100% and the city descends into slapstick anarchy and your shift is over.
 
-The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: bright, chunky, low-poly art, bean-shaped officers, silly suspects, physics comedy.
+The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: bright, chunky low-poly cities with detailed, life-like (but still playful) people, silly suspects, physics comedy.
 
 ## Pillars
 1. **Party first.** Readable chaos, shouting at your friends, clutch saves. Sessions are short and replayable.
@@ -69,7 +69,7 @@ Medium-scale procedural grid city (a few districts: downtown, residential, indus
 - Online subsystem: Null for LAN/dev; Steam or EOS for release (both free).
 
 ## Art & animation
-- Stylized low-poly, bright palette, chunky proportions.
+- Stylized low-poly city in a bright palette; the people are detailed and life-like (Epic's mannequin proportions and animations, our own models and clips), with a sense of fun.
 - Only free (CC0) or in-house assets: Kenney, Quaternius, Poly Pizza CC0, plus Blender-scripted in-house models and animations.
 - Everything so far is in-house and Blender-scripted: characters, vehicles, and a modular building kit (bevelled walls,
   shopfronts, awnings, signs, rooftop clutter, furniture, street dressing) that the city is assembled from at runtime.

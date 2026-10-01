@@ -28,6 +28,7 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	UAnimSequence* Walk = nullptr;
 	UAnimSequence* Run = nullptr;
 	UAnimSequence* Jump = nullptr;
+	UAnimSequence* Fall = nullptr;
 	UAnimSequence* AimPistol = nullptr;
 	UAnimSequence* AimRifle = nullptr;
 	UAnimSequence* HandsBehind = nullptr;
@@ -36,13 +37,15 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	// Inputs, written on the game thread each frame
 	float Speed = 0.f;
 	bool bInAir = false;
+	/** Going up (a jump) rather than over an edge. */
+	bool bRising = false;
 	EFTOAnimAction Action = EFTOAnimAction::None;
 	EFTOAimPose Aim = EFTOAimPose::None;
 	float AimPitch = 0.f;
 
-	// Ground speeds (cm/s) at which the walk and run clips' strides match 1:1 with no sliding.
-	float WalkReferenceSpeed = 200.f;
-	float RunReferenceSpeed = 475.f;
+	// Ground speeds (cm/s) at which the walk and run clips' strides match 1:1 with no sliding (Epic's walk and jog).
+	float WalkReferenceSpeed = 300.f;
+	float RunReferenceSpeed = 600.f;
 
 	/** A pose to ease out of (local space, one transform per mesh bone), e.g. where a ragdoll came to rest. */
 	TArray<FTransform> FromPose;
@@ -57,6 +60,8 @@ private:
 	void Sample(UAnimSequence* Sequence, float Time, FPoseContext& Out) const;
 	static void Blend(FPoseContext& InOut, const FPoseContext& Other, float Alpha);
 	void ApplyAimLayer(FPoseContext& Output);
+	/** Lean the chest, neck and head forward (negative) or back by Degrees in all, about the body's side-to-side axis. */
+	void Bend(FPoseContext& Output, float Degrees) const;
 	UAnimSequence* ClipFor(EFTOAnimAction InAction) const;
 	UAnimSequence* ClipFor(EFTOAimPose InAim) const;
 
@@ -80,8 +85,9 @@ private:
 };
 
 /**
- * Native animation for every FTO character. Any skeletal mesh on the officer skeleton can use it;
- * the owning actor implements IFTOAnimatedActor to say what it's doing.
+ * Native animation for every FTO character. Any skeletal mesh on Epic's mannequin skeleton can use it (walking,
+ * running, jumping and the weapon poses are Epic's own animations; the rest are ours); the owning actor implements
+ * IFTOAnimatedActor to say what it's doing.
  */
 UCLASS(Transient, NotBlueprintable)
 class FTO_API UFTOCharacterAnimInstance : public UAnimInstance
@@ -95,10 +101,11 @@ public:
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> WalkClip;
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> RunClip;
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> JumpClip;
+	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> FallClip;
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> AimPistolClip;
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> AimRifleClip;
 	UPROPERTY(EditAnywhere, Category="Clips") TObjectPtr<UAnimSequence> HandsBehindClip;
-	/** One clip per EFTOAnimAction (A_Officer_<ActionName>). */
+	/** One clip per EFTOAnimAction (A_FTO_<ActionName>). */
 	UPROPERTY(EditAnywhere, Category="Clips") TMap<EFTOAnimAction, TObjectPtr<UAnimSequence>> ActionClips;
 
 	/**

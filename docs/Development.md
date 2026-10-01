@@ -131,13 +131,53 @@ checks it heard the call and has the client's voice going through the radio filt
 host). Finally the client checks it sees everything the host broke broken too.
 
 ## Art pipeline
-- **Characters**: `Tools/Blender/build_officer.py` models, rigs and animates the officer entirely from code and exports FBX
-  to `Art/Source/Characters/Officer` (plus an editable `Officer.blend`):
-  `blender -b --factory-startup -P Tools/Blender/build_officer.py -- --out Art/Source/Characters/Officer --preview <dir>`
-  (`--preview` renders turnaround and clip frames; `Tools/Blender/contact_sheet.py` tiles them into one image.
-  `--clips HandsBehind,Cuffing` re-exports just those clips, e.g. after adding or tweaking one.)
-- `Tools/Blender/build_civilians.py` makes eight citizen variants and the striped-jumper suspect on the **same skeleton**,
-  so every character shares the officer's clips. Shirts are tinted per pedestrian at runtime.
+- **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine
+  animations (walking, jogging, jumping, holding a pistol or rifle) and ragdoll (`PA_Mannequin`). That content ships with
+  every engine install but isn't ours to publish, so it's git-ignored: after cloning, run
+  `python Tools/Unreal/install_epic_content.py` once (it copies it to `Content/Characters/Mannequins`).
+- **Characters** (on the UE5 mannequin skeleton, so they also play Epic's engine animations):
+  `Tools/Blender/build_characters.py` builds `SK_Officer`, `SK_Officer_F` (in `Art/Source/Characters/Officer`,
+  plus `Officers.blend`), `SK_Civilian_01..08` and `SK_Suspect` (in `Art/Source/Characters/Civilians`, plus
+  `Civilians.blend`):
+  `blender -b --factory-startup -P Tools/Blender/build_characters.py -- --out Art/Source/Characters --preview Art/Previews/Characters`
+  (`--only SK_Officer,SK_Suspect` rebuilds just those.) Each body is one smooth, watertight surface: skin, clothes,
+  hair and hats are signed distance fields (`Tools/Blender/fto_sdf.py`, numpy only) stacked as layers and meshed
+  with surface nets, then decimated to about 10k triangles, so clothes can't clip through a bent joint and hems are
+  small steps. Faces take the colour of the layer they lie on and the mesh is cut exactly where layers meet (crisp
+  hems, hairlines, stripes). Hands are separate meshes with jointed fingers; eyes, brows, mouth, badges, pouches and
+  buttons are props placed on the surface. Weights come from bone proximity per body region (an arm never pulls the
+  ribs, one leg never the other), smoothed over the surface; the head is rigid above the jaw; props take the
+  weights under them; at most four influences. `Col` vertex alpha 1 = tinted in game (the uniform shirt, civilians'
+  tops). About 12-15k triangles each. Casting (build, skin tone, hair, outfit) is the `CAST` table at the top.
+- **Clips**: `Tools/Blender/build_character_anims.py` exports our own clips on that skeleton as
+  `Art/Source/Characters/Anims/A_FTO_<Clip>.fbx` (armature only, 30 fps, root left at the origin), all of them in
+  `Anims.blend`, and `fight_timing.json` (per fighting clip: contact frame/time, reach in cm from the root, the bone
+  that lands it, the contact point, and `travel_cm` for clips whose body moves away from the root, e.g. the heavy
+  stagger and knockback):
+  `blender -b --factory-startup -P Tools/Blender/build_character_anims.py -- --out Art/Source/Characters/Anims --preview Art/Previews/Characters/Clips`
+  (`--clips Jab,Cross` for just some; the preview poses `SK_Officer` from `--mesh`, default
+  `Art/Source/Characters/Officer/Officers.blend`, so build the characters first). Clips are written in
+  `Tools/Blender/character_clips.py` as keyed controls solved by `Tools/Blender/fto_pose.py`: IK hands and feet
+  (planted feet stay put while the hips shift), spine and neck bends spread over the chain, finger curls, and lag
+  on the head, fingers and wrists for overlap. Loops: `Sit`, `Drive`, `Ride`, `Talk`, `Work`, `HandsUp`, `Kneel`,
+  `Cuffed`, `HandsBehind`, `Cower`, `Dance`, `Dance2`, `Slump`, `Dazed`, `SitCuffed`, `SitHandsUp`, `Struggle`,
+  `Idle_Bored`, `Phone`, `Wave`, `Point`, `Clipboard`, `Search`, `SearchedPose`, `Spray`, `Smash`, `Grab`
+  (rummaging), `Sneak` (1 m/s). One-shots: `Cuffing` (2.6 s), `Tackle`, `Interact`, `Cheer`. Fighting: `Jab`,
+  `Cross`, `Hook`, `Uppercut`, `Kick_Front`, `Kick_Side`, `Kick_Roundhouse`, `Shove`, `Fight_Grab` (clinch start;
+  `Grab` was taken by the rummage), `Throw`, `Block_Loop`, `HitReact_Light_Front/Back/Left/Right`, `HitReact_Heavy`,
+  `Knockback`, `GetUp_Front`, `GetUp_Back`, `Taunt`, `Fight_Idle`, `Fight_Step_Fwd/Back/Left/Right` (1 m/s).
+  Spots the clips assume: `Sit` is a 45 cm chair (hip joints 53 cm up, 4.5 cm behind the root, feet 44 cm ahead);
+  the car clips (`Drive`, `Ride`, `SitCuffed`, `SitHandsUp`) sit with the hip joints 40 cm up and 5 cm behind the
+  root, feet about 60 cm ahead, and `Drive`'s wheel is centred 40 cm ahead of the root at 88 cm, tilted 25 degrees
+  towards the driver, 36 cm across. `Cuffing` has the suspect kneeling (`Cuffed`) 76 cm ahead facing away;
+  `Search` has them 55 cm ahead facing away (`SearchedPose`, hands on a wall 68 cm ahead of them); `Struggle` and
+  the clinch are face to face about 50-55 cm apart. `Knockback` ends lying face up 110 cm behind the root, where
+  `GetUp_Back` starts (it and `GetUp_Front` start lying with the pelvis over the root). Walk/run/jump/aiming come
+  from Epic's mannequin animations.
+- `Tools/Unreal/import_art.py` imports the cast onto Epic's skeleton (`/Game/Characters/Mannequins/Meshes/SK_Mannequin`)
+  with `PA_Mannequin` as their ragdoll, and our clips to `/Game/FTO/Characters/Anims` (`FTO_IMPORT=clips FTO_CLIPS=Jab`
+  for just some). Shirts are tinted per pedestrian at runtime. (`build_officer.py` and `build_civilians.py`, the old
+  cartoon cast on its own skeleton, are kept only for the seated figures in `build_vehicles.py`'s previews.)
 - `Tools/Blender/build_vehicles.py` builds the cars (sedan, hatchback, van, pickup, taxi, ice cream truck, cruiser) and
   a shared wheel as static meshes facing +X. They're real shells: doors, floor, dashboard, seats and a steering wheel
   behind see-through glass, plus the cruiser's police kit (MDT laptop, radio, radar, shotgun rack, cage, lightbar
@@ -206,8 +246,13 @@ host). Finally the client checks it sees everything the host broke broken too.
     a light or heavy impact (heavy ones with the metal groaning after), knockdowns land with a body fall, and the
     city hums under everything.
 - **Animation** needs no Animation Blueprint: `UFTOCharacterAnimInstance` samples the clips in C++ and blends
-  idle/walk/run by speed, with full-body actions (tickets, cuffing, driving, riding along...) crossfading straight
-  into one another, and an upper-body layer on top (aiming, or hands cuffed behind the back). Actors animating several
+  idle/walk/run by speed (Epic's `MM_Idle`, `MF_Unarmed_Walk_Fwd` and `MF_Unarmed_Jog_Fwd`, held in place, at 300 and
+  600 cm/s), the take-off then a fall loop in the air, with full-body actions (our `A_FTO_<Action>` clips: tickets,
+  cuffing, driving, riding along, spraying graffiti...) crossfading straight into one another, and an upper-body layer
+  on top: Epic's pistol or rifle aiming pose (the chest, arms and fingers, and the hand IK bones), or hands cuffed
+  behind the back. Looking up and down leans the spine, neck and head about the body's side-to-side axis, so the arms
+  follow the aim. Guns go in the right hand where Epic's aiming poses put one (`FTOWeapons::HoldInHand`), so the hands
+  are always on the gun. Actors animating several
   people (a car's driver and passengers) pick each one's action per mesh. Two-person moves (cuffing, a struggle) lock
   the officer onto a spot beside the suspect (`AFTOCharacter::BeginSyncedAction`) so the two clips line up.
 - **Destruction** (`Source/FTO/Physics`): `AFTODestruction` keeps the list of broken pieces of the city, a replicated

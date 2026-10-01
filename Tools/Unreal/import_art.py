@@ -30,20 +30,21 @@ KIT_SLOT_MATERIALS = {
 # Blender works in metres; Unreal in centimetres.
 METRES_TO_CM = 1.0  # FBX from Tools/Blender already carries centimetres
 
-OFFICER_SKELETON = "/Game/FTO/Characters/Officer/SK_Officer_Skeleton"
+# Everyone is built on Epic's UE5 mannequin skeleton (Tools/Blender/fto_rig.py), so the cast shares Epic's
+# animations (Content/Characters/Mannequins, installed by Tools/Unreal/install_epic_content.py), our own clips and its
+# ragdoll (PA_Mannequin).
+MANNEQUIN_SKELETON = "/Game/Characters/Mannequins/Meshes/SK_Mannequin"
+MANNEQUIN_PHYSICS = "/Game/Characters/Mannequins/Rigs/PA_Mannequin"
 
-# Everyone shares the officer's skeleton, so the officer's clips animate every character.
 CHARACTERS = [
-    {"folder": "Characters/Officer", "meshes": ["SK_Officer"],
-     "clips": ["Idle", "Walk", "Run", "Jump", "Interact", "Cheer",
-               "Sit", "Drive", "Talk", "Work", "HandsUp", "Kneel", "Cuffed", "Cuffing", "Struggle", "Tackle",
-               "Punch", "Cower", "AimPistol", "AimRifle", "Dance", "Slump", "Dazed",
-               "Ride", "SitCuffed", "SitHandsUp", "HandsBehind"],
+    {"folder": "Characters/Officer", "meshes": ["SK_Officer", "SK_Officer_F"],
      "dest": "/Game/FTO/Characters/Officer"},
     {"folder": "Characters/Civilians",
      "meshes": [f"SK_Civilian_{i:02d}" for i in range(1, 9)] + ["SK_Suspect"],
-     "clips": [], "dest": "/Game/FTO/Characters/Civilians", "skeleton": OFFICER_SKELETON},
+     "dest": "/Game/FTO/Characters/Civilians"},
 ]
+# Our own clips (Tools/Blender/build_character_anims.py): every A_FTO_*.fbx in the folder.
+CLIPS = {"folder": "Characters/Anims", "dest": "/Game/FTO/Characters/Anims"}
 
 # Static meshes (vehicles, weapons): folder, names, the sockets the game looks up on them, destination, and the
 # FTO_IMPORT key that picks the group alone.
@@ -111,7 +112,7 @@ def skeletal_options(skeleton=None):
     ui.set_editor_property("import_animations", False)
     ui.set_editor_property("import_materials", False)
     ui.set_editor_property("import_textures", False)
-    ui.set_editor_property("create_physics_asset", False)  # built properly by ensure_physics_assets()
+    ui.set_editor_property("create_physics_asset", False)  # everyone uses Epic's PA_Mannequin
     ui.set_editor_property("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)
     data = ui.get_editor_property("skeletal_mesh_import_data")
     data.set_editor_property("import_uniform_scale", METRES_TO_CM)
@@ -221,7 +222,7 @@ def import_kit():
     materials = {slot: eal.load_asset(path) for slot, path in KIT_SLOT_MATERIALS.items()}
     with open(os.path.join(source, "kit_manifest.json")) as f:
         manifest = json.load(f)  # written by build_kit.py: the material slots each piece uses
-    names = sorted(f[:-4] for f in os.listdir(source) if f.lower().endswith(".fbx"))
+    names = sorted(f[:-4] for f in os.listdir(source) if f.lower().endswith(".fbx") and (not MESHES or f[:-4] in MESHES))
     nanite_count = 0
     for name in names:
         path = f"{KIT_DEST}/{name}"
@@ -245,7 +246,7 @@ def import_kit():
         convex = len(geom.get_editor_property("convex_elems")) if geom else 0
         unreal.log(f"FTO: kit {name} nanite={nanite} collision={boxes} boxes + {convex} hulls")
         eal.save_loaded_asset(mesh)
-    eal.save_directory(KIT_DEST, only_if_is_dirty=False, recursive=True)
+    eal.save_directory(KIT_DEST, only_if_is_dirty=bool(MESHES), recursive=True)
     unreal.log(f"FTO: imported {len(names)} kit pieces ({nanite_count} Nanite)")
 
 
@@ -260,15 +261,25 @@ def apply_base_material(mesh):
     eal.save_loaded_asset(mesh)
 
 
-def import_mesh(source, mesh_name, destination, skeleton=None):
-    remove_if_wrong_type(f"{destination}/{mesh_name}", "SkeletalMesh")
+def import_mesh(source, mesh_name, destination, skeleton):
+    # (A mesh on another skeleton can't be re-imported in place onto this one.)
+    path = f"{destination}/{mesh_name}"
+    remove_if_wrong_type(path, "SkeletalMesh")
+    old = eal.load_asset(path) if eal.does_asset_exist(path) else None
+    if old and old.get_editor_property("skeleton") != skeleton:
+        unreal.log_warning(f"FTO: {mesh_name} was on {old.get_editor_property('skeleton').get_name()}: starting it afresh")
+        old = None
+        eal.delete_asset(path)
     run_import(os.path.join(source, mesh_name + ".fbx"), destination, mesh_name, skeletal_options(skeleton))
 
-    mesh = eal.load_asset(f"{destination}/{mesh_name}")
+    mesh = eal.load_asset(path)
     if not mesh:
-        unreal.log_error(f"FTO: missing {destination}/{mesh_name} after import")
+        unreal.log_error(f"FTO: missing {path} after import")
         return None
     apply_base_material(mesh)
+    # Epic's ragdoll fits (every body is built on the mannequin's own bones).
+    mesh.set_editor_property("physics_asset", eal.load_asset(MANNEQUIN_PHYSICS))
+    eal.save_loaded_asset(mesh)
 
     bounds = mesh.get_bounds()
     skeleton_name = mesh.get_editor_property("skeleton").get_name()
@@ -276,14 +287,26 @@ def import_mesh(source, mesh_name, destination, skeleton=None):
     return mesh
 
 
-def import_clips(source, mesh_name, clips, destination, skeleton):
-    for clip in clips:
-        anim_name = f"A_{mesh_name[3:]}_{clip}"  # SK_Officer -> A_Officer_Walk
+def import_clips(names=None):
+    """Our clips onto the mannequin skeleton: every A_FTO_*.fbx, or just the named ones (Walk, not A_FTO_Walk)."""
+    skeleton = eal.load_asset(MANNEQUIN_SKELETON)
+    if not skeleton:
+        unreal.log_error("FTO: no mannequin skeleton: run Tools/Unreal/install_epic_content.py first")
+        return
+    source = os.path.join(ART, CLIPS["folder"])
+    destination = CLIPS["dest"]
+    for filename in sorted(os.listdir(source)):
+        if not (filename.startswith("A_FTO_") and filename.endswith(".fbx")):
+            continue
+        anim_name = filename[:-4]
+        if names and anim_name[len("A_FTO_"):] not in names:
+            continue
         remove_if_wrong_type(f"{destination}/{anim_name}", "AnimSequence")
-        run_import(os.path.join(source, anim_name + ".fbx"), destination, anim_name, animation_options(skeleton))
+        run_import(os.path.join(source, filename), destination, anim_name, animation_options(skeleton))
         anim = eal.load_asset(f"{destination}/{anim_name}")
         if anim:
             unreal.log(f"FTO: {anim_name} length {anim.get_play_length():.2f}s")
+            eal.save_loaded_asset(anim)
         else:
             unreal.log_error(f"FTO: animation {anim_name} missing after import")
 
@@ -291,62 +314,29 @@ def import_clips(source, mesh_name, clips, destination, skeleton):
 def import_group(group):
     source = os.path.join(ART, group["folder"])
     destination = group["dest"]
-    shared = eal.load_asset(group["skeleton"]) if group.get("skeleton") else None
-
+    skeleton = eal.load_asset(MANNEQUIN_SKELETON)
+    if not skeleton:
+        unreal.log_error("FTO: no mannequin skeleton: run Tools/Unreal/install_epic_content.py first")
+        return
     for mesh_name in group["meshes"]:
-        mesh = import_mesh(source, mesh_name, destination, shared)
-        if mesh and group["clips"]:
-            import_clips(source, mesh_name, group["clips"], destination, mesh.get_editor_property("skeleton"))
-
-    # Secondary assets (skeleton, physics asset) aren't saved by the import task itself.
+        import_mesh(source, mesh_name, destination, skeleton)
     eal.save_directory(destination, only_if_is_dirty=False, recursive=True)
-
     # List what actually landed, to catch importer renames.
     for path in eal.list_assets(destination, recursive=False):
         unreal.log(f"FTO: asset {path}")
 
 
-def ensure_physics_assets():
-    """Ragdolls need a capsule per limb; the importer's auto physics asset merges our small bones away."""
-    for group in CHARACTERS:
-        for mesh_name in group["meshes"]:
-            mesh = eal.load_asset(f"{group['dest']}/{mesh_name}")
-            if not mesh:
-                continue
-            bodies = unreal.FTOEditorLibrary.rebuild_physics_asset(mesh, 2.0)
-            physics = mesh.get_editor_property("physics_asset")
-            if physics:
-                eal.save_loaded_asset(physics)
-            eal.save_loaded_asset(mesh)
-            unreal.log(f"FTO: {mesh_name} physics asset has {bodies} bodies")
-
-
-def import_named_clips(names):
-    """Just these clips, onto the meshes already imported (so nothing else is re-imported and churned)."""
-    for group in CHARACTERS:
-        wanted = [clip for clip in group["clips"] if clip in names]
-        for mesh_name in group["meshes"] if wanted else []:
-            mesh = eal.load_asset(f"{group['dest']}/{mesh_name}")
-            if not mesh:
-                unreal.log_error(f"FTO: import {mesh_name} before its clips")
-                continue
-            import_clips(os.path.join(ART, group["folder"]), mesh_name, wanted, group["dest"], mesh.get_editor_property("skeleton"))
-            for clip in wanted:
-                eal.save_asset(f"{group['dest']}/A_{mesh_name[3:]}_{clip}", only_if_is_dirty=False)
-
-
-# FTO_IMPORT=characters|statics|vehicles|weapons|kit limits the run (default: everything); FTO_IMPORT=clips with
-# FTO_CLIPS=A,B imports only those animation clips, and FTO_MESHES=A,B only those static meshes (vehicles, weapons).
+# FTO_IMPORT=characters|clips|statics|vehicles|weapons|kit limits the run (default: everything); with
+# FTO_IMPORT=clips, FTO_CLIPS=Walk,Jab imports only those clips, and FTO_MESHES=A,B only those static meshes.
 ONLY = os.environ.get("FTO_IMPORT", "").lower()
 MESHES = set(filter(None, os.environ.get("FTO_MESHES", "").split(",")))
-
-if ONLY == "clips":
-    import_named_clips(set(filter(None, os.environ.get("FTO_CLIPS", "").split(","))))
 
 if ONLY in ("", "characters"):
     for character_group in CHARACTERS:
         import_group(character_group)
-    ensure_physics_assets()
+
+if ONLY in ("", "characters", "clips"):
+    import_clips(set(filter(None, os.environ.get("FTO_CLIPS", "").split(","))))
 
 for static_group in STATICS:
     if ONLY in ("", "statics", static_group["key"]):

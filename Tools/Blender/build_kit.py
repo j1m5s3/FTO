@@ -36,10 +36,10 @@ G = 4.0     # ground floor height
 U = 3.2     # upper floor height
 T = 0.3     # wall thickness
 
-# The cast are short in the leg (hip 0.72 m, knee 0.42 m), so seats are low: at SEAT a sitter's feet reach the floor
-# and their hands the 0.75 m tables. Stools stay tall (feet dangle, as on any bar stool). FTOCityInteriors.cpp seats
-# people to these numbers.
-SEAT = 0.31
+# Seats are an ordinary 0.45 m, which is what the cast (Epic's mannequin proportions) sit on in their Sit clip (hip joints
+# 0.53 m up): feet flat on the floor, hands at the 0.75 m tables. Stools stay tall (feet dangle, as on any bar stool).
+# FTOCityInteriors.cpp seats people to these numbers.
+SEAT = 0.45
 
 # Colours (sRGB)
 PAINT = (0.85, 0.85, 0.85)          # tinted in game

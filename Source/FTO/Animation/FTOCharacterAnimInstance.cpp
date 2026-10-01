@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Misc/Paths.h"
 
 namespace
 {
@@ -13,19 +14,49 @@ namespace
 		return Length > KINDA_SMALL_NUMBER ? FMath::Fmod(Time, Length) : 0.f;
 	}
 
+	/** One of our clips (Tools/Blender/character_clips.py). */
 	UAnimSequence* FindClip(const FString& Name)
 	{
-		const FString Path = FString::Printf(TEXT("/Game/FTO/Characters/Officer/A_Officer_%s.A_Officer_%s"), *Name, *Name);
+		const FString Path = FString::Printf(TEXT("/Game/FTO/Characters/Anims/A_FTO_%s.A_FTO_%s"), *Name, *Name);
 		ConstructorHelpers::FObjectFinder<UAnimSequence> Finder(*Path);
 		return Finder.Object;
 	}
 
-	/** Bones the aim layer takes over (everything from the waist up). */
-	const FName UpperBodyBones[] =
+	/** One of Epic's mannequin animations (Content/Characters/Mannequins/Anims, Tools/Unreal/install_epic_content.py). */
+	UAnimSequence* FindEpic(const TCHAR* Path)
 	{
-		TEXT("spine"), TEXT("head"),
-		TEXT("upperarm_l"), TEXT("lowerarm_l"), TEXT("hand_l"),
-		TEXT("upperarm_r"), TEXT("lowerarm_r"), TEXT("hand_r"),
+		const FString Name = FPaths::GetBaseFilename(Path);
+		ConstructorHelpers::FObjectFinder<UAnimSequence> Finder(*FString::Printf(TEXT("/Game/Characters/Mannequins/Anims/%s.%s"), Path, *Name));
+		return Finder.Object;
+	}
+
+	/** Actions whose clip has another name. */
+	FString ClipNameFor(const FString& Action)
+	{
+		if (Action == TEXT("Punch"))     return TEXT("Cross");
+		if (Action == TEXT("IdleBored")) return TEXT("Idle_Bored");
+		return Action;
+	}
+
+	/** Is Bone (a mesh bone index) the upper body: the chest and everything on it, or the hand IK bones? */
+	bool IsUpperBody(const FReferenceSkeleton& Skeleton, int32 Bone)
+	{
+		for (int32 At = Bone; At != INDEX_NONE; At = Skeleton.GetParentIndex(At))
+		{
+			const FName Name = Skeleton.GetBoneName(At);
+			if (Name == TEXT("spine_01") || Name == TEXT("ik_hand_root"))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/** How much of a lean each bone takes (chest most, then the neck and head). */
+	const TPair<const TCHAR*, float> BendShares[] =
+	{
+		{ TEXT("spine_01"), 0.08f }, { TEXT("spine_02"), 0.12f }, { TEXT("spine_03"), 0.15f }, { TEXT("spine_04"), 0.15f },
+		{ TEXT("spine_05"), 0.1f }, { TEXT("neck_01"), 0.1f }, { TEXT("neck_02"), 0.1f }, { TEXT("head"), 0.2f },
 	};
 }
 
@@ -78,7 +109,12 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	LocoPhase = FMath::Fmod(LocoPhase + DeltaSeconds * PlayRate / FMath::Max(0.05f, CycleLength), 1.f);
 
 	AirWeight = FMath::FInterpTo(AirWeight, bInAir ? 1.f : 0.f, DeltaSeconds, 12.f);
-	AirTime = bInAir ? Wrap(AirTime + DeltaSeconds, Jump) : 0.f;
+	// The take-off once, then falling for as long as it lasts (walking off a ledge, there's no take-off).
+	if (bInAir && AirTime <= 0.f && !bRising && Jump)
+	{
+		AirTime = Jump->GetPlayLength();
+	}
+	AirTime = bInAir ? AirTime + DeltaSeconds : 0.f;
 
 	// Fade actions in and out. Going from one action straight to another crossfades between the two (kneeling to
 	// kneeling in cuffs mustn't stand up in between).
@@ -132,6 +168,11 @@ void FFTOCharacterAnimProxy::Sample(UAnimSequence* Sequence, float Time, FPoseCo
 	}
 	FAnimationPoseData PoseData(Out);
 	Sequence->GetAnimationPose(PoseData, FAnimExtractContext(double(Wrap(Time, Sequence)), false));
+	// In place: Epic's walk and jog carry the root forward (root motion), which the capsule does for us.
+	if (Out.Pose.GetNumBones() > 0)
+	{
+		Out.Pose[FCompactPoseBoneIndex(0)].SetTranslation(FVector::ZeroVector);
+	}
 }
 
 void FFTOCharacterAnimProxy::Blend(FPoseContext& InOut, const FPoseContext& Other, float Alpha)
@@ -158,36 +199,85 @@ void FFTOCharacterAnimProxy::ApplyAimLayer(FPoseContext& Output)
 	FPoseContext AimPose(this);
 	Sample(ClipFor(ShownAim), AimTime, AimPose);
 
+	// The chest and everything on it (arms, hands and fingers round the grip) from the aim pose. The chest is held
+	// as the aim pose has it in the body's own space, not on top of the legs' pelvis, so the gun points where the aim
+	// pose points it and doesn't sway with the walk.
 	const FBoneContainer& Bones = Output.Pose.GetBoneContainer();
-	auto ToCompact = [&Bones](FName Name) -> FCompactPoseBoneIndex
+	const FReferenceSkeleton& RefSkeleton = Bones.GetReferenceSkeleton();
+	const int32 ChestBone = RefSkeleton.FindBoneIndex(TEXT("spine_01"));
+	const FCompactPoseBoneIndex Chest = ChestBone == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(ChestBone));
+	FQuat ChestLocal = FQuat::Identity;
+	if (Chest.IsValid())
 	{
-		const int32 MeshIndex = Bones.GetPoseBoneIndexForBoneName(Name);
-		return MeshIndex == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshIndex));
-	};
-
-	for (const FName& Name : UpperBodyBones)
-	{
-		const FCompactPoseBoneIndex Index = ToCompact(Name);
-		if (Index.IsValid())
+		// (Component-space rotation of the chest's parents, in each pose.)
+		auto ParentRotation = [&](const FCompactPose& Pose)
 		{
+			FQuat Rotation = FQuat::Identity;
+			for (int32 At = RefSkeleton.GetParentIndex(ChestBone); At != INDEX_NONE; At = RefSkeleton.GetParentIndex(At))
+			{
+				const FCompactPoseBoneIndex Compact = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(At));
+				Rotation = (Compact.IsValid() ? Pose[Compact].GetRotation() : RefSkeleton.GetRefBonePose()[At].GetRotation()) * Rotation;
+			}
+			return Rotation;
+		};
+		ChestLocal = ParentRotation(Output.Pose).Inverse() * ParentRotation(AimPose.Pose) * AimPose.Pose[Chest].GetRotation();
+	}
+	for (const FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
+	{
+		if (IsUpperBody(RefSkeleton, Bones.MakeMeshPoseIndex(Bone).GetInt()))
+		{
+			FTransform Target = AimPose.Pose[Bone];
+			if (Bone == Chest)
+			{
+				Target.SetRotation(ChestLocal.GetNormalized());
+				Target.SetTranslation(Output.Pose[Bone].GetTranslation());
+			}
 			FTransform Blended;
-			Blended.Blend(Output.Pose[Index], AimPose.Pose[Index], AimWeight);
-			Output.Pose[Index] = Blended;
+			Blended.Blend(Output.Pose[Bone], Target, AimWeight);
+			Output.Pose[Bone] = Blended;
 		}
 	}
 
-	// Look up/down by bending the spine (60%) and head (40%) about their side-to-side axis.
-	auto Bend = [&](FName Name, float Degrees)
+	// Look up and down: the whole chest leans with the aim, so the arms (and the gun in them) follow it.
+	Bend(Output, SmoothedPitch * AimWeight);
+}
+
+void FFTOCharacterAnimProxy::Bend(FPoseContext& Output, float Degrees) const
+{
+	if (FMath::Abs(Degrees) < 0.1f)
 	{
-		const FCompactPoseBoneIndex Index = ToCompact(Name);
-		if (Index.IsValid())
+		return;
+	}
+	const FBoneContainer& Bones = Output.Pose.GetBoneContainer();
+	const FReferenceSkeleton& RefSkeleton = Bones.GetReferenceSkeleton();
+	// The mannequin faces +Y in its own space, so leaning back is a turn about the X axis there. Each bone turns
+	// about that axis as its own frame sees it (worked out from where it is in the pose before any of the lean).
+	auto ComponentRotation = [&](int32 MeshBone)
+	{
+		FQuat Rotation = FQuat::Identity;
+		for (int32 At = MeshBone; At != INDEX_NONE; At = RefSkeleton.GetParentIndex(At))
 		{
-			FTransform& Local = Output.Pose[Index];
-			Local.SetRotation(Local.GetRotation() * FQuat(FVector::XAxisVector, FMath::DegreesToRadians(Degrees)));
+			const FCompactPoseBoneIndex Compact = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(At));
+			Rotation = (Compact.IsValid() ? Output.Pose[Compact].GetRotation() : RefSkeleton.GetRefBonePose()[At].GetRotation()) * Rotation;
 		}
+		return Rotation;
 	};
-	Bend(TEXT("spine"), -SmoothedPitch * 0.6f * AimWeight);
-	Bend(TEXT("head"), -SmoothedPitch * 0.4f * AimWeight);
+	TArray<TPair<FCompactPoseBoneIndex, FQuat>, TInlineAllocator<8>> Turns;
+	for (const TPair<const TCHAR*, float>& Share : BendShares)
+	{
+		const int32 MeshBone = RefSkeleton.FindBoneIndex(Share.Key);
+		const FCompactPoseBoneIndex Compact = MeshBone == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(MeshBone));
+		if (Compact.IsValid())
+		{
+			const FVector Axis = ComponentRotation(MeshBone).Inverse().RotateVector(FVector::XAxisVector);
+			Turns.Emplace(Compact, FQuat(Axis, FMath::DegreesToRadians(Degrees * Share.Value)));
+		}
+	}
+	for (const TPair<FCompactPoseBoneIndex, FQuat>& Turn : Turns)
+	{
+		FTransform& Local = Output.Pose[Turn.Key];
+		Local.SetRotation(Local.GetRotation() * Turn.Value);
+	}
 }
 
 bool FFTOCharacterAnimProxy::Evaluate(FPoseContext& Output)
@@ -211,11 +301,19 @@ bool FFTOCharacterAnimProxy::Evaluate(FPoseContext& Output)
 		Blend(Output, Moving, MoveAlpha);
 	}
 
-	// 2. Airborne.
+	// 2. Airborne: the take-off, then falling.
 	if (AirWeight > 0.01f)
 	{
 		FPoseContext Air(this);
-		Sample(Jump, AirTime, Air);
+		const float TakeOff = Jump ? Jump->GetPlayLength() : 0.f;
+		if (AirTime < TakeOff || !Fall)
+		{
+			Sample(Jump, FMath::Min(AirTime, FMath::Max(0.f, TakeOff - 0.01f)), Air);
+		}
+		else
+		{
+			Sample(Fall, AirTime - TakeOff, Air);
+		}
 		Blend(Output, Air, AirWeight);
 	}
 
@@ -270,12 +368,15 @@ bool FFTOCharacterAnimProxy::Evaluate(FPoseContext& Output)
 
 UFTOCharacterAnimInstance::UFTOCharacterAnimInstance()
 {
-	IdleClip = FindClip(TEXT("Idle"));
-	WalkClip = FindClip(TEXT("Walk"));
-	RunClip = FindClip(TEXT("Run"));
-	JumpClip = FindClip(TEXT("Jump"));
-	AimPistolClip = FindClip(TEXT("AimPistol"));
-	AimRifleClip = FindClip(TEXT("AimRifle"));
+	// Getting about and holding a gun: Epic's.
+	IdleClip = FindEpic(TEXT("Unarmed/MM_Idle"));
+	WalkClip = FindEpic(TEXT("Unarmed/Walk/MF_Unarmed_Walk_Fwd"));
+	RunClip = FindEpic(TEXT("Unarmed/Jog/MF_Unarmed_Jog_Fwd"));
+	JumpClip = FindEpic(TEXT("Unarmed/Jump/MM_Jump"));
+	FallClip = FindEpic(TEXT("Unarmed/Jump/MM_Fall_Loop"));
+	AimPistolClip = FindEpic(TEXT("Pistol/MF_Pistol_Idle_ADS"));
+	AimRifleClip = FindEpic(TEXT("Rifle/MF_Rifle_Idle_ADS"));
+	// Everything else: ours.
 	HandsBehindClip = FindClip(TEXT("HandsBehind"));
 
 	// Every action plays the clip named after it.
@@ -285,7 +386,7 @@ UFTOCharacterAnimInstance::UFTOCharacterAnimInstance()
 		const EFTOAnimAction Action = static_cast<EFTOAnimAction>(Actions->GetValueByIndex(i));
 		if (Action != EFTOAnimAction::None)
 		{
-			if (UAnimSequence* Clip = FindClip(Actions->GetNameStringByIndex(i)))
+			if (UAnimSequence* Clip = FindClip(ClipNameFor(Actions->GetNameStringByIndex(i))))
 			{
 				ActionClips.Add(Action, Clip);
 			}
@@ -312,6 +413,7 @@ void UFTOCharacterAnimInstance::NativeInitializeAnimation()
 	Proxy.Walk = WalkClip;
 	Proxy.Run = RunClip;
 	Proxy.Jump = JumpClip;
+	Proxy.Fall = FallClip;
 	Proxy.AimPistol = AimPistolClip;
 	Proxy.AimRifle = AimRifleClip;
 	Proxy.HandsBehind = HandsBehindClip;
@@ -345,6 +447,7 @@ void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		Proxy.Speed = Animated->GetAnimSpeed();
 		Proxy.bInAir = Animated->IsAnimAirborne();
+		Proxy.bRising = Owner && Owner->GetVelocity().Z > 50.f;
 		Proxy.Action = Animated->GetAnimActionFor(GetSkelMeshComponent());
 		Proxy.Aim = Animated->GetAimPose();
 		Proxy.AimPitch = Animated->GetAimPitch();

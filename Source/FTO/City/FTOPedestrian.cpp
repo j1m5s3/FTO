@@ -35,17 +35,17 @@ namespace
 		TEXT("\"I've never jaywalked in my life. Today.\""),
 	};
 
-	/** What sets each of Tools/Blender/build_civilians.py's variants apart, in SK_Civilian_01..08 order. */
+	/** What sets each of the cast apart (Tools/Blender/build_characters.py's CAST), in SK_Civilian_01..08 order. */
 	const TCHAR* LookNotes[] =
 	{
-		TEXT("short brown hair, jeans"),
-		TEXT("black hair in a bun, glasses"),
-		TEXT("bald, with a beard"),
-		TEXT("blonde bob, red trousers, a shoulder bag"),
-		TEXT("spiky black hair, red shoes"),
-		TEXT("baseball cap, ginger beard"),
-		TEXT("grey beanie, glasses, green trousers"),
-		TEXT("pink bob, a shoulder bag"),
+		TEXT("short brown hair, jeans, white trainers"),
+		TEXT("black hair in a bun, glasses, a dress, red shoes"),
+		TEXT("bald, with a beard, denim overalls"),
+		TEXT("blonde bob, a dark red skirt, a shoulder bag"),
+		TEXT("a black mohawk, green shorts, red shoes"),
+		TEXT("short ginger hair, a beard, a suit"),
+		TEXT("curly grey hair, glasses, an apron"),
+		TEXT("a pink ponytail, black trousers, boots"),
 	};
 
 	/** The shirt tint (FLinearColor::MakeFromHSV8 hue) in words. */
@@ -116,6 +116,7 @@ void AFTOPedestrian::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AFTOPedestrian, LookSeed);
 	DOREPLIFETIME(AFTOPedestrian, bChatting);
 	DOREPLIFETIME(AFTOPedestrian, bHandsUp);
+	DOREPLIFETIME(AFTOPedestrian, bBeingSearched);
 	DOREPLIFETIME(AFTOPedestrian, bSearched);
 	DOREPLIFETIME(AFTOPedestrian, Found);
 }
@@ -360,8 +361,18 @@ bool AFTOPedestrian::TalkChoice(AFTOCharacter* Officer, int32 Index)
 			// Hands up for the pat-down.
 			bSearched = true;
 			Found = Contraband();
-			Officer->PlayTimedAction(EFTOAnimAction::Interact, 2.2f);
-			bHandsUp = true;
+			// Turned round to face away, the officer squared up just behind them for the pat-down.
+			{
+				FVector Away = (GetActorLocation() - Officer->GetActorLocation()).GetSafeNormal2D();
+				if (Away.IsNearlyZero())
+				{
+					Away = Officer->GetActorForwardVector();
+				}
+				FaceYaw(Away.Rotation().Yaw);
+				const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, HalfHeight) - Away * 55.f;
+				Officer->BeginSyncedAction(EFTOAnimAction::Search, Feet, Away.Rotation().Yaw, this);
+			}
+			bBeingSearched = true;
 			GetWorldTimerManager().SetTimer(SearchPoseTimer, this, &AFTOPedestrian::EndSearchPose, 2.2f, false);
 			if (Found.IsEmpty())
 			{
@@ -396,7 +407,15 @@ bool AFTOPedestrian::TalkChoice(AFTOCharacter* Officer, int32 Index)
 
 void AFTOPedestrian::EndSearchPose()
 {
-	bHandsUp = false;
+	bBeingSearched = false;
+	if (AFTOCharacter* Officer = TalkingWith.Get())
+	{
+		if (Officer->IsInSyncedAction() && Officer->GetSyncedPartner() == this)
+		{
+			Officer->EndSyncedAction();
+		}
+		FaceOfficer(Officer);
+	}
 }
 
 FString AFTOPedestrian::AnswerWhatTheySaw()
@@ -525,7 +544,11 @@ EFTOAnimAction AFTOPedestrian::GetAnimAction() const
 	{
 		return EFTOAnimAction::Dazed;
 	}
-	return bHandsUp ? EFTOAnimAction::Cheer : (bChatting ? EFTOAnimAction::Interact : EFTOAnimAction::None);
+	if (bBeingSearched)
+	{
+		return EFTOAnimAction::SearchedPose;
+	}
+	return bHandsUp ? EFTOAnimAction::HandsUp : (bChatting ? EFTOAnimAction::Talk : EFTOAnimAction::None);
 }
 
 bool AFTOPedestrian::IsMovementFrozen() const
