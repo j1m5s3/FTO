@@ -1510,7 +1510,7 @@ void AFTOSmokeTest::BuildSteps()
 			const FVector At = TestPerp->GetActorLocation();
 			ViewFrom(At + TestPerp->GetActorRightVector() * 420.f + TestPerp->GetActorForwardVector() * 60.f + FVector(0.f, 0.f, 80.f), At + TestPerp->GetActorForwardVector() * 60.f);
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: mugging: %s, the mugger %s."), Victims > 0 ? TEXT("a victim with their hands up") : TEXT("NO VICTIM"),
-				TestPerp->GetAnimAction() == EFTOAnimAction::Talk ? TEXT("demanding their wallet") : TEXT("NOT AT IT"));
+				TestPerp->GetAnimAction() == EFTOAnimAction::Point ? TEXT("demanding their wallet") : TEXT("NOT AT IT"));
 		});
 		AddShot(TEXT("21a_mugging"), 0.3f);
 		AddStep(TEXT("mugger slips away"), 4.f, [this]()
@@ -1712,6 +1712,12 @@ void AFTOSmokeTest::BuildSteps()
 		});
 
 		// Upstairs: the lift to the top of a tower and back down, and the outside stairs up to a house's first floor.
+		// (Once the officer's hands are free: the arrests before take a moment to finish.)
+		AddWait(TEXT("officer free"), 6.f, [this]()
+		{
+			const AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			return !Cop || Cop->IsReadyForAction();
+		});
 		AddStep(TEXT("call the lift"), 0.3f, [this]()
 		{
 			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
@@ -2399,7 +2405,12 @@ void AFTOSmokeTest::BuildSteps()
 			TArray<int32> Order;
 			for (int32 s = 0; s < All.Num(); ++s)
 			{
-				if (!Wreckage->IsStructureDown(s, 99) && All[s].Floors >= 2)
+				// (Untouched: the crash checks before may have knocked a building or two about.)
+				const bool bUntouched = !All[s].Pieces.ContainsByPredicate([Wreckage](const FFTOStructurePiece& Piece)
+				{
+					return Piece.Role == EFTOPieceRole::Wall && (Wreckage->GetWallDamage(Piece.Component, Piece.Instance) > 0.f || Wreckage->IsBroken(Piece.Component, Piece.Instance));
+				});
+				if (bUntouched && !Wreckage->IsStructureDown(s, 99) && All[s].Floors >= 2)
 				{
 					Order.Add(s);
 				}
@@ -2415,7 +2426,9 @@ void AFTOSmokeTest::BuildSteps()
 				const FFTOStructure& S = All[Order[k]];
 				for (const FFTOStructurePiece& Piece : S.Pieces)
 				{
-					if (Piece.Role != EFTOPieceRole::Wall || Piece.Level != 0 || Piece.Face < 0)
+					// (A solid stretch of wall: not a doorway.)
+					if (Piece.Role != EFTOPieceRole::Wall || Piece.Level != 0 || Piece.Face < 0 || Piece.Component.ToString().Contains(TEXT("Door")) ||
+						Piece.Component.ToString().Contains(TEXT("Roller")))
 					{
 						continue;
 					}
@@ -2458,10 +2471,11 @@ void AFTOSmokeTest::BuildSteps()
 			// A gentle run at it first.
 			TestCruiser->SetAutopilot(false);
 			TestCruiser->StopDead();
-			const FVector Start = TestTarget + TestAway * 600.f;
+			const FVector Start = TestTarget + TestAway * 420.f;
 			TestCruiser->SetActorLocationAndRotation(FVector(Start.X, Start.Y, GroundZ(Start) + AFTOCruiser::RideHeight), (-TestAway).Rotation(), false, nullptr,
 				ETeleportType::TeleportPhysics);
-			TestCruiser->SetAutopilot(true, 1.f, 0.f);
+			TestCruiser->Launch(1150.f);
+			TestCruiser->SetAutopilot(true, 0.2f, 0.f);
 			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
 			ViewFrom(TestTarget + TestAway * 700.f + Across * 700.f + FVector(0.f, 0.f, 250.f), TestTarget + FVector(0.f, 0.f, 180.f));
 		});
@@ -2483,7 +2497,8 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			return Most;
 		};
-		AddWait(TEXT("ram lands"), 4.f, [WornNear]() { return WornNear() > 0.f; });
+		AddStep(TEXT("before the ram"), 0.f, [this, WornNear]() { RamBaseline = WornNear(); });
+		AddWait(TEXT("ram lands"), 4.f, [this, WornNear]() { return WornNear() > RamBaseline; });
 		AddStep(TEXT("ram result"), 0.5f, [this, WornNear]()
 		{
 			if (TestCruiser)
@@ -2493,7 +2508,7 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
 			const UFTODebris* Debris = UFTODebris::Get(GetWorld());
-			const float Worn = WornNear();
+			const float Worn = WornNear() > RamBaseline ? WornNear() : 0.f;
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: rammed a wall: %s (%.0f of %.0f worn, %d crack(s) showing)."), Worn >= AFTODestruction::WallStrength - 5.f ? TEXT("knocked in") : Worn > 0.f && Debris && Debris->NumCracks() > 0 ? TEXT("cracked") : TEXT("NO DAMAGE"),
 				Worn, AFTODestruction::WallStrength, Debris ? Debris->NumCracks() : -1);
 			if (TestCruiser)

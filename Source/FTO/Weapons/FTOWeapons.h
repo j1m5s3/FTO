@@ -70,5 +70,9 @@ namespace FTOWeapons
 	FTO_API FVector RoundDirection(const FVector& Aim, float Spread, int32 Seed, int32 Index);
 
 	/** Put Gun in Body's right hand (the grip just past the wrist) with the barrel along Aim. */
-	FTO_API void HoldInHand(USceneComponent* Gun, const USkeletalMeshComponent* Body, const FRotator& Aim);
+	/**
+	 * Put Gun in Body's right hand, held the way Pose (pistol or rifle) holds it: it follows the hand (whose arm the aim
+	 * pose raises and the lean points), so the hands are always on the gun.
+	 */
+	FTO_API void HoldInHand(USceneComponent* Gun, const USkeletalMeshComponent* Body, EFTOAimPose Pose);
 }

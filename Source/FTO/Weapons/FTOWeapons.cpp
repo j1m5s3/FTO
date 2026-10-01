@@ -98,11 +98,30 @@ FVector FTOWeapons::RoundDirection(const FVector& Aim, float Spread, int32 Seed,
 	return Spread > 0.f ? Rng.VRandCone(Aim.GetSafeNormal(), FMath::DegreesToRadians(Spread)) : Aim.GetSafeNormal();
 }
 
-void FTOWeapons::HoldInHand(USceneComponent* Gun, const USkeletalMeshComponent* Body, const FRotator& Aim)
+namespace
 {
+	/**
+	 * Where a gun (barrel along +X, the grip at its origin) sits relative to the right hand, worked out from Epic's
+	 * aiming poses (MF_Pistol_Idle_ADS, MF_Rifle_Idle_ADS): there the hand (hand_r, in the mannequin's own space, where
+	 * it faces +Y) holds a gun level and dead ahead, with the grip in the palm, a few centimetres on from the wrist.
+	 */
+	FTransform GripFor(EFTOAimPose Pose)
+	{
+		const bool bRifle = Pose == EFTOAimPose::Rifle;
+		const FQuat Hand = bRifle ? FQuat(-0.0387, 0.1691, -0.6336, 0.7540) : FQuat(-0.0455, -0.0562, 0.6828, -0.7270);
+		const FVector Wrist = bRifle ? FVector(-16.8, 7.1, 139.9) : FVector(-14.7, 35.2, 148.7);
+		const FTransform Gun(FRotationMatrix::MakeFromXZ(FVector::YAxisVector, FVector::ZAxisVector).ToQuat(), Wrist + FVector(1.5f, 6.f, -3.f));
+		return Gun.GetRelativeTransform(FTransform(Hand.GetNormalized(), Wrist));
+	}
+}
+
+void FTOWeapons::HoldInHand(USceneComponent* Gun, const USkeletalMeshComponent* Body, EFTOAimPose Pose)
+{
+	static const FTransform PistolGrip = GripFor(EFTOAimPose::Pistol);
+	static const FTransform RifleGrip = GripFor(EFTOAimPose::Rifle);
 	if (Gun && Body)
 	{
-		const FVector Wrist = Body->GetSocketLocation(TEXT("hand_r"));
-		Gun->SetWorldLocationAndRotation(Wrist + Aim.RotateVector(FVector(4.f, 0.f, -3.f)), Aim);
+		const FTransform Hand = Body->GetSocketTransform(TEXT("hand_r"));
+		Gun->SetWorldTransform((Pose == EFTOAimPose::Rifle ? RifleGrip : PistolGrip) * FTransform(Hand.GetRotation(), Hand.GetLocation()));
 	}
 }

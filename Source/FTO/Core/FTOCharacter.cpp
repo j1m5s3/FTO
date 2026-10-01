@@ -88,6 +88,9 @@ AFTOCharacter::AFTOCharacter()
 	BaseMaterial = BaseMat.Object;
 
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> OfficerMesh(TEXT("/Game/FTO/Characters/Officer/SK_Officer.SK_Officer"));
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> OfficerMeshF(TEXT("/Game/FTO/Characters/Officer/SK_Officer_F.SK_Officer_F"));
+	OfficerModel = OfficerMesh.Object;
+	OfficerModelF = OfficerMeshF.Object;
 	if (OfficerMesh.Succeeded())
 	{
 		// The Blender model faces +Y with feet at its origin.
@@ -320,6 +323,14 @@ void AFTOCharacter::RefreshOfficerColor()
 	if (!PS)
 	{
 		return;
+	}
+
+	// Every other badge number is a woman officer.
+	USkeletalMesh* Model = (PS->GetBadgeIndex() & 1) && OfficerModelF ? OfficerModelF.Get() : OfficerModel.Get();
+	if (!BodyMesh && Model && GetMesh()->GetSkeletalMeshAsset() != Model)
+	{
+		GetMesh()->SetSkeletalMeshAsset(Model);
+		UniformMaterial = nullptr;
 	}
 
 	// Real model: vertex alpha marks the shirt, so one tint colours just the uniform.
@@ -1027,15 +1038,17 @@ void AFTOCharacter::UpdateWeaponMesh()
 	}
 	if (bDrawn)
 	{
-		FTOWeapons::HoldInHand(WeaponMesh, GetMesh(), GetAimRotation());
+		FTOWeapons::HoldInHand(WeaponMesh, GetMesh(), GetAimPose());
 		return;
 	}
 	// Slung across the back (muzzle up over the right shoulder) or holstered on the right hip (muzzle down): placed
 	// for someone standing tall, then carried by the spine or the pelvis so it stays put when they crouch, kneel or
 	// wrestle.
 	const bool bLongGun = FTOWeapons::Spec(Shown).bLongGun;
-	const FName Bone = bLongGun ? FName(TEXT("spine")) : FName(TEXT("pelvis"));
-	const FTransform Stowed = bLongGun ? FTransform(FRotator(62.f, 180.f, 0.f), FVector(-28.f, -12.f, -20.f)) : FTransform(FRotator(-90.f, 0.f, 0.f), FVector(2.f, 34.f, -22.f));
+	const FName Bone = bLongGun ? FName(TEXT("spine_05")) : FName(TEXT("pelvis"));
+	// (Across the back: grip at the right hip, barrel up past the left shoulder, flat to the back.)
+	static const FQuat Slung = FRotationMatrix::MakeFromXZ(FVector(-0.1f, -0.5f, 0.86f), FVector(-1.f, 0.f, 0.f)).ToQuat();
+	const FTransform Stowed = bLongGun ? FTransform(Slung, FVector(-20.f, 14.f, 2.f)) : FTransform(FRotator(-90.f, 0.f, 0.f), FVector(1.f, 21.f, -4.f));
 	const USkeletalMeshComponent* Body = GetMesh();
 	const USkeletalMesh* Asset = Body->GetSkeletalMeshAsset();
 	const int32 BoneIndex = Asset ? Asset->GetRefSkeleton().FindBoneIndex(Bone) : INDEX_NONE;

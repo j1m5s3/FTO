@@ -95,6 +95,8 @@ namespace
 AFTOOccupant::AFTOOccupant()
 {
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> Officer(TEXT("/Game/FTO/Characters/Officer/SK_Officer.SK_Officer"));
+	static ConstructorHelpers::FObjectFinder<USkeletalMesh> OfficerF(TEXT("/Game/FTO/Characters/Officer/SK_Officer_F.SK_Officer_F"));
+	OfficerLookF = OfficerF.Object;
 	static ConstructorHelpers::FObjectFinder<USkeletalMesh> Crook(TEXT("/Game/FTO/Characters/Civilians/SK_Suspect.SK_Suspect"));
 	OfficerLook = Officer.Object;
 	CrookLook = Crook.Object;
@@ -140,8 +142,8 @@ void AFTOOccupant::ApplyLook()
 	case EFTOOccupantRole::Officer:
 		if (OfficerLook)
 		{
-			// Precinct staff in plain navy; the players' officers wear their badge colours.
-			Body->SetSkeletalMeshAsset(OfficerLook);
+			// Precinct staff in plain navy (half of them women); the players' officers wear their badge colours.
+			Body->SetSkeletalMeshAsset((LookSeed & 1) && OfficerLookF ? OfficerLookF.Get() : OfficerLook.Get());
 			PaintBody(FLinearColor(0.18f, 0.24f, 0.42f));
 			return;
 		}

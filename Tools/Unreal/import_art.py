@@ -222,7 +222,7 @@ def import_kit():
     materials = {slot: eal.load_asset(path) for slot, path in KIT_SLOT_MATERIALS.items()}
     with open(os.path.join(source, "kit_manifest.json")) as f:
         manifest = json.load(f)  # written by build_kit.py: the material slots each piece uses
-    names = sorted(f[:-4] for f in os.listdir(source) if f.lower().endswith(".fbx"))
+    names = sorted(f[:-4] for f in os.listdir(source) if f.lower().endswith(".fbx") and (not MESHES or f[:-4] in MESHES))
     nanite_count = 0
     for name in names:
         path = f"{KIT_DEST}/{name}"
@@ -246,7 +246,7 @@ def import_kit():
         convex = len(geom.get_editor_property("convex_elems")) if geom else 0
         unreal.log(f"FTO: kit {name} nanite={nanite} collision={boxes} boxes + {convex} hulls")
         eal.save_loaded_asset(mesh)
-    eal.save_directory(KIT_DEST, only_if_is_dirty=False, recursive=True)
+    eal.save_directory(KIT_DEST, only_if_is_dirty=bool(MESHES), recursive=True)
     unreal.log(f"FTO: imported {len(names)} kit pieces ({nanite_count} Nanite)")
 
 

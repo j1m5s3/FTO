@@ -7,9 +7,9 @@
 class USkeletalMeshComponent;
 
 /**
- * Full-body "action" layered over locomotion. Each value plays the clip A_Officer_<Name>
- * (every character shares the officer rig), so adding a clip is: key it in
- * Tools/Blender/build_officer.py, import it, add a value here.
+ * Full-body "action" layered over locomotion. Each value plays our clip A_FTO_<Name> (Tools/Blender/character_clips.py,
+ * on Epic's mannequin skeleton, which every character shares), so adding one is: key it there, export and import it,
+ * add a value here (UFTOCharacterAnimInstance maps the odd one whose name differs).
  */
 UENUM(BlueprintType)
 enum class EFTOAnimAction : uint8
@@ -34,7 +34,18 @@ enum class EFTOAnimAction : uint8
 	Dazed,		// sat on the ground seeing stars
 	Ride,		// passenger seat, hands in the lap
 	SitCuffed,	// back of the cruiser, cuffed and sulking
-	SitHandsUp	// busted at the wheel
+	SitHandsUp,	// busted at the wheel
+	IdleBored,	// shifting from foot to foot, checking the time
+	Phone,		// on the phone
+	Wave,
+	Point,
+	Clipboard,	// writing a ticket
+	Search,		// patting someone down
+	SearchedPose,	// hands on the wall, being patted down
+	Spray,		// spraying graffiti
+	Smash,		// kicking and battering street furniture
+	Grab,		// rummaging (a shoplifter filling a sack)
+	Dance2
 };
 
 /** Upper-body pose layered over whatever the legs are doing: a weapon up, or hands cuffed behind the back. */
@@ -44,7 +55,7 @@ enum class EFTOAimPose : uint8
 	None,
 	Pistol,
 	Rifle,
-	Cuffed	// A_Officer_HandsBehind: walked to the cells in cuffs
+	Cuffed	// A_FTO_HandsBehind: walked to the cells in cuffs
 };
 
 UINTERFACE(MinimalAPI)

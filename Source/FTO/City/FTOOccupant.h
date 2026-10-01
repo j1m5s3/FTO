@@ -81,6 +81,7 @@ protected:
 	UPROPERTY(Replicated) bool bQuestioned = false;
 
 	UPROPERTY() TObjectPtr<USkeletalMesh> OfficerLook;
+	UPROPERTY() TObjectPtr<USkeletalMesh> OfficerLookF;
 	UPROPERTY() TObjectPtr<USkeletalMesh> CrookLook;
 
 	FFTOSpot Spot;

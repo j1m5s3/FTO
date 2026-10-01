@@ -539,7 +539,7 @@ void AFTOTrafficCar::Interact(AFTOCharacter* Officer)
 		GetWorldTimerManager().SetTimer(TicketTimer, this, &AFTOTrafficCar::FinishTicket, TicketSeconds, false);
 		if (Officer)
 		{
-			Officer->PlayTimedAction(EFTOAnimAction::Interact, TicketSeconds);
+			Officer->PlayTimedAction(EFTOAnimAction::Clipboard, TicketSeconds);
 		}
 
 		if (AFTOPlayerController* PC = Officer ? Cast<AFTOPlayerController>(Officer->GetController()) : nullptr)

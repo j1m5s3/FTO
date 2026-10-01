@@ -111,6 +111,8 @@ protected:
 	FName TestWallName;
 	int32 TestWallInstance = INDEX_NONE;
 	int32 BrokenBefore = 0;
+	/** How worn the rammed wall already was (the crash checks before may have knocked it). */
+	float RamBaseline = 0.f;
 	/** Find a standing wall panel (Face, Column, Level) of structure S. */
 	/** Where a camera can stand on the way from From to Wanted (short of whatever's in the way). */
 	FVector ClearSpot(const FVector& From, const FVector& Wanted) const;

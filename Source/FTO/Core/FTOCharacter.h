@@ -201,6 +201,9 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> BaseMaterial;
+	/** The two officer models: every other badge number is a woman. */
+	UPROPERTY() TObjectPtr<USkeletalMesh> OfficerModel;
+	UPROPERTY() TObjectPtr<USkeletalMesh> OfficerModelF;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> UniformMaterial;

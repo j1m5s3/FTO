@@ -136,6 +136,8 @@ protected:
 
 	/** Startled by a whistle. */
 	UPROPERTY(Replicated) bool bHandsUp = false;
+	/** Turned round, hands up against an imaginary wall, being patted down. */
+	UPROPERTY(Replicated) bool bBeingSearched = false;
 
 	UPROPERTY(Transient) TObjectPtr<AFTOCityGenerator> City;
 

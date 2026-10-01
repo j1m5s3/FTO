@@ -45,22 +45,37 @@ namespace
 	/** What they're up to before the police arrive. */
 	EFTOAnimAction DeedFor(FName Crime)
 	{
-		if (Crime == TEXT("BarFight") || Crime == TEXT("Riot") || Crime == TEXT("Vandalism"))
+		if (Crime == TEXT("BarFight") || Crime == TEXT("Riot"))
 		{
 			return EFTOAnimAction::Punch;
+		}
+		if (Crime == TEXT("Vandalism"))
+		{
+			return EFTOAnimAction::Smash;
+		}
+		if (Crime == TEXT("Graffiti"))
+		{
+			return EFTOAnimAction::Spray;
 		}
 		if (Crime == TEXT("NoiseComplaint") || Crime == TEXT("Jaywalking"))
 		{
 			return EFTOAnimAction::Dance; // the party, or showing off in the middle of the road
 		}
-		if (Crime == TEXT("DomesticDispute") || Crime == TEXT("CatInTree") || Crime == TEXT("Mugging"))
+		if (Crime == TEXT("Mugging"))
 		{
-			return EFTOAnimAction::Talk; // rowing, pleading with the cat, or "hand it over!"
+			return EFTOAnimAction::Point; // "hand it over!"
 		}
-		if (Crime == TEXT("Shoplifting") || Crime == TEXT("Burglary") || Crime == TEXT("TerrorPlot") || Crime == TEXT("StolenGoods") ||
-			Crime == TEXT("Graffiti") || Crime == TEXT("PettyTheft"))
+		if (Crime == TEXT("DomesticDispute") || Crime == TEXT("CatInTree"))
 		{
-			return EFTOAnimAction::Work; // rummaging, spraying, fiddling with a ticking thing
+			return EFTOAnimAction::Talk; // rowing, or pleading with the cat
+		}
+		if (Crime == TEXT("Shoplifting") || Crime == TEXT("Burglary") || Crime == TEXT("StolenGoods") || Crime == TEXT("PettyTheft"))
+		{
+			return EFTOAnimAction::Grab; // rummaging, stuffing a sack
+		}
+		if (Crime == TEXT("TerrorPlot"))
+		{
+			return EFTOAnimAction::Work; // fiddling with a ticking thing
 		}
 		if (IsHoldUp(Crime))
 		{
@@ -296,7 +311,7 @@ void AFTOPerp::Tick(float DeltaSeconds)
 	}
 	if (bShowGun)
 	{
-		FTOWeapons::HoldInHand(Gun, Body, FRotator(AimPitch, GetActorRotation().Yaw, 0.f));
+		FTOWeapons::HoldInHand(Gun, Body, EFTOAimPose::Pistol);
 	}
 
 	UpdateScuffleCloud(DeltaSeconds);

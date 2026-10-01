@@ -34,3 +34,6 @@ Build/*.zip
 
 # Epic's mannequin content, copied from the engine by Tools/Unreal/install_epic_content.py
 Content/Characters/
+
+# Blender preview renders (--preview): look, don't commit
+Art/Previews/
