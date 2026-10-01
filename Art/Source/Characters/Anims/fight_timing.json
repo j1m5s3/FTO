@@ -1,0 +1,298 @@
+{
+  "Block_Loop": {
+    "frames": 30,
+    "length_s": 1.0,
+    "loop": true
+  },
+  "Cross": {
+    "bone": "hand_r",
+    "contact_fraction": 0.41,
+    "contact_frame": 9,
+    "contact_point_cm": [
+      0.4,
+      -82.2,
+      137.2
+    ],
+    "contact_time_s": 0.3,
+    "frames": 22,
+    "length_s": 0.733,
+    "loop": false,
+    "reach_cm": 82.2
+  },
+  "Cuffing": {
+    "bone": "hand_r",
+    "contact_fraction": 0.49,
+    "contact_frame": 38,
+    "contact_point_cm": [
+      -4.5,
+      -50.5,
+      62.4
+    ],
+    "contact_time_s": 1.267,
+    "frames": 78,
+    "length_s": 2.6,
+    "loop": false,
+    "note": "suspect kneeling 76 cm ahead, facing away",
+    "reach_cm": 50.7
+  },
+  "Fight_Grab": {
+    "bone": "hand_r",
+    "contact_fraction": 0.42,
+    "contact_frame": 10,
+    "contact_point_cm": [
+      -12.6,
+      -74.3,
+      138.4
+    ],
+    "contact_time_s": 0.333,
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": false,
+    "note": "ends in the clinch; partner ~50 cm ahead",
+    "reach_cm": 75.4
+  },
+  "Fight_Idle": {
+    "frames": 30,
+    "length_s": 1.0,
+    "loop": true
+  },
+  "Fight_Step_Back": {
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": true,
+    "note": "1 m/s",
+    "travel_cm": [
+      0.0,
+      80.0,
+      0.0
+    ]
+  },
+  "Fight_Step_Fwd": {
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": true,
+    "note": "1 m/s",
+    "travel_cm": [
+      0.0,
+      -80.0,
+      0.0
+    ]
+  },
+  "Fight_Step_Left": {
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": true,
+    "note": "1 m/s",
+    "travel_cm": [
+      80.0,
+      0.0,
+      0.0
+    ]
+  },
+  "Fight_Step_Right": {
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": true,
+    "note": "1 m/s",
+    "travel_cm": [
+      -80.0,
+      0.0,
+      0.0
+    ]
+  },
+  "GetUp_Back": {
+    "frames": 60,
+    "length_s": 2.0,
+    "loop": false
+  },
+  "GetUp_Front": {
+    "frames": 54,
+    "length_s": 1.8,
+    "loop": false
+  },
+  "HitReact_Heavy": {
+    "frames": 50,
+    "length_s": 1.667,
+    "loop": false,
+    "note": "staggers ~56 cm back (the root stays put)",
+    "travel_cm": [
+      0,
+      56.0
+    ]
+  },
+  "HitReact_Light_Back": {
+    "frames": 22,
+    "length_s": 0.733,
+    "loop": false
+  },
+  "HitReact_Light_Front": {
+    "frames": 22,
+    "length_s": 0.733,
+    "loop": false
+  },
+  "HitReact_Light_Left": {
+    "frames": 22,
+    "length_s": 0.733,
+    "loop": false
+  },
+  "HitReact_Light_Right": {
+    "frames": 22,
+    "length_s": 0.733,
+    "loop": false
+  },
+  "Hook": {
+    "bone": "hand_l",
+    "contact_fraction": 0.42,
+    "contact_frame": 10,
+    "contact_point_cm": [
+      -5.2,
+      -62.8,
+      137.4
+    ],
+    "contact_time_s": 0.333,
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": false,
+    "reach_cm": 63.0
+  },
+  "Jab": {
+    "bone": "hand_l",
+    "contact_fraction": 0.4,
+    "contact_frame": 8,
+    "contact_point_cm": [
+      0.3,
+      -77.5,
+      137.4
+    ],
+    "contact_time_s": 0.267,
+    "frames": 20,
+    "length_s": 0.667,
+    "loop": false,
+    "reach_cm": 77.5
+  },
+  "Kick_Front": {
+    "bone": "ball_r",
+    "contact_fraction": 0.4,
+    "contact_frame": 12,
+    "contact_point_cm": [
+      -9.7,
+      -80.3,
+      92.7
+    ],
+    "contact_time_s": 0.4,
+    "frames": 30,
+    "length_s": 1.0,
+    "loop": false,
+    "reach_cm": 80.8
+  },
+  "Kick_Roundhouse": {
+    "bone": "foot_r",
+    "contact_fraction": 0.38,
+    "contact_frame": 13,
+    "contact_point_cm": [
+      18.0,
+      -86.0,
+      122.0
+    ],
+    "contact_time_s": 0.433,
+    "frames": 34,
+    "length_s": 1.133,
+    "loop": false,
+    "reach_cm": 87.9
+  },
+  "Kick_Side": {
+    "bone": "foot_l",
+    "contact_fraction": 0.41,
+    "contact_frame": 13,
+    "contact_point_cm": [
+      2.0,
+      -76.0,
+      92.0
+    ],
+    "contact_time_s": 0.433,
+    "frames": 32,
+    "length_s": 1.067,
+    "loop": false,
+    "reach_cm": 76.0
+  },
+  "Knockback": {
+    "frames": 40,
+    "length_s": 1.333,
+    "loop": false,
+    "note": "ends lying on the back 110 cm behind the root; GetUp_Back starts there",
+    "travel_cm": [
+      0,
+      110.0
+    ]
+  },
+  "Shove": {
+    "bone": "hand_r",
+    "contact_fraction": 0.38,
+    "contact_frame": 9,
+    "contact_point_cm": [
+      -15.6,
+      -81.6,
+      120.6
+    ],
+    "contact_time_s": 0.3,
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": false,
+    "reach_cm": 83.0
+  },
+  "Tackle": {
+    "bone": "hand_l",
+    "contact_fraction": 0.75,
+    "contact_frame": 18,
+    "contact_point_cm": [
+      33.9,
+      -163.3,
+      115.2
+    ],
+    "contact_time_s": 0.6,
+    "frames": 24,
+    "length_s": 0.8,
+    "loop": false,
+    "reach_cm": 166.8,
+    "travel_cm": [
+      0,
+      -80.0
+    ]
+  },
+  "Taunt": {
+    "frames": 60,
+    "length_s": 2.0,
+    "loop": true
+  },
+  "Throw": {
+    "bone": "pelvis",
+    "contact_fraction": 0.5,
+    "contact_frame": 24,
+    "contact_point_cm": [
+      4.0,
+      -42.2,
+      76.2
+    ],
+    "contact_time_s": 0.8,
+    "frames": 48,
+    "length_s": 1.6,
+    "loop": false,
+    "note": "starts in the clinch (Fight_Grab); ends turned round with the partner thrown down in front",
+    "reach_cm": 42.4
+  },
+  "Uppercut": {
+    "bone": "hand_r",
+    "contact_fraction": 0.42,
+    "contact_frame": 11,
+    "contact_point_cm": [
+      -3.2,
+      -47.4,
+      156.0
+    ],
+    "contact_time_s": 0.367,
+    "frames": 26,
+    "length_s": 0.867,
+    "loop": false,
+    "reach_cm": 47.5
+  }
+}
