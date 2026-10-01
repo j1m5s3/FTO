@@ -1637,6 +1637,11 @@ void AFTOSmokeTest::BuildSteps()
 						Cop->GetTalkingTo() == Citizen ? TEXT("still talking") : TEXT("CONVERSATION ENDED"));
 				}
 				Citizen->TalkChoice(Cop, 2);
+				// (Done with the pat-down at once: the next one's straight after.)
+				if (Cop->IsInSyncedAction())
+				{
+					Cop->EndSyncedAction();
+				}
 				++Searched;
 				TWeakObjectPtr<AFTOPedestrian>& Keep = Citizen->GetFound().IsEmpty() ? Clean : Carrying;
 				if (!Keep.IsValid())

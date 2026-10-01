@@ -361,17 +361,17 @@ bool AFTOPedestrian::TalkChoice(AFTOCharacter* Officer, int32 Index)
 			// Hands up for the pat-down.
 			bSearched = true;
 			Found = Contraband();
-			// Turned round to face away, just in front of the officer, for the pat-down.
+			// Turned round to face away, the officer squared up just behind them for the pat-down.
 			{
-				const FVector Away = (GetActorLocation() - Officer->GetActorLocation()).GetSafeNormal2D();
-				if (!Away.IsNearlyZero())
+				FVector Away = (GetActorLocation() - Officer->GetActorLocation()).GetSafeNormal2D();
+				if (Away.IsNearlyZero())
 				{
-					const FVector Spot = Officer->GetActorLocation() + Away * 55.f;
-					SetActorLocationAndRotation(FVector(Spot.X, Spot.Y, GetActorLocation().Z), Away.Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
-					Officer->SetActorRotation(Away.Rotation());
+					Away = Officer->GetActorForwardVector();
 				}
+				FaceYaw(Away.Rotation().Yaw);
+				const FVector Feet = GetActorLocation() - FVector(0.f, 0.f, HalfHeight) - Away * 55.f;
+				Officer->BeginSyncedAction(EFTOAnimAction::Search, Feet, Away.Rotation().Yaw, this);
 			}
-			Officer->PlayTimedAction(EFTOAnimAction::Search, 2.2f);
 			bBeingSearched = true;
 			GetWorldTimerManager().SetTimer(SearchPoseTimer, this, &AFTOPedestrian::EndSearchPose, 2.2f, false);
 			if (Found.IsEmpty())
@@ -410,6 +410,10 @@ void AFTOPedestrian::EndSearchPose()
 	bBeingSearched = false;
 	if (AFTOCharacter* Officer = TalkingWith.Get())
 	{
+		if (Officer->IsInSyncedAction() && Officer->GetSyncedPartner() == this)
+		{
+			Officer->EndSyncedAction();
+		}
 		FaceOfficer(Officer);
 	}
 }

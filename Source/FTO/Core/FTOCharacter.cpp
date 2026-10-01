@@ -329,7 +329,7 @@ void AFTOCharacter::RefreshOfficerColor()
 
 	// Every other badge number is a woman officer.
 	USkeletalMesh* Model = (PS->GetBadgeIndex() & 1) && OfficerModelF ? OfficerModelF.Get() : OfficerModel.Get();
-	if (!BodyMesh && Model && GetMesh()->GetSkeletalMeshAsset() != Model)
+	if (!BodyMesh && Model && GetMesh()->GetSkeletalMeshAsset() != Model && !(Knockdown && Knockdown->IsDown()))
 	{
 		GetMesh()->SetSkeletalMeshAsset(Model);
 		UniformMaterial = nullptr;
@@ -1145,16 +1145,15 @@ void AFTOCharacter::UpdateWeaponMesh()
 	// (Across the back: grip at the right hip, barrel up past the left shoulder, flat to the back.)
 	static const FQuat Slung = FRotationMatrix::MakeFromXZ(FVector(-0.1f, -0.5f, 0.86f), FVector(-1.f, 0.f, 0.f)).ToQuat();
 	const FTransform Stowed = bLongGun ? FTransform(Slung, FVector(-20.f, 14.f, 2.f)) : FTransform(FRotator(-90.f, 0.f, 0.f), FVector(1.f, 21.f, -4.f));
-	const USkeletalMeshComponent* Body = GetMesh();
+	USkeletalMeshComponent* Body = GetMesh();
 	const USkeletalMesh* Asset = Body->GetSkeletalMeshAsset();
 	const int32 BoneIndex = Asset ? Asset->GetRefSkeleton().FindBoneIndex(Bone) : INDEX_NONE;
 	if (BoneIndex == INDEX_NONE)
 	{
-		WeaponMesh->SetWorldTransform(Stowed * GetActorTransform());
 		return;
 	}
 	const FTransform BoneStanding = FAnimationRuntime::GetComponentSpaceTransformRefPose(Asset->GetRefSkeleton(), BoneIndex) * Body->GetRelativeTransform();
-	WeaponMesh->SetWorldTransform(Stowed.GetRelativeTransform(BoneStanding) * Body->GetSocketTransform(Bone));
+	FTOWeapons::Carry(WeaponMesh, Body, Bone, Stowed.GetRelativeTransform(BoneStanding));
 }
 
 void AFTOCharacter::UpdateAimCamera(float DeltaSeconds)

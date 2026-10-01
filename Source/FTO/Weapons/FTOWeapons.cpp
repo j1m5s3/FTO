@@ -115,13 +115,28 @@ namespace
 	}
 }
 
-void FTOWeapons::HoldInHand(USceneComponent* Gun, const USkeletalMeshComponent* Body, EFTOAimPose Pose)
+void FTOWeapons::HoldInHand(USceneComponent* Gun, USkeletalMeshComponent* Body, EFTOAimPose Pose)
 {
 	static const FTransform PistolGrip = GripFor(EFTOAimPose::Pistol);
 	static const FTransform RifleGrip = GripFor(EFTOAimPose::Rifle);
-	if (Gun && Body)
+	Carry(Gun, Body, TEXT("hand_r"), Pose == EFTOAimPose::Rifle ? RifleGrip : PistolGrip);
+}
+
+void FTOWeapons::Carry(USceneComponent* Gun, USkeletalMeshComponent* Body, FName Bone, const FTransform& Relative)
+{
+	if (!Gun || !Body)
 	{
-		const FTransform Hand = Body->GetSocketTransform(TEXT("hand_r"));
-		Gun->SetWorldTransform((Pose == EFTOAimPose::Rifle ? RifleGrip : PistolGrip) * FTransform(Hand.GetRotation(), Hand.GetLocation()));
+		return;
+	}
+	if (Gun->GetAttachParent() != Body || Gun->GetAttachSocketName() != Bone || Gun->IsUsingAbsoluteLocation())
+	{
+		Gun->SetUsingAbsoluteLocation(false);
+		Gun->SetUsingAbsoluteRotation(false);
+		Gun->AttachToComponent(Body, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Bone);
+	}
+	// (The bone's frame carries its scale as one, so the gun's own scale stays put.)
+	if (!Gun->GetRelativeTransform().Equals(FTransform(Relative.GetRotation(), Relative.GetLocation(), Gun->GetRelativeScale3D()), 0.01f))
+	{
+		Gun->SetRelativeLocationAndRotation(Relative.GetLocation(), Relative.GetRotation());
 	}
 }

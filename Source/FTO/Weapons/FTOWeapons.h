@@ -74,5 +74,8 @@ namespace FTOWeapons
 	 * Put Gun in Body's right hand, held the way Pose (pistol or rifle) holds it: it follows the hand (whose arm the aim
 	 * pose raises and the lean points), so the hands are always on the gun.
 	 */
-	FTO_API void HoldInHand(USceneComponent* Gun, const USkeletalMeshComponent* Body, EFTOAimPose Pose);
+	FTO_API void HoldInHand(USceneComponent* Gun, USkeletalMeshComponent* Body, EFTOAimPose Pose);
+
+	/** Put Gun on Body's Bone at Relative (if it isn't already), so it moves with the bone the same frame. */
+	FTO_API void Carry(USceneComponent* Gun, USkeletalMeshComponent* Body, FName Bone, const FTransform& Relative);
 }

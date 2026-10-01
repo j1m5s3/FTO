@@ -109,6 +109,7 @@ AFTOCruiser::AFTOCruiser()
 
 	InteriorCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("InteriorCamera"));
 	InteriorCamera->SetupAttachment(Body, FTOSeats::CameraSocket(EFTOSeat::Driver));
+	InteriorCamera->SetRelativeLocation(FVector(0.f, 0.f, -22.f)); // (Cam_Driver was placed for the old cast's eyes)
 	InteriorCamera->SetFieldOfView(95.f);
 	InteriorCamera->bAutoActivate = false;
 
