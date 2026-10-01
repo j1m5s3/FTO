@@ -1013,6 +1013,24 @@ def wall_break(r, v):
     return norm(trim(outdoor(x, r, slaps=((0.1, 0.35), (0.22, 0.22), (0.38, 0.12)), rt60=1.6, wet=0.5)), 0.95)
 
 
+@sound("SW_Explosion", variants=3, base=False)
+def explosion(r, v):
+    """A car going up: a crack and a huge low thump, a whoomp of flame, then bits of car and glass raining down."""
+    sec = 5.0
+    t = T(sec)
+    x = zeros(sec)
+    place(x, 2.2 * thump(r, 55 * jitter(r, v, 0.12), 18, 0.45, noise_lp=180, noise_amt=1.2, drive=4.0), 0.0)
+    place(x, 1.4 * burst(r, 900, 14000, 0.006), 0.0)                                             # the crack
+    place(x, 0.9 * burst(r, 120, 1800, 0.12, 0.6), 0.002)
+    whoomp = lp(colored(r, sec, 1.0), 700, 2) * np.clip(t / 0.08, 0, 1) * np.exp(-t / 0.9)       # the fireball
+    x += 0.5 * whoomp / np.max(np.abs(whoomp))
+    rumble = lp(colored(r, sec, 2.0), 90, 4) * np.exp(-t / 1.6)
+    x += 0.5 * rumble / np.max(np.abs(rumble))
+    place(x, 0.35 * norm(debris(r, 2.6, int(r.uniform(30, 45)), 0.35, metal=True), 1.0), 0.0)     # bits of car
+    place(x, 0.2 * norm(shatter(r, 1.2, 40, 30), 1.0), 0.05)                                    # its windows
+    return norm(trim(outdoor(x, r, slaps=((0.11, 0.45), (0.24, 0.3), (0.42, 0.18)), rt60=2.2, wet=0.5)), 0.97)
+
+
 @sound("SW_Collapse", variants=1, base=False)
 def collapse(r, v):
     sec = 9.0

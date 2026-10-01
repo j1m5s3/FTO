@@ -97,6 +97,13 @@ public:
 
 	UFTOVehicleDamage* GetDamage() const { return Damage; }
 
+	/** Dev/testing: already doing Speed (cm/s) straight ahead. */
+	void Launch(float Speed)
+	{
+		ForwardSpeed = Speed;
+		LateralSpeed = 0.f;
+	}
+
 	/** Dev/testing: stop dead on the spot (for photos). */
 	void StopDead()
 	{

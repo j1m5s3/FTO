@@ -1,4 +1,5 @@
 #include "Physics/FTOVehicleDamage.h"
+#include "Physics/FTODestruction.h"
 #include "Art/FTOArt.h"
 #include "Components/AudioComponent.h"
 #include "Components/PointLightComponent.h"
@@ -116,12 +117,27 @@ void UFTOVehicleDamage::ApplyDamage(float Amount, const FVector& At, AController
 	}
 	if (IsWrecked())
 	{
-		if (GS && bCitizensCar && bPolice)
+		Wreck(Instigator, Before < BurningBelow);
+	}
+}
+
+void UFTOVehicleDamage::Wreck(AController* Instigator, bool bWasBurning)
+{
+	AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	if (GS && bCitizensCar && Cast<APlayerController>(Instigator))
+	{
+		GS->AddChaos(3.f);
+		++GS->CarsWrecked;
+	}
+	OnWrecked.Broadcast();
+	// The fire got to the tank.
+	if (bWasBurning)
+	{
+		if (AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld()))
 		{
-			GS->AddChaos(3.f);
-			++GS->CarsWrecked;
+			const FVector At = Body ? Body->Bounds.Origin : GetOwner()->GetActorLocation();
+			Wreckage->Blast(At, BlastRadius, BlastStrength, Instigator);
 		}
-		OnWrecked.Broadcast();
 	}
 }
 
@@ -513,6 +529,17 @@ void UFTOVehicleDamage::TickPlume(float DeltaTime)
 void UFTOVehicleDamage::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	// On fire, it burns down till it goes up.
+	if (GetOwner()->HasAuthority() && !IsWrecked() && State.Health < BurningBelow)
+	{
+		State.Health = FMath::Max(0.f, State.Health - BurnRate * DeltaTime);
+		if (IsWrecked())
+		{
+			GetOwner()->ForceNetUpdate();
+			OnRep_State();
+			Wreck(LastInstigator.Get(), true);
+		}
+	}
 	if (!Plume.IsEmpty() && GetNetMode() != NM_DedicatedServer)
 	{
 		TickPlume(DeltaTime);

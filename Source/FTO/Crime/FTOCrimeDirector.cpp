@@ -1,4 +1,5 @@
 #include "Crime/FTOCrimeDirector.h"
+#include "Physics/FTODestruction.h"
 #include "Core/FTOGameState.h"
 #include "Crime/FTOCrimeCatalog.h"
 #include "Crime/FTOCrimeSpawnPoint.h"
@@ -271,9 +272,12 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FTransform& OutWhere, int
 
 	// Prefer authored / generated spawn points (indoors, the perp stands facing their victim).
 	TArray<AFTOCrimeSpawnPoint*> Candidates;
+	// (Nothing happens in a building that's come down.)
+	const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
 	for (AFTOCrimeSpawnPoint* Point : SpawnPoints)
 	{
-		if (Point && Point->Allows(TemplateId) && !IsTooCloseToActiveIncident(Point->GetActorLocation()))
+		if (Point && Point->Allows(TemplateId) && !IsTooCloseToActiveIncident(Point->GetActorLocation()) &&
+			!(Wreckage && Wreckage->IsBuildingDown(Point->BuildingIndex)))
 		{
 			Candidates.Add(Point);
 		}

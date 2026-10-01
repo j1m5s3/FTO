@@ -228,6 +228,10 @@ void AFTOInteriorLife::Wake(int32 Index)
 		return;
 	}
 	FRoom& Room = Rooms[Index];
+	if (Room.bGone)
+	{
+		return;
+	}
 	Room.bAwake = true;
 	const FCrowd Crowd = CrowdFor(B->Type);
 	const uint32 RoomHash = HashCombine(GetTypeHash(Seed), GetTypeHash(Index));
@@ -312,6 +316,15 @@ AFTOOccupant* AFTOInteriorLife::SpawnOccupant(int32 Index, const FFTOBuilding& B
 		Rooms[Index].People.Add(Person);
 	}
 	return Person;
+}
+
+void AFTOInteriorLife::Abandon(int32 Index)
+{
+	if (Rooms.IsValidIndex(Index))
+	{
+		Sleep(Index);
+		Rooms[Index].bGone = true;
+	}
 }
 
 void AFTOInteriorLife::Sleep(int32 Index)

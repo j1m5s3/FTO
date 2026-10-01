@@ -265,6 +265,97 @@ void AFTOCityGenerator::Place(UStaticMesh* Mesh, const FTransform& Transform, co
 	FBatch& Batch = (bInterior ? InteriorBatches : ExteriorBatches).FindOrAdd(Mesh);
 	Batch.Transforms.Add(Transform);
 	Batch.Colors.Append({ Tint.R, Tint.G, Tint.B });
+	if (CurrentStructure != INDEX_NONE)
+	{
+		RecordPiece(Mesh, Batch.Transforms.Num() - 1, Transform, bInterior);
+	}
+}
+
+void AFTOCityGenerator::BeginStructure(const FFootprint& F, int32 Floors, const FLinearColor& Paint)
+{
+	FFTOStructure& S = Structures.AddDefaulted_GetRef();
+	S.Center = F.Center;
+	S.HalfX = F.HalfX();
+	S.HalfY = F.HalfY();
+	S.Floors = Floors;
+	S.Paint = Paint;
+	for (const EFace Face : { EFace::PosX, EFace::NegX, EFace::PosY, EFace::NegY })
+	{
+		S.Columns[int32(Face)] = FacePanels(F, Face);
+	}
+	CurrentStructure = Structures.Num() - 1;
+}
+
+void AFTOCityGenerator::EndStructure()
+{
+	CurrentStructure = INDEX_NONE;
+}
+
+void AFTOCityGenerator::RecordPiece(UStaticMesh* Mesh, int32 Instance, const FTransform& Transform, bool bInterior)
+{
+	FFTOStructure& S = Structures[CurrentStructure];
+	const FString Name = GetNameSafe(Mesh);
+	// The garden's things (fences, mailboxes, trees) are street furniture, not the house.
+	for (const TCHAR* Garden : { TEXT("SM_Fence"), TEXT("SM_HouseMailbox"), TEXT("SM_Tree"), TEXT("SM_Bush"), TEXT("SM_Barrel") })
+	{
+		if (Name.StartsWith(Garden))
+		{
+			return;
+		}
+	}
+	const FVector At = Transform.GetLocation();
+	const FVector Local = At - S.Center;
+	const bool bInside = S.Contains2D(At, 5.f);
+	const bool bCube = Mesh == CubeMesh;
+	// (Nothing further out than an awning or the stairs: and a flat box out there is the garden path.)
+	if (!S.Contains2D(At, 300.f) || (bCube && !bInside && Transform.GetScale3D().Z * 100.f < 10.f))
+	{
+		return;
+	}
+
+	FFTOStructurePiece& Piece = S.Pieces.AddDefaulted_GetRef();
+	Piece.Component = FName(*FString::Printf(TEXT("%s%s"), *Name, bInterior ? TEXT("_In") : TEXT("")));
+	Piece.Instance = Instance;
+	Piece.Location = At;
+	if (Name.StartsWith(TEXT("SM_Wall_G_")) || Name.StartsWith(TEXT("SM_Wall_U_")))
+	{
+		Piece.Role = Name.EndsWith(TEXT("_Glass")) ? EFTOPieceRole::Glass : EFTOPieceRole::Wall;
+	}
+	else if (bCube && bInside)
+	{
+		Piece.Role = bInterior && Local.Z < 10.f ? EFTOPieceRole::Foundation : EFTOPieceRole::Floor;
+	}
+	else
+	{
+		Piece.Role = bInterior ? EFTOPieceRole::Inside : EFTOPieceRole::Trim;
+	}
+
+	// The storey it's on (wall panels stand on their pivots: an upper panel's is on its floor).
+	Piece.Level = Local.Z < FTOKit::GroundHeight - 5.f ? 0 : int8(FMath::Min(1 + FMath::FloorToInt((Local.Z - FTOKit::GroundHeight + 5.f) / FTOKit::UpperHeight), 120));
+
+	// The facade's pieces: which face, which panel along it (faces run round as PanelTransform has them).
+	if (Piece.Role == EFTOPieceRole::Wall || Piece.Role == EFTOPieceRole::Glass || Piece.Role == EFTOPieceRole::Trim)
+	{
+		const float RX = FMath::Abs(Local.X) / FMath::Max(S.HalfX, 1.f);
+		const float RY = FMath::Abs(Local.Y) / FMath::Max(S.HalfY, 1.f);
+		if (FMath::Max(RX, RY) > 0.9f)
+		{
+			EFace Face;
+			float Along;
+			if (RX >= RY)
+			{
+				Face = Local.X > 0.f ? EFace::PosX : EFace::NegX;
+				Along = Local.X > 0.f ? Local.Y + S.HalfY : S.HalfY - Local.Y;
+			}
+			else
+			{
+				Face = Local.Y > 0.f ? EFace::PosY : EFace::NegY;
+				Along = Local.Y > 0.f ? S.HalfX - Local.X : Local.X + S.HalfX;
+			}
+			Piece.Face = int8(Face);
+			Piece.Column = int8(FMath::Clamp(FMath::FloorToInt(Along / FTOKit::PanelWidth + 0.001f), 0, S.Columns[int32(Face)] - 1));
+		}
+	}
 }
 
 void AFTOCityGenerator::Place(const TCHAR* Piece, const FTransform& Transform, const FLinearColor& Tint, bool bInterior)
@@ -348,6 +439,10 @@ void AFTOCityGenerator::AddSphere(const FLinearColor& Color, const FVector& Cent
 void AFTOCityGenerator::AddLabel(const FVector& Location, float Yaw, const FText& Text, const FColor& Color, float Size)
 {
 	UTextRenderComponent* Label = NewObject<UTextRenderComponent>(this);
+	if (CurrentStructure != INDEX_NONE)
+	{
+		Structures[CurrentStructure].Labels.Add(Label);
+	}
 	Label->SetupAttachment(Root);
 	Label->RegisterComponent();
 	Label->SetWorldLocation(Location);
@@ -377,6 +472,8 @@ void AFTOCityGenerator::BuildGeometry()
 	LiftPlans.Reset();
 	OutsideStairs.Reset();
 	OutsideStairTops.Reset();
+	Structures.Reset();
+	CurrentStructure = INDEX_NONE;
 	FRandomStream Rng(Seed ^ 0x5EED);
 
 	const float Pitch = BlockSize + RoadWidth;

@@ -194,7 +194,7 @@ host). Finally the client checks it sees everything the host broke broken too.
   - Footsteps: `SW_Step_<Surface>_01..06` and `SW_StepRun_<Surface>_01..04` for Concrete, Wood, Tile, Carpet, Metal
     and Grass, plus `SW_Land_Concrete_01..02` (jump landing) and `SW_Scuff_01..03` (shoe scrape).
   - Vehicles and destruction: `SW_CarImpactLight_01..03`, `SW_CarImpactHeavy_01..03`, `SW_MetalCreak_01..02`,
-    `SW_Rubble_01..04`, `SW_WallBreak_01..03`, `SW_Collapse_01` (about 10 s).
+    `SW_Rubble_01..04`, `SW_WallBreak_01..03`, `SW_Collapse_01` (about 10 s), `SW_Explosion_01..03` (a car going up).
   - Buildings and city: `SW_DoorOpen`, `SW_DoorClose`, `SW_ElevatorDing`, plus the loops above.
   - `--list` prints every name with its loop flag.
   - In the game (`Source/FTO/Audio`): `FTOAudio::Vary` swaps any sound with numbered takes for a random one (every
@@ -220,13 +220,27 @@ host). Finally the client checks it sees everything the host broke broken too.
   into moved vertices, bent normals and bare metal, so every machine sees the same crumples; a knock near an old dent
   deepens it. What breaks what (speeds, rounds, chaos) is the table in
   `FTODestruction.cpp`.
+  Buildings are structures: while it builds the city, `AFTOCityGenerator` records every instance placed between
+  `BeginStructure` and `EndStructure` (each building but the precinct) as an `FFTOStructurePiece` (component, instance,
+  role: wall, glass, trim, floor, inside or foundation; and for the facade its face, column and storey), into
+  `GetStructures()`, identically on every machine. `AFTODestruction` sorts those into cells (a panel on a face on a
+  storey, glass and trim going with their panel). Walls wear down (`DamageWall`: rounds, `DamageAt`: crashes and
+  blasts) through a replicated fast array of worn panels (cracks from `M_FTOCrackDecal` and darkening on every
+  machine); at `WallStrength` a cell crumbles (its pieces join the broken list). `Settle` then works up the storeys:
+  a cell stands if the one below it does, or if one that does is within two panels round the ring; anything else
+  drops off whole (thrown by `UFTODebris`), and a storey with too little left brings everything above down as one
+  replicated `FFTOCollapse`, which every machine plays out itself (instances tucked away at once, copies in
+  collision-free proxy components falling into a dust cloud, then a deterministic heap of rubble with collision).
+  A car going through a wall at `BreakThroughSpeed` or more breaks every panel its width covers (`WallsInTheWay`);
+  burning cars burn down and call `Blast`. The crime director and `AFTOInteriorLife` skip buildings that are down.
 - **Materials**: `Tools/Unreal/create_materials.py` builds `Content/FTO/Materials`: `M_FTOBase` (vertex colour ×
   `Color` tint, glowing in its own colour by `Emissive`, charred towards black by `Scorch`), `M_FTOGlass` (tinted
   see-through glass), `MI_FTOGlow` (the base material, glowing), `MI_FTOCity` (tinted per instance from custom data,
   for the instanced city), `MI_FTOCityInterior` (the same, a little self-lit for rooms) and `M_FTODecal` (a bullet
   hole: a deferred decal that fades out), and the dentable car materials `M_FTOVehicle` (M_FTOBase plus up to 12
   `DentN`/`PushN` dents moving the vertices, bending the normals and scraping the paint), `MI_FTOVehicleGlow` and
-  `M_FTOVehicleGlass`. `FTO_MATERIALS=M_FTODecal` builds just the named ones.
+  `M_FTOVehicleGlass`, and `M_FTOCrackDecal` (cracks in a knocked wall, worked out in the shader).
+  `FTO_MATERIALS=M_FTODecal` builds just the named ones.
   Run: `UnrealEditor-Cmd.exe FTO.uproject -run=pythonscript -script="<repo>/Tools/Unreal/create_materials.py"`
 - Nearly everything uses `M_FTOBase`. Engine primitives have no vertex colour, so they just take `Color`.
   Blender assets bake flat colours into vertex colours; vertex alpha = 1 marks tintable areas (uniforms, car paint).

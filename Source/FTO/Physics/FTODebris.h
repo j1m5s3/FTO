@@ -44,6 +44,18 @@ public:
 	/** A burst hydrant at At spouting water for Seconds. */
 	void Fountain(const FVector& At, float Seconds);
 
+	/**
+	 * A cloud of dust (or smoke) billowing out from At: Count puffs spread over Radius, rising and spreading for
+	 * Seconds before they thin away. Over Spread seconds they keep coming (a building coming down takes a while).
+	 */
+	void Dust(const FVector& At, float Radius, const FLinearColor& Color, float Seconds, int32 Count, float Spread = 0.f, float Glow = 0.f);
+
+	/** Cracks spreading Size cm across a wall from where it took a knock (they stay till the wall goes). */
+	void Crack(const FVector& At, const FVector& Normal, float Size);
+
+	/** Bullet holes and cracks inside Box go (the wall they were on has come down). */
+	void ClearMarks(const FBox& Box);
+
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
 	virtual void Deinitialize() override;
@@ -52,11 +64,15 @@ public:
 	int32 NumPieces() const;
 	int32 NumHoles() const;
 	int32 NumFountains() const { return Fountains.Num(); }
+	int32 NumCracks() const;
+	int32 NumPuffs() const;
 
 	/** Chaos rigid bodies in flight at once (the oldest gives way to a new one). */
 	static constexpr int32 MaxPieces = 96;
 	static constexpr int32 MaxHoles = 80;
 	static constexpr int32 DropsPerFountain = 22;
+	static constexpr int32 MaxCracks = 160;
+	static constexpr int32 MaxPuffs = 140;
 
 private:
 	AActor* GetHost();
@@ -65,6 +81,7 @@ private:
 	void ReleasePiece(int32 Index);
 	void TickPieces(float DeltaTime);
 	void TickFountains(float DeltaTime);
+	void TickDust(float DeltaTime);
 
 	struct FPieceLife
 	{
@@ -96,6 +113,22 @@ private:
 
 	/** Live bullet holes, oldest first (each one fades and removes itself). */
 	TArray<TWeakObjectPtr<UDecalComponent>> Holes;
+	/** Cracks in walls, oldest first. */
+	TArray<TWeakObjectPtr<UDecalComponent>> Cracks;
+
+	struct FPuff
+	{
+		FVector Location = FVector::ZeroVector;
+		FVector Velocity = FVector::ZeroVector;
+		float Delay = 0.f;
+		float Age = 0.f;
+		float Life = 0.f;
+		float Size = 1.f;
+		bool bInUse = false;
+	};
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> PuffMeshes;
+	UPROPERTY(Transient) TArray<TObjectPtr<UMaterialInstanceDynamic>> PuffMaterials;
+	TArray<FPuff> Puffs;
 
 	TArray<FFountain> Fountains;
 	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> DropMeshes;
@@ -104,6 +137,7 @@ private:
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> BaseMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> GlassMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> DecalMaterial;
+	UPROPERTY(Transient) TObjectPtr<UMaterialInterface> CrackMaterial;
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> WaterMaterial;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> Cube;
 	UPROPERTY(Transient) TObjectPtr<UStaticMesh> Sphere;
