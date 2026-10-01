@@ -23,6 +23,8 @@ struct FFTOMovePlay
 	UPROPERTY() FName Bone;
 	UPROPERTY() FVector_NetQuantize10 Impulse = FVector::ZeroVector;
 	UPROPERTY() uint8 Serial = 0;
+	/** Server world time it started (someone coming into view mid-move picks it up where it's got to, or not at all). */
+	UPROPERTY() float StartTime = 0.f;
 };
 
 USTRUCT()
@@ -79,6 +81,8 @@ public:
 	uint8 GetMoveSerial() const { return Move.Serial; }
 	/** Mid-punch or mid-reel: can't throw another yet. */
 	bool IsBusy() const { return GetMove() != EFTOAnimAction::None; }
+	/** Seconds left of the move showing. */
+	float GetMoveTimeLeft() const;
 	/** Server: how groggy the blows have left them (0-100: at 100 they go down); added to, and the total returned. */
 	float AddDaze(float Amount);
 	float GetDaze() const { return Daze; }

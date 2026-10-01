@@ -323,7 +323,16 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerTackle();
 	UFUNCTION(Server, Reliable)
-	void ServerFight(EFTOMove Move);
+	void ServerFight(EFTOMove Move, float Yaw);
+	/** Server: a press that came in just before the last move finished (lag): thrown the moment it does. */
+	EFTOMove BufferedMove = EFTOMove::None;
+	float BufferedYaw = 0.f;
+	FTimerHandle BufferTimer;
+	void ThrowBuffered();
+	/** Everything CanFight asks but being mid-move (a press then can be buffered). */
+	bool CanFightSoon() const;
+	/** Owner: face where the camera looks and ask the server for Move. */
+	void RequestFight(EFTOMove Move);
 	/** Server: whoever we've got hold of goes over. */
 	void ThrowGrabbed();
 	/** Server: punches strung together (and when the last one went). */

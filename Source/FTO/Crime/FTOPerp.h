@@ -204,6 +204,10 @@ protected:
 	TWeakObjectPtr<AFTOCharacter> FightTarget;
 	float NextSwing = 0.f;
 	float FightStartTime = 0.f;
+	/** Server: the chase in a fight: where we were last sent, when next to look, and when they were last in reach. */
+	FVector ChaseGoal = FVector::ZeroVector;
+	float NextChase = 0.f;
+	float LastReachable = 0.f;
 	void TryArrest(AFTOCharacter* Officer);
 	EFTOArrestResponse RollResponse(const AFTOCharacter* Officer);
 	void BeginCuffing(AFTOCharacter* Officer);

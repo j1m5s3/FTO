@@ -922,6 +922,8 @@ bool AFTOPerp::CanInteract(const AFTOCharacter* Officer) const
 		return Officer != Arrester; // pile in and help
 	case EFTOPerpArrest::Hiding:
 		return !(Knockdown && Knockdown->IsDown()); // any officer can stop anyone for a word
+	case EFTOPerpArrest::Fighting:
+		return true; // (only to be told: put them down first)
 	default:
 		return false;
 	}
@@ -949,6 +951,12 @@ void AFTOPerp::Interact(AFTOCharacter* Officer)
 	switch (ArrestState)
 	{
 	case EFTOPerpArrest::Surrendered: BeginCuffing(Officer); break;
+	case EFTOPerpArrest::Fighting:
+		if (AFTOPlayerController* PC = PCOf(Officer))
+		{
+			PC->ClientToast(INVTEXT("They won't come quietly: put them down first! Punch (LMB), kick (G), or grab and throw them (F)."), Warning);
+		}
+		break;
 	case EFTOPerpArrest::Struggling:  Mash(Officer); break;
 	case EFTOPerpArrest::Hiding:
 		// Just a word with a passer-by, as far as they're concerned (the officer might know better).
@@ -1114,6 +1122,8 @@ void AFTOPerp::BeginFighting(AFTOCharacter* Officer)
 	FightTarget = Officer;
 	FightStartTime = GetWorld()->GetTimeSeconds();
 	NextSwing = FightStartTime + Rng.FRandRange(0.4f, 0.9f);
+	LastReachable = FightStartTime;
+	NextChase = 0.f;
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{
 		GS->MulticastPlaySound(AFTOGameState::Sounds().Scuffle, GetActorLocation(), 0.8f);
@@ -1167,16 +1177,41 @@ void AFTOPerp::TickFighting(float DeltaSeconds)
 	{
 		return; // mid-swing, or reeling
 	}
-	// In close (just out of arm's length), then swinging every so often.
+	// In close (just out of arm's length), then swinging every so often. Only straight at them on the level with
+	// nothing in the way (they don't walk through walls or float up stairs), and only now and then (not every frame).
 	const FVector To = Officer->GetActorLocation() - GetActorLocation();
 	const float Distance = To.Size2D();
 	if (Distance > 125.f)
 	{
-		MoveTo(Officer->GetActorLocation() - To.GetSafeNormal2D() * 95.f, 380.f);
+		const bool bReachable = FMath::Abs(To.Z) < 60.f && CanSee(Officer);
+		const FVector Goal = Officer->GetActorLocation() - To.GetSafeNormal2D() * 95.f;
+		if (bReachable && (Now >= NextChase || FVector::DistSquared2D(Goal, ChaseGoal) > FMath::Square(80.f)))
+		{
+			ChaseGoal = Goal;
+			NextChase = Now + 0.4f;
+			MoveTo(FVector(Goal.X, Goal.Y, GetActorLocation().Z), 380.f);
+			LastReachable = Now;
+		}
+		else if (!bReachable)
+		{
+			Hold();
+			FaceToward(Officer->GetActorLocation());
+			// Out of reach a good while (up the stairs, round a wall): off they go.
+			if (Now - LastReachable > 6.f)
+			{
+				ToastOfficersNear(INVTEXT("The suspect's made a run for it! Sprint (Shift) and tackle (F)!"), Warning, 3000.f);
+				BeginFleeing(Officer);
+				return;
+			}
+		}
 	}
 	else
 	{
-		Hold();
+		LastReachable = Now;
+		if (GetCurrentSpeed() > 1.f)
+		{
+			Hold();
+		}
 		FaceToward(Officer->GetActorLocation());
 	}
 	if (Distance < 150.f && Now >= NextSwing && FTOFighting::CanSwing(this))

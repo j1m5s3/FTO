@@ -131,11 +131,12 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	if (Action != EFTOAnimAction::None)
 	{
 		// The same move again (a second jab): start it over, crossfading from where the first one got to.
-		if (ShownAction == Action && Serial != ShownSerial && ActionWeight > 0.05f)
+		if (ShownAction == Action && Serial != ShownSerial)
 		{
-			FadingAction = ShownAction;
+			const bool bShowing = ActionWeight > 0.05f;
+			FadingAction = bShowing ? ShownAction : EFTOAnimAction::None;
 			FadingTime = ActionTime;
-			CrossAlpha = 0.f;
+			CrossAlpha = bShowing ? 0.f : 1.f;
 			ActionTime = 0.f;
 		}
 		if (ShownAction != Action)

@@ -105,6 +105,13 @@ void FTOImpact::Roughed(AActor* Victim, AController* Police)
 	// (Told once in a while, not for every punch.)
 	static TMap<TWeakObjectPtr<AController>, float> LastTold;
 	const float Now = Victim->GetWorld()->GetTimeSeconds();
+	for (auto It = LastTold.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
 	float& Told = LastTold.FindOrAdd(Police);
 	if (Now - Told > 4.f || Told > Now)
 	{

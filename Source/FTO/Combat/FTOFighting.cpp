@@ -79,9 +79,18 @@ AActor* FTOFighting::FindTarget(const AActor* Attacker, float Reach, AActor* Onl
 		}
 		const UFTOKnockdownComponent* Knockdown = Who->FindComponentByClass<UFTOKnockdownComponent>();
 		const AFTOCharacter* Officer = Cast<AFTOCharacter>(Who);
-		if (!Knockdown || Knockdown->IsDown() || (Officer && Officer->GetCurrentVehicle()))
+		if (!Knockdown || Knockdown->IsDown() || (Officer && (Officer->GetCurrentVehicle() || Officer->IsInSyncedAction())))
 		{
 			return false;
+		}
+		// Someone who's given up (kneeling, being cuffed, wrestled) is off limits.
+		if (const AFTOPerp* Perp = Cast<AFTOPerp>(Who))
+		{
+			const EFTOPerpArrest State = Perp->GetArrestState();
+			if (State == EFTOPerpArrest::Surrendered || State == EFTOPerpArrest::Cuffing || State == EFTOPerpArrest::Struggling)
+			{
+				return false;
+			}
 		}
 		const FVector To = Who->GetActorLocation() - From;
 		return FMath::Abs(To.Z) < 120.f && To.Size2D() < InReach && FVector::DotProduct(To.GetSafeNormal2D(), Facing) > 0.45f;

@@ -1,4 +1,5 @@
 #include "Physics/FTOKnockdownComponent.h"
+#include "GameFramework/GameStateBase.h"
 #include "Audio/FTOAudio.h"
 #include "Animation/FTOCharacterAnimInstance.h"
 #include "Core/FTOGameState.h"
@@ -86,6 +87,7 @@ void UFTOKnockdownComponent::PlayMove(EFTOAnimAction Action, float Seconds)
 	Move.Seconds = Seconds;
 	Move.Bone = NAME_None;
 	Move.Impulse = FVector::ZeroVector;
+	Move.StartTime = GetWorld()->GetTimeSeconds();
 	++Move.Serial;
 	GetOwner()->ForceNetUpdate();
 	OnRep_Move();
@@ -98,6 +100,7 @@ void UFTOKnockdownComponent::TakeBlow(EFTOAnimAction Reaction, float Seconds, FN
 	Move.Seconds = Seconds;
 	Move.Bone = Bone;
 	Move.Impulse = Impulse;
+	Move.StartTime = GetWorld()->GetTimeSeconds();
 	++Move.Serial;
 	LastBlow = GetWorld()->GetTimeSeconds();
 	GetOwner()->ForceNetUpdate();
@@ -106,11 +109,19 @@ void UFTOKnockdownComponent::TakeBlow(EFTOAnimAction Reaction, float Seconds, FN
 
 void UFTOKnockdownComponent::OnRep_Move()
 {
-	MoveStart = GetWorld()->GetTimeSeconds();
-	if (!FVector(Move.Impulse).IsNearlyZero())
+	// How long ago it started on the server: one that's long over (someone just come into view) doesn't replay.
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	const float Age = GetOwner()->HasAuthority() || !GS ? 0.f : FMath::Max(0.f, GS->GetServerWorldTimeSeconds() - Move.StartTime);
+	MoveStart = GetWorld()->GetTimeSeconds() - Age;
+	if (Age < 0.25f && !FVector(Move.Impulse).IsNearlyZero())
 	{
 		StartFlinch(Move.Bone, Move.Impulse);
 	}
+}
+
+float UFTOKnockdownComponent::GetMoveTimeLeft() const
+{
+	return GetMove() == EFTOAnimAction::None ? 0.f : FMath::Max(0.f, Move.Seconds - (GetWorld()->GetTimeSeconds() - MoveStart));
 }
 
 EFTOAnimAction UFTOKnockdownComponent::GetMove() const
@@ -257,6 +268,9 @@ void UFTOKnockdownComponent::StartRagdoll(const FVector& LaunchVelocity)
 		Mesh->DetachFromComponent(FDetachmentTransformRules::KeepWorldTransform);
 		Mesh->SetCollisionProfileName(TEXT("Ragdoll"));
 		Mesh->SetAllBodiesSimulatePhysics(true);
+		// (Fully limp, even caught mid-flinch with the upper body half blended.)
+		Flinch = 0.f;
+		Mesh->SetAllBodiesPhysicsBlendWeight(1.f);
 		Mesh->SetSimulatePhysics(true);
 		Mesh->WakeAllRigidBodies();
 		bRagdolling = true;
