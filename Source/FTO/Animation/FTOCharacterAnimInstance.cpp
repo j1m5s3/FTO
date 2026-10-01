@@ -109,7 +109,12 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	LocoPhase = FMath::Fmod(LocoPhase + DeltaSeconds * PlayRate / FMath::Max(0.05f, CycleLength), 1.f);
 
 	AirWeight = FMath::FInterpTo(AirWeight, bInAir ? 1.f : 0.f, DeltaSeconds, 12.f);
-	AirTime = bInAir ? AirTime + DeltaSeconds : 0.f; // (the take-off once, then falling for as long as it lasts)
+	// The take-off once, then falling for as long as it lasts (walking off a ledge, there's no take-off).
+	if (bInAir && AirTime <= 0.f && !bRising && Jump)
+	{
+		AirTime = Jump->GetPlayLength();
+	}
+	AirTime = bInAir ? AirTime + DeltaSeconds : 0.f;
 
 	// Fade actions in and out. Going from one action straight to another crossfades between the two (kneeling to
 	// kneeling in cuffs mustn't stand up in between).
@@ -194,15 +199,41 @@ void FFTOCharacterAnimProxy::ApplyAimLayer(FPoseContext& Output)
 	FPoseContext AimPose(this);
 	Sample(ClipFor(ShownAim), AimTime, AimPose);
 
-	// The chest and everything on it (arms, hands and fingers round the grip) from the aim pose.
+	// The chest and everything on it (arms, hands and fingers round the grip) from the aim pose. The chest is held
+	// as the aim pose has it in the body's own space, not on top of the legs' pelvis, so the gun points where the aim
+	// pose points it and doesn't sway with the walk.
 	const FBoneContainer& Bones = Output.Pose.GetBoneContainer();
 	const FReferenceSkeleton& RefSkeleton = Bones.GetReferenceSkeleton();
+	const int32 ChestBone = RefSkeleton.FindBoneIndex(TEXT("spine_01"));
+	const FCompactPoseBoneIndex Chest = ChestBone == INDEX_NONE ? FCompactPoseBoneIndex(INDEX_NONE) : Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(ChestBone));
+	FQuat ChestLocal = FQuat::Identity;
+	if (Chest.IsValid())
+	{
+		// (Component-space rotation of the chest's parents, in each pose.)
+		auto ParentRotation = [&](const FCompactPose& Pose)
+		{
+			FQuat Rotation = FQuat::Identity;
+			for (int32 At = RefSkeleton.GetParentIndex(ChestBone); At != INDEX_NONE; At = RefSkeleton.GetParentIndex(At))
+			{
+				const FCompactPoseBoneIndex Compact = Bones.MakeCompactPoseIndex(FMeshPoseBoneIndex(At));
+				Rotation = (Compact.IsValid() ? Pose[Compact].GetRotation() : RefSkeleton.GetRefBonePose()[At].GetRotation()) * Rotation;
+			}
+			return Rotation;
+		};
+		ChestLocal = ParentRotation(Output.Pose).Inverse() * ParentRotation(AimPose.Pose) * AimPose.Pose[Chest].GetRotation();
+	}
 	for (const FCompactPoseBoneIndex Bone : Output.Pose.ForEachBoneIndex())
 	{
 		if (IsUpperBody(RefSkeleton, Bones.MakeMeshPoseIndex(Bone).GetInt()))
 		{
+			FTransform Target = AimPose.Pose[Bone];
+			if (Bone == Chest)
+			{
+				Target.SetRotation(ChestLocal.GetNormalized());
+				Target.SetTranslation(Output.Pose[Bone].GetTranslation());
+			}
 			FTransform Blended;
-			Blended.Blend(Output.Pose[Bone], AimPose.Pose[Bone], AimWeight);
+			Blended.Blend(Output.Pose[Bone], Target, AimWeight);
 			Output.Pose[Bone] = Blended;
 		}
 	}
@@ -416,6 +447,7 @@ void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	{
 		Proxy.Speed = Animated->GetAnimSpeed();
 		Proxy.bInAir = Animated->IsAnimAirborne();
+		Proxy.bRising = Owner && Owner->GetVelocity().Z > 50.f;
 		Proxy.Action = Animated->GetAnimActionFor(GetSkelMeshComponent());
 		Proxy.Aim = Animated->GetAimPose();
 		Proxy.AimPitch = Animated->GetAimPitch();

@@ -290,6 +290,9 @@ def import_mesh(source, mesh_name, destination, skeleton):
 def import_clips(names=None):
     """Our clips onto the mannequin skeleton: every A_FTO_*.fbx, or just the named ones (Walk, not A_FTO_Walk)."""
     skeleton = eal.load_asset(MANNEQUIN_SKELETON)
+    if not skeleton:
+        unreal.log_error("FTO: no mannequin skeleton: run Tools/Unreal/install_epic_content.py first")
+        return
     source = os.path.join(ART, CLIPS["folder"])
     destination = CLIPS["dest"]
     for filename in sorted(os.listdir(source)):

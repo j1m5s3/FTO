@@ -31,6 +31,7 @@ namespace FTOSeats
 
 	FVector EyeOffset(float CapsuleHalfHeight)
 	{
-		return FVector(16.f, 0.f, 144.f - CapsuleHalfHeight);
+		// (The cast's eyes, sat in a car seat: 1.22 m above the root, a little ahead of it.)
+		return FVector(16.f, 0.f, 122.f - CapsuleHalfHeight);
 	}
 }

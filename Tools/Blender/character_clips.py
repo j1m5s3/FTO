@@ -4,8 +4,9 @@ The clip library for build_character_anims.py: every clip as keyed controls (see
 Coordinates are cm with the character facing -Y (X is its left), root at the origin on the floor. A standing
 character's ankles rest 8.2 cm off the floor; hands default to hanging relaxed. Frames are at 30 fps.
 Seats: Sit is on a 45 cm chair (hip joints 53 cm up, 4.5 cm behind the root); Drive, Ride, SitCuffed and SitHandsUp
-are on a car seat (hip joints 40 cm up, 5 cm behind the root, feet 60 cm ahead); the wheel is centred 40 cm ahead of
-the root at 88 cm (chest height), tilted 25 degrees towards the driver, 36 cm across.
+are on a car seat (build_vehicles.py: the car floor 15 cm up, the cushion 33 cm; hip joints 43 cm up, 5 cm behind the
+root, feet 60 cm ahead on the car floor); the wheel is centred 48 cm ahead of the root at 99 cm (chest height), tilted
+25 degrees towards the driver, 36 cm across.
 """
 import math
 
@@ -190,10 +191,11 @@ def idle_base(f, c, amount=1.0, sway=1.2, period=120):
 
 
 def seated_car(c, knees=(0, 0), feet_fwd=60.0):
-    c.setdefault("pelvis", (0, 7.5, -53.5))
+    # (A car's floor is 15 cm above the root, and its cushion 33: build_vehicles.py SOLE and BUTT.)
+    c.setdefault("pelvis", (0, 7.5, -50.5))
     c.setdefault("hips", (-14, 0, 0))
     for side, sx in SIDES:
-        c.setdefault(f"foot_{side}", (sx * (15 + knees[0]), -feet_fwd, 11.0))
+        c.setdefault(f"foot_{side}", (sx * (15 + knees[0]), -feet_fwd, 23.0))
         c.setdefault(f"foot_rot_{side}", (18, 0, 0))
         c.setdefault(f"knee_{side}", (0.25 * sx, -0.6, 1.0))
 
@@ -226,7 +228,7 @@ def clip_sit():
     return Clip("Sit", n, True, ch, fn=fn)
 
 
-WHEEL = Vector((0, -40.0, 88.0))
+WHEEL = Vector((0, -48.0, 99.0))      # build_vehicles.py HANDS
 WHEEL_UP = Vector((0, 0.42, 0.91)).normalized()
 WHEEL_R = 18.0
 

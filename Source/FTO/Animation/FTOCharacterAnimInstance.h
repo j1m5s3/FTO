@@ -37,6 +37,8 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	// Inputs, written on the game thread each frame
 	float Speed = 0.f;
 	bool bInAir = false;
+	/** Going up (a jump) rather than over an edge. */
+	bool bRising = false;
 	EFTOAnimAction Action = EFTOAnimAction::None;
 	EFTOAimPose Aim = EFTOAimPose::None;
 	float AimPitch = 0.f;
