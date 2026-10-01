@@ -1,4 +1,5 @@
 #include "Vehicles/FTOCruiser.h"
+#include "City/FTOCityKit.h"
 #include "Audio/FTOAudio.h"
 #include "Crime/FTOArrestee.h"
 #include "Physics/FTODestruction.h"
@@ -487,6 +488,12 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// A fire with someone at the wheel smoulders on; left empty, it burns down (and goes up).
+	if (Damage && HasAuthority())
+	{
+		Damage->bHoldFire = Driver != nullptr;
+	}
+
 	// Stop passing through people we bowled over a moment ago.
 	const float Now = GetWorld()->GetTimeSeconds();
 	for (int32 i = BowledOver.Num() - 1; i >= 0; --i)
@@ -732,39 +739,116 @@ void AFTOCruiser::ServerBowlOver_Implementation(AActor* Victim, FVector_NetQuant
 	}
 }
 
-bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
+void AFTOCruiser::IgnoreBriefly(UPrimitiveComponent* Thing, float Until)
 {
-	UPrimitiveComponent* Thing = Hit.GetComponent();
-	const EFTOBreakKind Kind = AFTODestruction::KindOf(Thing);
-	AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
-	if (!Wreckage || Kind == EFTOBreakKind::None || Kind == EFTOBreakKind::Shatter || Hit.Item == INDEX_NONE ||
-		Velocity.Size2D() < AFTODestruction::BreakSpeed(Thing))
-	{
-		return false;
-	}
-	const FVector Push = Velocity * 0.9f;
-	if (HasAuthority())
-	{
-		Wreckage->Break(Thing, Hit.Item, Hit.ImpactPoint, Push, GetController());
-	}
-	else
-	{
-		// Out of our way now; the server breaks it for everyone a moment later.
-		Wreckage->BreakLocally(Thing, Hit.Item, Hit.ImpactPoint, Push);
-		ServerBreakThrough(Thing->GetFName(), Hit.Item, Hit.ImpactPoint, Push);
-	}
-	// It's being tucked away: don't catch on it again meanwhile. (Briefly: this lets the car through every
-	// instance of that mesh, so the next fence panel along should still stop it.)
 	Collision->IgnoreComponentWhenMoving(Thing, true);
-	const float Until = GetWorld()->GetTimeSeconds() + 0.06f;
 	if (TPair<TWeakObjectPtr<UPrimitiveComponent>, float>* Already = BrokenThrough.FindByPredicate([Thing](const TPair<TWeakObjectPtr<UPrimitiveComponent>, float>& Entry) { return Entry.Key == Thing; }))
 	{
-		Already->Value = Until;
+		Already->Value = FMath::Max(Already->Value, Until);
 	}
 	else
 	{
 		BrokenThrough.Emplace(Thing, Until);
 	}
+}
+
+bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
+{
+	UPrimitiveComponent* Thing = Hit.GetComponent();
+	EFTOBreakKind Kind = AFTODestruction::KindOf(Thing);
+	AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+	int32 Item = Hit.Item;
+	// A building's wall (or a shop window in one, or what's stuck on its front), taken head on fast enough: straight
+	// through it.
+	EFTOPieceRole PieceRole = EFTOPieceRole::Trim;
+	const bool bWall = Wreckage && Hit.Item != INDEX_NONE && Wreckage->GetStructurePiece(Thing, Hit.Item, PieceRole) &&
+		(PieceRole == EFTOPieceRole::Wall || PieceRole == EFTOPieceRole::Glass || PieceRole == EFTOPieceRole::Trim);
+	const float Into = -FVector::DotProduct(Velocity, Hit.ImpactNormal.GetSafeNormal2D());
+	if (bWall)
+	{
+		if (Into < AFTODestruction::BreakThroughSpeed)
+		{
+			return false; // (it takes the knock in Crash)
+		}
+		Kind = EFTOBreakKind::Crumble;
+		if (PieceRole != EFTOPieceRole::Wall)
+		{
+			// The pane's (or the trim's) wall goes with it (and it goes now, here, so the car isn't stopped by it).
+			UInstancedStaticMeshComponent* Wall = nullptr;
+			int32 WallItem = INDEX_NONE;
+			if (!Wreckage->FindWallOf(Thing, Hit.Item, Wall, WallItem))
+			{
+				return false;
+			}
+			if (!HasAuthority())
+			{
+				Wreckage->BreakLocally(Thing, Hit.Item, Hit.ImpactPoint, Velocity * 0.9f);
+			}
+			IgnoreBriefly(Thing, GetWorld()->GetTimeSeconds() + 0.06f);
+			Thing = Wall;
+			Item = WallItem;
+		}
+	}
+	else if (Wreckage && Hit.Item != INDEX_NONE && Wreckage->GetStructurePiece(Thing, Hit.Item, PieceRole) && PieceRole == EFTOPieceRole::Inside)
+	{
+		// The furniture of whatever room we've driven into: scattered, unless we're barely moving.
+		if (Velocity.Size2D() < 500.f || !AFTODestruction::IsLoose(Thing))
+		{
+			return false;
+		}
+		Kind = EFTOBreakKind::KnockOff;
+	}
+	else if (!Wreckage || Kind == EFTOBreakKind::None || Kind == EFTOBreakKind::Shatter || Hit.Item == INDEX_NONE ||
+		Velocity.Size2D() < AFTODestruction::BreakSpeed(Thing))
+	{
+		return false;
+	}
+	const FVector Push = Velocity * 0.9f;
+	if (Kind == EFTOBreakKind::Crumble)
+	{
+		// A hole as wide as the car: this panel and whichever it overlaps either side, glass and all. (Where the
+		// car crosses the wall, as wide as it is across it: an angled car cuts a wider hole.)
+		const FVector Into2D = -Hit.ImpactNormal.GetSafeNormal2D();
+		const FVector Heading = Velocity.GetSafeNormal2D();
+		const float Square = FMath::Max(0.35f, FVector::DotProduct(Heading, Into2D));
+		const FVector Car = GetActorLocation();
+		const FVector Crossing = Car + Heading * (FVector::DotProduct(Hit.ImpactPoint - Car, Into2D) / Square);
+		const FVector Extent = Collision->GetScaledBoxExtent();
+		const float Across = FMath::Min((Extent.Y + Extent.X * FMath::Sqrt(1.f - Square * Square)) / Square, 350.f);
+		TArray<TPair<UInstancedStaticMeshComponent*, int32>> InTheWay;
+		Wreckage->WallsInTheWay(Thing, Item, Crossing, Across + 5.f, InTheWay);
+		const float Until = GetWorld()->GetTimeSeconds() + 0.06f;
+		for (const TPair<UInstancedStaticMeshComponent*, int32>& Piece : InTheWay)
+		{
+			if (HasAuthority())
+			{
+				Wreckage->Break(Piece.Key, Piece.Value, Hit.ImpactPoint, Push, GetController());
+			}
+			else
+			{
+				Wreckage->BreakLocally(Piece.Key, Piece.Value, Hit.ImpactPoint, Push);
+				ServerBreakThrough(Piece.Key->GetFName(), Piece.Value, Hit.ImpactPoint, Push);
+			}
+			IgnoreBriefly(Piece.Key, Until);
+		}
+		// That's a wall: it costs the car (and the panels round the hole feel it too).
+		Velocity *= 0.55f;
+		Crash(Hit, Into * 0.55f);
+		return true;
+	}
+	if (HasAuthority())
+	{
+		Wreckage->Break(Thing, Item, Hit.ImpactPoint, Push, GetController());
+	}
+	else
+	{
+		// Out of our way now; the server breaks it for everyone a moment later.
+		Wreckage->BreakLocally(Thing, Item, Hit.ImpactPoint, Push);
+		ServerBreakThrough(Thing->GetFName(), Item, Hit.ImpactPoint, Push);
+	}
+	// It's being tucked away: don't catch on it again meanwhile. (Briefly: this lets the car through every
+	// instance of that mesh, so the next fence panel along should still stop it.)
+	IgnoreBriefly(Thing, GetWorld()->GetTimeSeconds() + 0.06f);
 	Velocity *= Kind == EFTOBreakKind::Topple ? 0.6f : 0.85f;
 	return true;
 }
@@ -780,7 +864,9 @@ void AFTOCruiser::ServerBreakThrough_Implementation(FName Component, int32 Insta
 		break;
 	}
 	UInstancedStaticMeshComponent* Thing = City ? City->FindInstanced(Component) : nullptr;
-	if (Wreckage && Thing && FVector::DistSquared(FVector(Hit), GetActorLocation()) < FMath::Square(900.f))
+	// (Checked against the piece itself: at speed and with lag, our copy of the car can be well behind the driver's.)
+	if (Wreckage && Thing && Wreckage->IsPieceNear(Thing, Instance, Hit, 400.f) &&
+		FVector::DistSquared(FVector(Hit), GetActorLocation()) < FMath::Square(2500.f))
 	{
 		Wreckage->Break(Thing, Instance, Hit, FVector(Push).GetClampedToMaxSize(MaxSpeed * 1.2f), GetController());
 	}
@@ -842,10 +928,17 @@ void AFTOCruiser::ServerCrash_Implementation(AActor* Other, float Into, FVector_
 	}
 	UE_LOG(LogFTO, Log, TEXT("%s crashed into %s at %.0f km/h (%.0f damage)."), *GetName(), *GetNameSafe(Other), Into * 0.036f, Knock);
 	Damage->ApplyDamage(Knock, At, GetController());
-	// Whatever we ran into takes the same (another car; walls don't mind).
+	// Whatever we ran into takes the same (another car), and a building's walls take a knock of their own.
 	if (UFTOVehicleDamage* Theirs = Other && Other != this ? Other->FindComponentByClass<UFTOVehicleDamage>() : nullptr)
 	{
 		Theirs->ApplyDamage(Knock, At, GetController());
+	}
+	else if (Other && Other->IsA<AFTOCityGenerator>())
+	{
+		if (AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld()))
+		{
+			Wreckage->DamageAt(At, 130.f, (Into - 300.f) * 0.065f, GetController());
+		}
 	}
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{

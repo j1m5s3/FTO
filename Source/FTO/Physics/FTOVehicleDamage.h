@@ -90,6 +90,9 @@ public:
 	EFTOCarDamage GetStage() const;
 	bool IsWrecked() const { return State.Health <= 0.f; }
 
+	/** Someone's at the wheel: a fire smoulders on rather than burning the car down (set by the car). */
+	bool bHoldFire = false;
+
 	/** A citizen's car: the police writing it off costs the city chaos. */
 	UPROPERTY(EditAnywhere, Category="Damage") bool bCitizensCar = true;
 
@@ -99,12 +102,19 @@ public:
 	static constexpr float DentedBelow = 60.f;
 	static constexpr float SmokingBelow = 35.f;
 	static constexpr float BurningBelow = 15.f;
+	/** Health a burning car loses a second, till it goes up. */
+	static constexpr float BurnRate = 1.2f;
+	/** How far a car going up throws things (walls, windows, people, other cars), and how hard. */
+	static constexpr float BlastRadius = 700.f;
+	static constexpr float BlastStrength = 80.f;
 
 protected:
 	UFUNCTION() void OnRep_State();
 	UFUNCTION() void OnRep_Dents();
 	/** Server: a dent of Depth cm pressed in at world point At, pushed along Dir (merged into one nearby). */
 	void AddDent(const FVector& At, const FVector& Dir, float Depth, float Radius, float Scrape);
+	/** Server: written off (by Instigator); a car that was on fire goes up with a bang. */
+	void Wreck(AController* Instigator, bool bWasBurning);
 	/** Every machine: hand the dents to the body's materials. */
 	void ApplyDents();
 	/** Every machine: look the part for the health (bits fly off for a fresh knock). */

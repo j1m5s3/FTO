@@ -150,6 +150,17 @@ Done:
   is Chaos physics, made on each machine; what's broken is decided by the server and the same for everyone. The
   police breaking things costs chaos and goes on the report card.
 
+- Building destruction (in the spirit of The Finals). Every building but the precinct is a structure of wall panels,
+  storey on storey, and every panel can be knocked down. A car hitting a wall cracks it (cracks spread and the paint
+  goes dusty the more it takes); hit one head on at about 65 km/h or more and the car goes straight through, leaving a
+  car-wide hole and a battered car. Rounds chip away at a wall (a rifle quicker than a pistol), and a burning car
+  burns down until it blows, cracking the walls round about, blowing out windows and street furniture, throwing
+  people off their feet and setting other cars going. It's systematic: a panel holds up the one above it and props up
+  its neighbours a panel or two either side, so knock out a wide enough stretch and what's above drops off; lose too
+  much of a storey (about 40%, or nearly all of one side) and everything from there up comes down in a cloud of
+  dust, leaving a heap of rubble on whatever's left. A building that's come down has nobody in it and no more crime.
+  Knocking walls down costs chaos, and bringing a building down costs a lot.
+
 Next: see [Phase 2 plan](Phase2Plan.md) (Steam invites),
 tracked in [TODO](TODO.md).
 

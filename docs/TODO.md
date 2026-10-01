@@ -30,7 +30,7 @@ Each item is one PR, reviewed before it's merged.
 - [x] **Talking to people** (upgrade 7): conversations for information and chit-chat, stop and search, arrests (with
   a chaos cost for arresting someone who's clean).
 - [x] **Upper floors** (upgrade 6): stairs and lifts in multi-storey buildings.
-- [ ] **Building destruction** (upgrade 2): walls broken systematically, cars through walls, buildings levelled.
+- [x] **Building destruction** (upgrade 2): walls broken systematically, cars through walls, buildings levelled.
 - [ ] **Characters** (upgrade 1): detailed in-house models on the UE5 mannequin skeleton with Epic's free
   animations, plus weapon-handling fixes.
 - [ ] **Hand-to-hand fighting** (upgrade 8): punches, kicks, grabs and throws with weighty, physical reactions.

@@ -96,6 +96,9 @@ public:
 	const TArray<FTransform>& GetOutsideStairs() const { return OutsideStairs; }
 	const TArray<FTransform>& GetOutsideStairTops() const { return OutsideStairTops; }
 
+	/** Every building that can be knocked down, piece by piece (the precinct can't: AFTODestruction). */
+	const TArray<FFTOStructure>& GetStructures() const { return Structures; }
+
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksY = 8;
@@ -177,6 +180,15 @@ protected:
 	TArray<FLiftPlan> LiftPlans;
 	TArray<FTransform> OutsideStairs;
 	TArray<FTransform> OutsideStairTops;
+
+	// ---- Structures: what each building is made of, for knocking down ----
+	/** Everything placed from here till EndStructure is part of a building with this footprint. */
+	void BeginStructure(const FFootprint& F, int32 Floors, const FLinearColor& Paint);
+	void EndStructure();
+	/** The piece just placed (instance Instance of Mesh), if a structure's being built. */
+	void RecordPiece(UStaticMesh* Mesh, int32 Instance, const FTransform& Transform, bool bInterior);
+	TArray<FFTOStructure> Structures;
+	int32 CurrentStructure = INDEX_NONE;
 	void BuildRoof(const FFootprint& F, float RoofZ, const FLinearColor& Paint, FRandomStream& Rng, bool bRooftopClutter);
 	void BuildCorners(const FFootprint& F, int32 Floors, const FLinearColor& Paint);
 	/** Floor, ceiling and lights for a ground floor, and the room record interiors are furnished from. */

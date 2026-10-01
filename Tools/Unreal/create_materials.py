@@ -13,6 +13,8 @@ MI_FTOGlow   M_FTOBase glowing in its vertex colours (lights, dials, screens)
 MI_FTOCity   M_FTOBase tinted per instance (the building kit)
 MI_FTOCityInterior  the same, a little self-lit so rooms read clearly from the street
 M_FTODecal   deferred decal: a bullet hole (dark pit, chipped rim) that fades out over its lifetime
+M_FTOCrackDecal  deferred decal: cracks spreading through a knocked wall (jagged spokes from a crushed middle, and
+             a web of smaller cracks round it), worked out in the shader, so there's no texture to it
 M_FTOVehicle M_FTOBase for car bodies, plus dents: up to DENTS dents (DentN = local centre xyz + radius w,
              PushN = the push into the body xyz + scrape w) move the vertices (World Position Offset), bend the
              normals to match and scrape the paint back to bare metal. Set by UFTOVehicleDamage per car.
@@ -339,6 +341,81 @@ def build_instance(name, parent, scalars):
     return mi
 
 
+# Cracks in a wall, worked out from the decal's UV (0-1 across it): a crushed patch in the middle, a web of short
+# cracks round that (the edges of a Voronoi pattern), and seven jagged spokes running out, thinning as they go.
+CRACK_HLSL = """
+float2 p = (UV - 0.5) * 2.0;
+float r = length(p);
+float ang = atan2(p.y, p.x);
+float spokes = 0.0;
+for (int k = 0; k < 7; k++)
+{
+    float a0 = frac(sin(k * 12.9898 + 4.1) * 43758.5453) * 6.2831853;
+    float len = 0.55 + 0.45 * frac(sin(k * 78.233 + 1.7) * 12345.678);
+    float wob = (0.18 * sin(r * 23.0 + k * 3.1) + 0.08 * sin(r * 57.0 + k)) * r;
+    float da = abs(fmod(ang - a0 - wob + 21.9911486, 6.2831853) - 3.14159265);
+    float d = da * r;
+    float w = 0.02 * saturate(1.0 - r / len) + 0.003;
+    spokes = max(spokes, (1.0 - smoothstep(w * 0.5, w, d)) * step(r, len));
+}
+float2 g = p * 6.0;
+float2 i = floor(g);
+float2 f = frac(g);
+float f1 = 8.0;
+float f2 = 8.0;
+for (int y = -1; y <= 1; y++)
+{
+    for (int x = -1; x <= 1; x++)
+    {
+        float2 o = float2(x, y);
+        float2 h = frac(sin(float2(dot(i + o, float2(127.1, 311.7)), dot(i + o, float2(269.5, 183.3)))) * 43758.5453);
+        float dd = length(o + h - f);
+        if (dd < f1) { f2 = f1; f1 = dd; } else if (dd < f2) { f2 = dd; }
+    }
+}
+float web = (1.0 - smoothstep(0.03, 0.08, f2 - f1)) * (1.0 - smoothstep(0.15, 0.5, r));
+float crush = 1.0 - smoothstep(0.06, 0.16, r);
+return saturate(max(max(spokes, web), crush * 0.8));
+"""
+
+
+def build_crack_decal_material(name):
+    """Deferred decal: cracks spreading through a wall where it took a knock (CRACK_HLSL). They don't fade."""
+    path = f"{PACKAGE_DIR}/{name}"
+    if eal.does_asset_exist(path):
+        eal.delete_asset(path)
+
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+    mat = tools.create_asset(name, PACKAGE_DIR, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("material_domain", unreal.MaterialDomain.MD_DEFERRED_DECAL)
+    mat.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+
+    uv = mel.create_material_expression(mat, unreal.MaterialExpressionTextureCoordinate, -1000, 0)
+    cracks = mel.create_material_expression(mat, unreal.MaterialExpressionCustom, -800, 0)
+    cracks.set_editor_property("code", CRACK_HLSL)
+    cracks.set_editor_property("output_type", unreal.CustomMaterialOutputType.CMOT_FLOAT1)
+    pin = unreal.CustomInput()
+    pin.set_editor_property("input_name", "UV")
+    cracks.set_editor_property("inputs", [pin])
+    mel.connect_material_expressions(uv, "", cracks, "UV")
+
+    dark = mel.create_material_expression(mat, unreal.MaterialExpressionVectorParameter, -600, -200)
+    dark.set_editor_property("parameter_name", "Color")
+    dark.set_editor_property("default_value", unreal.LinearColor(0.035, 0.032, 0.03, 1.0))
+    mel.connect_material_property(dark, "", unreal.MaterialProperty.MP_BASE_COLOR)
+    strength = scalar_param(mat, "Strength", 0.92, -600, 150)
+    opacity = mel.create_material_expression(mat, unreal.MaterialExpressionMultiply, -400, 50)
+    mel.connect_material_expressions(cracks, "", opacity, "A")
+    mel.connect_material_expressions(strength, "", opacity, "B")
+    mel.connect_material_property(opacity, "", unreal.MaterialProperty.MP_OPACITY)
+    rough = scalar_param(mat, "Roughness", 0.95, -400, 300)
+    mel.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+
+    mel.recompile_material(mat)
+    eal.save_loaded_asset(mat)
+    return mat
+
+
 # FTO_MATERIALS=M_FTODecal (comma-separated) builds just those; the rest are left alone (rebuilding the base
 # material churns every asset that uses it).
 ONLY = set(filter(None, os.environ.get("FTO_MATERIALS", "").split(",")))
@@ -366,3 +443,5 @@ if wanted("M_FTOVehicleGlass"):
     build_glass_material("M_FTOVehicleGlass", dents=True)
 if wanted("M_FTODecal"):
     build_decal_material("M_FTODecal")                                              # bullet holes and scuffs
+if wanted("M_FTOCrackDecal"):
+    build_crack_decal_material("M_FTOCrackDecal")                                   # cracks in knocked walls

@@ -56,6 +56,7 @@ AActor* UFTODebris::GetHost()
 	BaseMaterial = LoadObject<UMaterialInterface>(nullptr, FTOArt::BaseMaterialPath);
 	GlassMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FTO/Materials/M_FTOGlass.M_FTOGlass"));
 	DecalMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FTO/Materials/M_FTODecal.M_FTODecal"));
+	CrackMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/FTO/Materials/M_FTOCrackDecal.M_FTOCrackDecal"));
 	Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	return Host;
@@ -290,6 +291,174 @@ int32 UFTODebris::NumHoles() const
 	return Count;
 }
 
+void UFTODebris::Crack(const FVector& At, const FVector& Normal, float Size)
+{
+	if (GetWorld()->GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	GetHost();
+	UMaterialInterface* Material = CrackMaterial ? CrackMaterial.Get() : DecalMaterial.Get();
+	if (!Material || Normal.IsNearlyZero())
+	{
+		return;
+	}
+	Cracks.RemoveAll([](const TWeakObjectPtr<UDecalComponent>& Mark) { return !Mark.IsValid(); });
+	while (Cracks.Num() >= MaxCracks)
+	{
+		if (UDecalComponent* Oldest = Cracks[0].Get())
+		{
+			Oldest->DestroyComponent();
+		}
+		Cracks.RemoveAt(0);
+	}
+	// Projected into the wall, spun at random so no two knocks crack the same way.
+	UDecalComponent* Mark = NewObject<UDecalComponent>(Host);
+	Mark->SetDecalMaterial(Material);
+	Mark->DecalSize = FVector(20.f, Size * 0.5f, Size * 0.5f);
+	Mark->SetFadeScreenSize(0.001f);
+	Mark->SortOrder = 1; // over bullet holes
+	Mark->SetupAttachment(Host->GetRootComponent());
+	Mark->SetUsingAbsoluteLocation(true);
+	Mark->SetUsingAbsoluteRotation(true);
+	Mark->RegisterComponent();
+	FRotator Facing = (-Normal).Rotation();
+	Facing.Roll = FMath::FRandRange(0.f, 360.f);
+	Mark->SetWorldLocationAndRotation(At, Facing);
+	Cracks.Add(Mark);
+}
+
+void UFTODebris::ClearMarks(const FBox& Box)
+{
+	for (TArray<TWeakObjectPtr<UDecalComponent>>* Marks : { &Holes, &Cracks })
+	{
+		for (int32 i = Marks->Num() - 1; i >= 0; --i)
+		{
+			UDecalComponent* Mark = (*Marks)[i].Get();
+			if (!Mark || Box.IsInsideOrOn(Mark->GetComponentLocation()))
+			{
+				if (Mark)
+				{
+					Mark->DestroyComponent();
+				}
+				Marks->RemoveAt(i);
+			}
+		}
+	}
+}
+
+int32 UFTODebris::NumCracks() const
+{
+	int32 Count = 0;
+	for (const TWeakObjectPtr<UDecalComponent>& Mark : Cracks)
+	{
+		Count += Mark.IsValid() ? 1 : 0;
+	}
+	return Count;
+}
+
+// ------------------------------------------------------------------------------------------
+// Dust
+// ------------------------------------------------------------------------------------------
+
+void UFTODebris::Dust(const FVector& At, float Radius, const FLinearColor& Color, float Seconds, int32 Count, float Spread, float Glow)
+{
+	if (GetWorld()->GetNetMode() == NM_DedicatedServer || Count <= 0)
+	{
+		return;
+	}
+	GetHost();
+	for (int32 n = 0; n < Count; ++n)
+	{
+		int32 Free = Puffs.IndexOfByPredicate([](const FPuff& Puff) { return !Puff.bInUse; });
+		if (Free == INDEX_NONE && Puffs.Num() < MaxPuffs)
+		{
+			UStaticMeshComponent* Mesh = NewObject<UStaticMeshComponent>(Host);
+			Mesh->SetupAttachment(Host->GetRootComponent());
+			Mesh->SetUsingAbsoluteLocation(true);
+			Mesh->SetUsingAbsoluteScale(true);
+			Mesh->SetStaticMesh(Sphere);
+			Mesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Mesh->SetCastShadow(false);
+			Mesh->SetVisibility(false);
+			Mesh->RegisterComponent();
+			PuffMaterials.Add(FTOArt::ApplyColor(Mesh, BaseMaterial, Color));
+			PuffMeshes.Add(Mesh);
+			Puffs.AddDefaulted();
+			Free = Puffs.Num() - 1;
+		}
+		if (Free == INDEX_NONE)
+		{
+			// All billowing: the oldest makes way.
+			float Oldest = -1.f;
+			for (int32 i = 0; i < Puffs.Num(); ++i)
+			{
+				if (Puffs[i].Age / FMath::Max(Puffs[i].Life, 0.1f) > Oldest)
+				{
+					Oldest = Puffs[i].Age / FMath::Max(Puffs[i].Life, 0.1f);
+					Free = i;
+				}
+			}
+		}
+		// Low and wide: puffs start near the ground round the middle and roll outwards and up.
+		const FVector Offset = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f).GetClampedToMaxSize(1.f) * Radius;
+		FPuff& Puff = Puffs[Free];
+		Puff.Location = At + Offset + FVector(0.f, 0.f, FMath::FRandRange(0.f, Radius * 0.3f));
+		Puff.Velocity = Offset.GetSafeNormal2D() * FMath::FRandRange(60.f, 220.f) + FVector(0.f, 0.f, FMath::FRandRange(20.f, 110.f));
+		Puff.Delay = Spread > 0.f ? FMath::FRandRange(0.f, Spread) : 0.f;
+		Puff.Age = 0.f;
+		Puff.Life = Seconds * FMath::FRandRange(0.7f, 1.2f);
+		Puff.Size = FMath::Clamp(Radius / 100.f, 0.8f, 5.f) * FMath::FRandRange(0.6f, 1.2f);
+		Puff.bInUse = true;
+		const FLinearColor Shade = Color * FMath::FRandRange(0.85f, 1.1f);
+		FTOArt::SetColor(PuffMaterials[Free], FLinearColor(Shade.R, Shade.G, Shade.B, 1.f), Glow);
+		PuffMeshes[Free]->SetVisibility(false);
+	}
+}
+
+void UFTODebris::TickDust(float DeltaTime)
+{
+	for (int32 i = 0; i < Puffs.Num(); ++i)
+	{
+		FPuff& Puff = Puffs[i];
+		if (!Puff.bInUse)
+		{
+			continue;
+		}
+		if (Puff.Delay > 0.f)
+		{
+			Puff.Delay -= DeltaTime;
+			continue;
+		}
+		Puff.Age += DeltaTime;
+		if (Puff.Age >= Puff.Life)
+		{
+			Puff.bInUse = false;
+			PuffMeshes[i]->SetVisibility(false);
+			continue;
+		}
+		// Billows out fast and slows (air), swelling as it goes, then thins to nothing.
+		Puff.Velocity *= FMath::Exp(-1.2f * DeltaTime);
+		Puff.Location += Puff.Velocity * DeltaTime;
+		const float T = Puff.Age / Puff.Life;
+		const float Swell = FMath::Lerp(0.35f, 1.f, FMath::Sqrt(T)) * (T > 0.7f ? FMath::Max(0.f, 1.f - (T - 0.7f) / 0.3f) : 1.f);
+		UStaticMeshComponent* Mesh = PuffMeshes[i];
+		Mesh->SetVisibility(Swell > 0.02f);
+		Mesh->SetWorldLocation(Puff.Location);
+		Mesh->SetWorldScale3D(FVector(Puff.Size * Swell, Puff.Size * Swell, Puff.Size * Swell * 0.8f));
+	}
+}
+
+int32 UFTODebris::NumPuffs() const
+{
+	int32 Count = 0;
+	for (const FPuff& Puff : Puffs)
+	{
+		Count += Puff.bInUse ? 1 : 0;
+	}
+	return Count;
+}
+
 // ------------------------------------------------------------------------------------------
 // Fountains
 // ------------------------------------------------------------------------------------------
@@ -421,4 +590,5 @@ void UFTODebris::Tick(float DeltaTime)
 	}
 	TickPieces(DeltaTime);
 	TickFountains(DeltaTime);
+	TickDust(DeltaTime);
 }

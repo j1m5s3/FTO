@@ -181,6 +181,10 @@ FFTOBuilding& AFTOCityGenerator::AddRoom(const FFootprint& F, EFace DoorFace, fl
 {
 	using namespace FTOCityPalette;
 	FFTOBuilding& B = Buildings.AddDefaulted_GetRef();
+	if (CurrentStructure != INDEX_NONE)
+	{
+		Structures[CurrentStructure].Building = Buildings.Num() - 1;
+	}
 	B.Type = Type;
 	B.Name = Name;
 
@@ -307,6 +311,7 @@ void AFTOCityGenerator::BuildTower(const FFTOCityBlock& Block, int32 QuadX, int3
 	// The residents' lift: street doors on the other street face, near the corner.
 	const EFace LiftFace = DoorFace == StreetX ? StreetY : StreetX;
 	const int32 LiftIndex = 1;
+	BeginStructure(F, Floors, Paint);
 
 	// Ground floor: shop windows on the street, windows round the back, the door mid-front.
 	for (const EFace Face : { EFace::PosX, EFace::NegX, EFace::PosY, EFace::NegY })
@@ -351,6 +356,7 @@ void AFTOCityGenerator::BuildTower(const FFTOCityBlock& Block, int32 QuadX, int3
 
 	FFTOBuilding& Room = AddRoom(F, DoorFace, DoorIndex, Biz.Type, FString(Biz.Sign).ToUpper(), GroundHeight);
 	Furnish(Room, Rng);
+	EndStructure();
 }
 
 // ------------------------------------------------------------------------------------------
@@ -401,6 +407,7 @@ void AFTOCityGenerator::BuildHouse(const FVector& FrontCenter, EFace Facing, FRa
 	const FLinearColor RoofTint = Accent(Rng.RandRange(0, 7)) * 0.8f;
 	const bool bTwoStorey = Rng.FRand() < 0.45f;
 	const int32 DoorIndex = FacePanels(F, Facing) / 2;
+	BeginStructure(F, bTwoStorey ? 1 : 0, Paint);
 
 	for (const EFace Face : { EFace::PosX, EFace::NegX, EFace::PosY, EFace::NegY })
 	{
@@ -457,6 +464,7 @@ void AFTOCityGenerator::BuildHouse(const FVector& FrontCenter, EFace Facing, FRa
 
 	FFTOBuilding& Room = AddRoom(F, Facing, DoorIndex, EFTOBuildingType::Home, FamilyNames[Rng.RandRange(0, UE_ARRAY_COUNT(FamilyNames) - 1)], GroundHeight);
 	Furnish(Room, Rng);
+	EndStructure();
 }
 
 // ------------------------------------------------------------------------------------------
@@ -499,6 +507,7 @@ void AFTOCityGenerator::BuildWarehouse(const FFootprint& F, EFace DoorFace, FRan
 	const int32 N = FacePanels(F, DoorFace);
 	const int32 Roller = N / 2 - 1;
 	const int32 PersonDoor = FMath::Max(0, Roller - 2);
+	BeginStructure(F, 1, Paint);
 
 	for (const EFace Face : { EFace::PosX, EFace::NegX, EFace::PosY, EFace::NegY })
 	{
@@ -526,6 +535,7 @@ void AFTOCityGenerator::BuildWarehouse(const FFootprint& F, EFace DoorFace, FRan
 
 	FFTOBuilding& Room = AddRoom(F, DoorFace, PersonDoor, EFTOBuildingType::Warehouse, TEXT("WAREHOUSE"), GroundHeight + UpperHeight);
 	Furnish(Room, Rng);
+	EndStructure();
 }
 
 // ------------------------------------------------------------------------------------------
@@ -730,6 +740,7 @@ void AFTOCityGenerator::BuildBank(const FFTOCityBlock& Block)
 	const EFace Front = EFace::NegX;
 	const int32 DoorIndex = 6;
 	const FLinearColor Paint = BankStone;
+	BeginStructure(F, 2, Paint);
 
 	for (const EFace Face : { EFace::PosX, EFace::NegX, EFace::PosY, EFace::NegY })
 	{
@@ -812,4 +823,5 @@ void AFTOCityGenerator::BuildBank(const FFTOCityBlock& Block)
 	}
 	PlaceInRoom(B, TEXT("SM_VaultShelf"), VaultLine + 450.f, B.YMin, 90.f);
 	PlaceInRoom(B, TEXT("SM_VaultShelf"), VaultLine + 450.f, B.YMax, -90.f);
+	EndStructure();
 }

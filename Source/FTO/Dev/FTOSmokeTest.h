@@ -106,6 +106,15 @@ protected:
 	FVector TestTarget = FVector::ZeroVector;
 	FVector TestAway = FVector::ZeroVector;
 	float CrashHealthBefore = 0.f;
+	/** The demolition checks: the building, the wall panel rammed, and how many things were broken before. */
+	int32 TestStructure = INDEX_NONE;
+	FName TestWallName;
+	int32 TestWallInstance = INDEX_NONE;
+	int32 BrokenBefore = 0;
+	/** Find a standing wall panel (Face, Column, Level) of structure S. */
+	/** Where a camera can stand on the way from From to Wanted (short of whatever's in the way). */
+	FVector ClearSpot(const FVector& From, const FVector& Wanted) const;
+	bool FindWall(int32 S, int32 Face, int32 Column, int32 Level, UInstancedStaticMeshComponent*& OutISM, int32& OutInstance, FVector& OutAt) const;
 	/** The upstairs checks: the lift ridden, and where the stairs start. */
 	TWeakObjectPtr<class AFTOLift> TestLift;
 	FVector StairsFoot = FVector::ZeroVector;
