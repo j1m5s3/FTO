@@ -133,6 +133,7 @@ void AFTOCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME_CONDITION(AFTOCharacter, bSprinting, COND_SkipOwner);
 	DOREPLIFETIME(AFTOCharacter, TimedAction);
+	DOREPLIFETIME(AFTOCharacter, FightStanceUntil);
 	DOREPLIFETIME(AFTOCharacter, CurrentVehicle);
 	DOREPLIFETIME(AFTOCharacter, CurrentSeat);
 	DOREPLIFETIME(AFTOCharacter, TimedActionEnd);
@@ -170,6 +171,7 @@ void AFTOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompon
 	EIC->BindAction(Input->Whistle, ETriggerEvent::Started, this, &AFTOCharacter::WhistlePressed);
 	EIC->BindAction(Input->Camera, ETriggerEvent::Started, this, &AFTOCharacter::ToggleCamera);
 	EIC->BindAction(Input->Tackle, ETriggerEvent::Started, this, &AFTOCharacter::TacklePressed);
+	EIC->BindAction(Input->Kick, ETriggerEvent::Started, this, &AFTOCharacter::KickPressed);
 	EIC->BindAction(Input->Draw, ETriggerEvent::Started, this, &AFTOCharacter::DrawPressed);
 	EIC->BindAction(Input->Fire, ETriggerEvent::Started, this, &AFTOCharacter::FirePressed);
 	EIC->BindAction(Input->Reload, ETriggerEvent::Started, this, &AFTOCharacter::ReloadPressed);
@@ -361,9 +363,11 @@ void AFTOCharacter::Move(const FInputActionValue& Value)
 		return; // seeing stars, or busy cuffing someone: sit tight a moment
 	}
 
+	// Mid-punch (or reeling from one), only a shuffle.
+	const float Scale = Knockdown && Knockdown->IsBusy() ? 0.2f : 1.f;
 	const FRotator YawRotation(0.f, Controller->GetControlRotation().Yaw, 0.f);
-	AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X), Axis.Y);
-	AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Axis.X);
+	AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X), Axis.Y * Scale);
+	AddMovementInput(FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y), Axis.X * Scale);
 }
 
 void AFTOCharacter::Look(const FInputActionValue& Value)
@@ -440,6 +444,12 @@ bool AFTOCharacter::CanTackle() const
 
 void AFTOCharacter::TacklePressed()
 {
+	// Right up close and not running: grab hold of them instead (and over they go).
+	if (!bSprinting && CanFight() && FTOFighting::FindTarget(this, FTOFighting::Spec(EFTOMove::Grab).Reach))
+	{
+		ServerFight(EFTOMove::Grab);
+		return;
+	}
 	if (!CanTackle())
 	{
 		return;
@@ -451,6 +461,87 @@ void AFTOCharacter::TacklePressed()
 		LaunchTackle();
 	}
 	ServerTackle();
+}
+
+bool AFTOCharacter::CanFight() const
+{
+	return !CurrentVehicle && GetDrawnWeapon() == EFTOWeapon::None && !IsInSyncedAction() && IsReadyForAction() && FTOFighting::CanSwing(this);
+}
+
+void AFTOCharacter::PunchPressed()
+{
+	if (CanFight())
+	{
+		ServerFight(EFTOMove::Jab);
+	}
+}
+
+void AFTOCharacter::KickPressed()
+{
+	if (CanFight())
+	{
+		ServerFight(EFTOMove::KickFront);
+	}
+}
+
+void AFTOCharacter::EnterFightStance(float Seconds)
+{
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	FightStanceUntil = (GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds()) + Seconds;
+}
+
+void AFTOCharacter::ServerFight_Implementation(EFTOMove Move)
+{
+	if (!CanFight())
+	{
+		return;
+	}
+	// Strung together: jab, cross, hook, uppercut; a kick on the end of two or more is a roundhouse.
+	const float Now = GetWorld()->GetTimeSeconds();
+	const bool bChain = Now - LastSwingTime < 1.1f;
+	static const EFTOMove Punches[] = { EFTOMove::Jab, EFTOMove::Cross, EFTOMove::Hook, EFTOMove::Uppercut };
+	if (Move == EFTOMove::Jab)
+	{
+		FightCombo = bChain ? (FightCombo + 1) % UE_ARRAY_COUNT(Punches) : 0;
+		Move = Punches[FightCombo];
+	}
+	else if (Move == EFTOMove::KickFront)
+	{
+		Move = bChain && FightCombo >= 1 ? EFTOMove::KickRoundhouse : EFTOMove::KickFront;
+		FightCombo = 0;
+	}
+	// Squared up to wherever we're looking.
+	if (Controller)
+	{
+		SetActorRotation(FRotator(0.f, Controller->GetControlRotation().Yaw, 0.f));
+	}
+	AActor* Target = Move == EFTOMove::Grab ? FTOFighting::FindTarget(this, FTOFighting::Spec(EFTOMove::Grab).Reach) : nullptr;
+	if (Move == EFTOMove::Grab && !Target)
+	{
+		return;
+	}
+	if (!FTOFighting::Swing(this, Move, GetController(), Target))
+	{
+		return;
+	}
+	LastSwingTime = Now;
+	EnterFightStance();
+	if (Move == EFTOMove::Grab)
+	{
+		Grabbed = Target;
+		GetWorldTimerManager().SetTimer(ThrowTimer, this, &AFTOCharacter::ThrowGrabbed, FTOFighting::Spec(EFTOMove::Grab).Length + 0.02f, false);
+	}
+}
+
+void AFTOCharacter::ThrowGrabbed()
+{
+	AActor* Target = Grabbed.Get();
+	Grabbed.Reset();
+	if (Target && !IsInSyncedAction() && IsReadyForAction())
+	{
+		FTOFighting::Swing(this, EFTOMove::Throw, GetController(), Target);
+		EnterFightStance();
+	}
 }
 
 void AFTOCharacter::LaunchTackle()
@@ -751,6 +842,11 @@ EFTOAnimAction AFTOCharacter::GetAnimAction() const
 	if (TimedAction != EFTOAnimAction::None && Now < TimedActionEnd)
 	{
 		return TimedAction;
+	}
+	// Fists up, between blows.
+	if (Now < FightStanceUntil && GetDrawnWeapon() == EFTOWeapon::None && GetAnimSpeed() < 40.f)
+	{
+		return EFTOAnimAction::FightIdle;
 	}
 
 	// Standing still at a live scene: take notes, look busy.
@@ -1190,10 +1286,10 @@ void AFTOCharacter::FirePressed()
 	{
 		return;
 	}
-	// Nothing up yet: the first press draws.
+	// Nothing up: it's fists (RMB raises a weapon).
 	if (GetDrawnWeapon() == EFTOWeapon::None)
 	{
-		DrawPressed();
+		PunchPressed();
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();

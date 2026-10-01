@@ -38,6 +38,8 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	float Speed = 0.f;
 	bool bInAir = false;
 	EFTOAnimAction Action = EFTOAnimAction::None;
+	/** Changes whenever Action starts over. */
+	uint32 Serial = 0;
 	EFTOAimPose Aim = EFTOAimPose::None;
 	float AimPitch = 0.f;
 
@@ -71,6 +73,7 @@ private:
 	float ActionTime = 0.f;
 	float ActionWeight = 0.f;
 	EFTOAnimAction ShownAction = EFTOAnimAction::None;
+	uint32 ShownSerial = 0;
 	/** The action being crossfaded out of (straight into the next, without standing up in between). */
 	EFTOAnimAction FadingAction = EFTOAnimAction::None;
 	float FadingTime = 0.f;
@@ -116,6 +119,9 @@ public:
 	void SnapToAction(EFTOAnimAction Action);
 
 protected:
+	/** The owner's knockdown component, if it has one: a blow taken (or thrown) shows over whatever they're doing. */
+	TWeakObjectPtr<class UFTOKnockdownComponent> Knockdown;
+
 	virtual FAnimInstanceProxy* CreateAnimInstanceProxy() override;
 	virtual void DestroyAnimInstanceProxy(FAnimInstanceProxy* InProxy) override;
 	virtual void NativeInitializeAnimation() override;

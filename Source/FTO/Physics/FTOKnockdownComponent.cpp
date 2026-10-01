@@ -32,6 +32,7 @@ void UFTOKnockdownComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UFTOKnockdownComponent, State);
+	DOREPLIFETIME(UFTOKnockdownComponent, Move);
 }
 
 void UFTOKnockdownComponent::BeginPlay()
@@ -77,6 +78,108 @@ void UFTOKnockdownComponent::EnsureStars()
 // ------------------------------------------------------------------------------------------
 // Server API
 // ------------------------------------------------------------------------------------------
+
+void UFTOKnockdownComponent::PlayMove(EFTOAnimAction Action, float Seconds)
+{
+	check(GetOwner()->HasAuthority());
+	Move.Action = Action;
+	Move.Seconds = Seconds;
+	Move.Bone = NAME_None;
+	Move.Impulse = FVector::ZeroVector;
+	++Move.Serial;
+	GetOwner()->ForceNetUpdate();
+	OnRep_Move();
+}
+
+void UFTOKnockdownComponent::TakeBlow(EFTOAnimAction Reaction, float Seconds, FName Bone, const FVector& Impulse)
+{
+	check(GetOwner()->HasAuthority());
+	Move.Action = Reaction;
+	Move.Seconds = Seconds;
+	Move.Bone = Bone;
+	Move.Impulse = Impulse;
+	++Move.Serial;
+	LastBlow = GetWorld()->GetTimeSeconds();
+	GetOwner()->ForceNetUpdate();
+	OnRep_Move();
+}
+
+void UFTOKnockdownComponent::OnRep_Move()
+{
+	MoveStart = GetWorld()->GetTimeSeconds();
+	if (!FVector(Move.Impulse).IsNearlyZero())
+	{
+		StartFlinch(Move.Bone, Move.Impulse);
+	}
+}
+
+EFTOAnimAction UFTOKnockdownComponent::GetMove() const
+{
+	if (State.bDown || Move.Action == EFTOAnimAction::None || GetWorld()->GetTimeSeconds() - MoveStart > Move.Seconds)
+	{
+		return EFTOAnimAction::None;
+	}
+	return Move.Action;
+}
+
+float UFTOKnockdownComponent::AddDaze(float Amount)
+{
+	check(GetOwner()->HasAuthority());
+	Daze = FMath::Clamp(Daze + Amount, 0.f, 100.f);
+	LastBlow = GetWorld()->GetTimeSeconds();
+	return Daze;
+}
+
+void UFTOKnockdownComponent::StartFlinch(FName Bone, const FVector& Impulse)
+{
+	if (!Mesh || bRagdolling || GetNetMode() == NM_DedicatedServer || !Mesh->GetPhysicsAsset())
+	{
+		return;
+	}
+	static const FName Chest(TEXT("spine_02"));
+	if (Flinch <= 0.f)
+	{
+		// (Bodies that go loose need physics on the mesh; it goes back to how it was once they're reeled in.)
+		FlinchProfile = Mesh->GetCollisionProfileName();
+		Mesh->SetCollisionProfileName(TEXT("Ragdoll"));
+		Mesh->SetAllBodiesBelowSimulatePhysics(Chest, true, true);
+	}
+	Flinch = 0.7f;
+	Mesh->SetAllBodiesBelowPhysicsBlendWeight(Chest, Flinch, false, true);
+	const FName Hit = Bone.IsNone() || Mesh->GetBoneIndex(Bone) == INDEX_NONE ? FName(TEXT("spine_04")) : Bone;
+	Mesh->AddImpulse(Impulse, Hit, true);
+	Mesh->AddImpulseToAllBodiesBelow(Impulse * 0.35f, Chest, true, true);
+}
+
+void UFTOKnockdownComponent::TickFlinch(float DeltaTime)
+{
+	if (Flinch <= 0.f || !Mesh)
+	{
+		return;
+	}
+	Flinch -= DeltaTime * 1.6f;
+	if (Flinch <= 0.f || bRagdolling)
+	{
+		StopFlinch();
+		return;
+	}
+	Mesh->SetAllBodiesBelowPhysicsBlendWeight(TEXT("spine_02"), Flinch, false, true);
+}
+
+void UFTOKnockdownComponent::StopFlinch()
+{
+	Flinch = 0.f;
+	if (!Mesh || bRagdolling)
+	{
+		return;
+	}
+	Mesh->SetAllBodiesBelowSimulatePhysics(TEXT("spine_02"), false, true);
+	Mesh->SetAllBodiesBelowPhysicsBlendWeight(TEXT("spine_02"), 0.f, false, true);
+	if (!FlinchProfile.IsNone())
+	{
+		Mesh->SetCollisionProfileName(FlinchProfile);
+	}
+}
 
 void UFTOKnockdownComponent::Knockdown(const FVector& LaunchVelocity, float Duration)
 {
@@ -242,6 +345,12 @@ bool UFTOKnockdownComponent::IsDazed() const
 void UFTOKnockdownComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	TickFlinch(DeltaTime);
+	// Grogginess wears off once the blows stop coming.
+	if (Daze > 0.f && GetOwner()->HasAuthority() && GetWorld()->GetTimeSeconds() - LastBlow > 2.5f)
+	{
+		Daze = FMath::Max(0.f, Daze - 15.f * DeltaTime);
+	}
 
 	// Keep the actor (and anything tracking it: camera, markers, relevancy) with the body.
 	if (bRagdolling && Mesh)

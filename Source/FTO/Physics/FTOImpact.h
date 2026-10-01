@@ -29,6 +29,12 @@ namespace FTOImpact
 	/** Server: an officer's flying tackle, heading along Direction, lands on Victim. */
 	FTO_API bool Tackle(AActor* Victim, const FVector& Direction, AController* Officer);
 
+	/** Server: a blow that floors Victim (FTOFighting): launched at Launch, down for Seconds. Police: who threw it, if an officer. */
+	FTO_API bool Strike(AActor* Victim, const FVector& Launch, float Seconds, AController* Police);
+
+	/** Server: an officer landed a blow on Victim that didn't floor them (a citizen: the city minds). */
+	FTO_API void Roughed(AActor* Victim, AController* Police);
+
 	/** Server: a round from Weapon, fired by Shooter (an officer, a perp), hits Victim at Velocity. */
 	FTO_API bool Shot(AActor* Victim, const FVector& Velocity, EFTOWeapon Weapon, AActor* Shooter);
 }

@@ -549,7 +549,8 @@ EFTOAnimAction AFTOPedestrian::GetAnimAction() const
 
 bool AFTOPedestrian::IsMovementFrozen() const
 {
-	return Knockdown && Knockdown->IsDown();
+	// (Mid-punch, or reeling from one, they stand their ground.)
+	return Knockdown && (Knockdown->IsDown() || Knockdown->IsBusy());
 }
 
 void AFTOPedestrian::HandleRecovered()

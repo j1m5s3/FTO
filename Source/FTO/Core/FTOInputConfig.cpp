@@ -43,6 +43,7 @@ void UFTOInputConfig::Build()
 	Horn     = MakeAction(TEXT("IA_Horn"),     (int32)EInputActionValueType::Boolean);
 	Camera   = MakeAction(TEXT("IA_Camera"),   (int32)EInputActionValueType::Boolean);
 	Tackle   = MakeAction(TEXT("IA_Tackle"),   (int32)EInputActionValueType::Boolean);
+	Kick     = MakeAction(TEXT("IA_Kick"),     (int32)EInputActionValueType::Boolean);
 	Draw     = MakeAction(TEXT("IA_Draw"),     (int32)EInputActionValueType::Boolean);
 	Fire     = MakeAction(TEXT("IA_Fire"),     (int32)EInputActionValueType::Boolean);
 	Reload   = MakeAction(TEXT("IA_Reload"),   (int32)EInputActionValueType::Boolean);
@@ -98,6 +99,8 @@ void UFTOInputConfig::Build()
 
 	DefaultContext->MapKey(Tackle, EKeys::F);
 	DefaultContext->MapKey(Tackle, EKeys::Gamepad_FaceButton_Right);
+	DefaultContext->MapKey(Kick, EKeys::G);
+	DefaultContext->MapKey(Kick, EKeys::Gamepad_RightShoulder); // (reload with a weapon up)
 
 	// Weapons
 	DefaultContext->MapKey(Draw, EKeys::RightMouseButton);

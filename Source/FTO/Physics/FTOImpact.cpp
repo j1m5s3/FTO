@@ -89,6 +89,33 @@ bool FTOImpact::Tackle(AActor* Victim, const FVector& Direction, AController* Of
 	return Knock(Victim, Launch, 2.8f, Officer, 1.f, INVTEXT("Easy, officer! That was a citizen."));
 }
 
+bool FTOImpact::Strike(AActor* Victim, const FVector& Launch, float Seconds, AController* Police)
+{
+	return Knock(Victim, Launch, Seconds, Police, 1.5f, INVTEXT("Hands off! That was a citizen."));
+}
+
+void FTOImpact::Roughed(AActor* Victim, AController* Police)
+{
+	AFTOGameState* GS = Victim && Police ? Victim->GetWorld()->GetGameState<AFTOGameState>() : nullptr;
+	if (!GS || !IsCivilian(Victim))
+	{
+		return;
+	}
+	GS->AddChaos(0.3f);
+	// (Told once in a while, not for every punch.)
+	static TMap<TWeakObjectPtr<AController>, float> LastTold;
+	const float Now = Victim->GetWorld()->GetTimeSeconds();
+	float& Told = LastTold.FindOrAdd(Police);
+	if (Now - Told > 4.f || Told > Now)
+	{
+		Told = Now;
+		if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(Police))
+		{
+			PC->ClientToast(INVTEXT("Easy! Roughing up citizens costs chaos."), FLinearColor(1.f, 0.45f, 0.3f));
+		}
+	}
+}
+
 bool FTOImpact::Shot(AActor* Victim, const FVector& Velocity, EFTOWeapon Weapon, AActor* Shooter)
 {
 	const FFTOWeaponSpec& Spec = FTOWeapons::Spec(Weapon);
