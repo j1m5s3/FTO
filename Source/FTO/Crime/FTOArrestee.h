@@ -44,6 +44,8 @@ public:
 	void MarkWrongful() { bWrongful = true; }
 
 	UFUNCTION(BlueprintPure, Category="Arrest") AFTOCharacter* GetEscort() const { return Escort; }
+	/** Server: taken along in a lift: stood at Where, the trail behind them forgotten. */
+	void RideAlongTo(const FVector& Where, float Yaw);
 	UFUNCTION(BlueprintPure, Category="Arrest") EFTOArresteeState GetArrestState() const { return State; }
 	FText GetCrime() const { return Crime; }
 	/** Sat in a cell (booked and settled). */

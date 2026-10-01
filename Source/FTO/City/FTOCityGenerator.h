@@ -92,6 +92,10 @@ public:
 	 */
 	UInstancedStaticMeshComponent* FindInstanced(FName Name) const;
 
+	/** The foot of each house's outside stairs, facing up them, and the doorway at the top, facing in (tests). */
+	const TArray<FTransform>& GetOutsideStairs() const { return OutsideStairs; }
+	const TArray<FTransform>& GetOutsideStairTops() const { return OutsideStairTops; }
+
 	/** Blocks along each axis. 8 x 8 is about 420 m across. */
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksX = 8;
 	UPROPERTY(EditAnywhere, Category="City|Layout") int32 BlocksY = 8;
@@ -148,7 +152,31 @@ protected:
 	FTransform PanelTransform(const FFootprint& F, EFace Face, float Index, float Z) const;
 
 	void BuildGroundFace(const FFootprint& F, EFace Face, const TArray<EPanel>& Panels, const FLinearColor& Paint);
-	void BuildUpperFloors(const FFootprint& F, int32 Floors, const FLinearColor& Paint, FRandomStream& Rng, bool bWide);
+	/** The facade above the ground floor. SpecialFace/SpecialIndex (if set) gets SpecialPiece on every floor instead
+	 *  (a plain panel behind a lift's stops), or nothing at all if SpecialPiece is null (a doorway to outside stairs). */
+	void BuildUpperFloors(const FFootprint& F, int32 Floors, const FLinearColor& Paint, FRandomStream& Rng, bool bWide,
+		int32 SpecialFace = -1, int32 SpecialIndex = -1, const TCHAR* SpecialPiece = nullptr);
+
+	// ---- Upper floors (FTOCityUpperFloors.cpp) ----
+	/** Standing height of storey 1.. (above the footprint's street level). */
+	static float StoreyFloorZ(int32 Storey);
+	/** Which quarter of a footprint a point is in (0: +X+Y, 1: -X+Y, 2: -X-Y, 3: +X-Y). */
+	static int32 QuarterOf(const FFootprint& F, const FVector& Where);
+	/** Floors, lights and furniture for storeys 1..Floors (offices low down, homes higher up or everywhere for
+	 *  bHomes), under a ceiling at CeilingTopZ on the top floor; SkipQuarter kept clear (for the lift). */
+	void BuildUpperStoreys(const FFootprint& F, int32 Floors, bool bHomes, float CeilingTopZ, int32 SkipQuarter, FRandomStream& Rng);
+	/** A lift with its street doors on panel Index of Face and a stop on every floor above (spawned on the server). */
+	void PlanLift(const FFootprint& F, EFace Face, int32 Index, int32 Floors);
+	/** Stairs up the outside of Face to a doorway at panel Index on the first floor. */
+	void BuildOutsideStairs(const FFootprint& F, EFace Face, int32 Index, const FLinearColor& Tint);
+	struct FLiftPlan
+	{
+		/** Where each stop's doors are (on the wall, facing whoever's waiting), street level first. */
+		TArray<FTransform> Stops;
+	};
+	TArray<FLiftPlan> LiftPlans;
+	TArray<FTransform> OutsideStairs;
+	TArray<FTransform> OutsideStairTops;
 	void BuildRoof(const FFootprint& F, float RoofZ, const FLinearColor& Paint, FRandomStream& Rng, bool bRooftopClutter);
 	void BuildCorners(const FFootprint& F, int32 Floors, const FLinearColor& Paint);
 	/** Floor, ceiling and lights for a ground floor, and the room record interiors are furnished from. */

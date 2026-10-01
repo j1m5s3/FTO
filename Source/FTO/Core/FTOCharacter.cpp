@@ -264,7 +264,7 @@ void AFTOCharacter::TalkPressed(int32 Index)
 void AFTOCharacter::ServerTalkChoice_Implementation(int32 Index)
 {
 	IFTOTalkable* Talkable = Cast<IFTOTalkable>(TalkingTo);
-	if (!Talkable || !IsValid(TalkingTo) || FVector::Dist2D(TalkingTo->GetActorLocation(), GetActorLocation()) > TalkRange + 150.f)
+	if (!Talkable || !IsValid(TalkingTo) || FVector::Dist(TalkingTo->GetActorLocation(), GetActorLocation()) > TalkRange + 250.f)
 	{
 		EndTalk();
 		return;
@@ -530,7 +530,7 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 	// A conversation's over if either of us goes (or gets in a car, gets shot, or it's gone quiet for a while).
 	if (HasAuthority() && TalkingTo)
 	{
-		const bool bGone = !IsValid(TalkingTo) || FVector::Dist2D(TalkingTo->GetActorLocation(), GetActorLocation()) > TalkRange;
+		const bool bGone = !IsValid(TalkingTo) || FVector::Dist(TalkingTo->GetActorLocation(), GetActorLocation()) > TalkRange + 150.f;
 		if (bGone || CurrentVehicle || bDowned || IsInSyncedAction() || GetWorld()->GetTimeSeconds() - TalkIdleSince > 30.f)
 		{
 			EndTalk();
