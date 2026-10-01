@@ -33,7 +33,7 @@ Each item is one PR, reviewed before it's merged.
 - [x] **Building destruction** (upgrade 2): walls broken systematically, cars through walls, buildings levelled.
 - [x] **Characters** (upgrade 1): detailed in-house models on the UE5 mannequin skeleton with Epic's free
   animations, plus weapon-handling fixes.
-- [ ] **Hand-to-hand fighting** (upgrade 8): punches, kicks, grabs and throws with weighty, physical reactions.
+- [x] **Hand-to-hand fighting** (upgrade 8): punches, kicks, grabs and throws with weighty, physical reactions.
 
 ## Backlog (later ideas)
 - [ ] Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame

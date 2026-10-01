@@ -127,6 +127,14 @@ Done:
   suspects (shot, tased, tackled or run over) kneel for the cuffs; car chases end with the driver climbing out and
   giving up beside the car. A suspect who outruns everyone, or is left kneeling alone, gets away.
 
+- Hand-to-hand fighting (upgrade 8). Officers and the people they're up against fight with their fists: punches
+  that string into combos, kicks, and grabbing someone and throwing them over. It's built to feel weighty and loose:
+  every blow lands at the clip's moment of contact, the one who takes it reels the way it came from with their upper
+  body knocked loose under physics, and a big one staggers them back. Blows add up (grogginess wears off if you stop),
+  and enough of them puts someone on the floor in a ragdoll, which for a suspect means they're caught. Suspects who'd
+  rather fight than come quietly (brawlers, drunks, muggers) square up, close in and swing back; bar fights and street
+  brawls are a proper scrap before the police arrive. Officers roughing up citizens costs chaos.
+
 - Phase 2: the radio. Push-to-talk squad voice through a walkie-talkie filter with squelch, and a callout wheel
   (need backup, suspect fleeing, officer down, 10-4) that needs no mic and drops pings on everyone's HUD. Going down
   calls "officer down" automatically.

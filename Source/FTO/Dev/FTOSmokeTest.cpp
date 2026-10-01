@@ -1,4 +1,5 @@
 #include "Dev/FTOSmokeTest.h"
+#include "Combat/FTOFighting.h"
 #include "City/FTOLift.h"
 #include "Audio/FTOFootsteps.h"
 #include "City/FTOCityGenerator.h"
@@ -1071,7 +1072,7 @@ void AFTOSmokeTest::BuildSteps()
 				TackleTarget->TeleportAndHold(FVector(Spot.X, Spot.Y, Cop->GetActorLocation().Z - 96.f + AFTOPedestrian::HalfHeight));
 				ViewFrom(Cop->GetActorLocation() + Fwd * 150.f + Right * Side * 560.f + FVector(0.f, 0.f, 120.f), Cop->GetActorLocation() + Fwd * 180.f);
 			}
-			Cop->TacklePressed();
+			Cop->DiveTackle(); // (a dive, even if someone else is close enough to grab)
 		});
 		AddShot(TEXT("16b_tackle"), 0.6f);
 		AddStep(TEXT("tackle result"), 2.9f, [this]()
@@ -1186,7 +1187,13 @@ void AFTOSmokeTest::BuildSteps()
 		{
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});
-		// (Once the view is the officer's own camera again.)
+		// (Once the view is the officer's own camera again, and they're on their feet: a burning car somewhere may
+		// have gone up beside them.)
+		AddWait(TEXT("officer steady"), 8.f, [this]()
+		{
+			const AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			return !Cop || Cop->IsReadyForAction();
+		});
 		AddStep(TEXT("aim"), 0.05f, AimAtRobber);
 		AddShot(TEXT("17b2_officer_aims"), 0.05f);
 		AddStep(TEXT("return fire"), 0.f, [this, AimAtRobber]()
@@ -1398,7 +1405,7 @@ void AFTOSmokeTest::BuildSteps()
 			const FVector Dir = TestPerp->GetMoveDirection().GetSafeNormal2D();
 			const FVector Runner = TestPerp->GetActorLocation();
 			Cop->TeleportTo(Runner - Dir * 140.f + FVector(0.f, 0.f, 96.f - AFTOPedestrian::HalfHeight + 2.f), Dir.Rotation());
-			Cop->TacklePressed();
+			Cop->DiveTackle(); // (as from a sprint)
 			const FVector Right = FVector::CrossProduct(FVector::UpVector, Dir);
 			ViewFrom(Runner + Dir * 150.f + Right * 560.f + FVector(0.f, 0.f, 120.f), Runner + Dir * 120.f);
 		});
@@ -2567,7 +2574,8 @@ void AFTOSmokeTest::BuildSteps()
 			// (How far in its front bumper got.)
 			const float Past = TestCruiser ? 240.f - FVector::DotProduct(TestCruiser->GetActorLocation() - TestTarget, TestAway) : 0.f;
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: drove through a wall: %s (front %.0f cm in, %d pieces broken, cruiser health %.0f)."),
-				bGone && Past > 50.f ? TEXT("through it") : bGone ? TEXT("WALL BROKE, CAR STOPPED") : TEXT("BOUNCED OFF"), Past,
+				// (Through it, or through the hole the ram had already opened beside it.)
+				Past > 50.f ? TEXT("through it") : bGone ? TEXT("WALL BROKE, CAR STOPPED") : TEXT("BOUNCED OFF"), Past,
 				Wreckage ? Wreckage->NumBroken() - BrokenBefore : -1, TestCruiser && TestCruiser->GetDamage() ? TestCruiser->GetDamage()->GetHealth() : -1.f);
 			if (TestCruiser)
 			{
@@ -2853,6 +2861,178 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				TestCruiser->GetDamage()->Repair();
 			}
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+		// Hand to hand. A bar fight where the brawlers trade blows; an officer's combo on a suspect who fights back
+		// (until they're down and cuffed); and a grab and a throw.
+		AddStep(TEXT("fight: a brawl"), 0.f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			// (A fresh start: the demolition before has the city in uproar.)
+			if (AFTOGameMode* GM = GetAuthGameMode())
+			{
+				GM->FTOAddChaos(-100.f);
+			}
+			TestPerp = StagePerp(TEXT("Riot"), 650.f);
+			if (!Cop || !TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: brawl: NO BRAWL."));
+				return;
+			}
+			TestPerp->SetForcedResponse(EFTOArrestResponse::Fight);
+			// (Watched from where the officer stands, well back: officers on the scene would break it up.)
+			const FVector At = TestPerp->GetActorLocation();
+			ViewFrom(ClearSpot(At + FVector(0.f, 0.f, 140.f), At + (Cop->GetActorLocation() - At).GetSafeNormal2D() * 520.f + FVector(0.f, 0.f, 160.f)), At);
+			BlowsBefore = 0;
+			for (TActorIterator<AFTOCrimeExtra> It(GetWorld()); It; ++It)
+			{
+				BlowsBefore += It->FindComponentByClass<UFTOKnockdownComponent>() ? It->FindComponentByClass<UFTOKnockdownComponent>()->GetMoveSerial() : 0;
+			}
+			BlowsBefore += TestPerp->FindComponentByClass<UFTOKnockdownComponent>() ? TestPerp->FindComponentByClass<UFTOKnockdownComponent>()->GetMoveSerial() : 0;
+		});
+		AddStep(TEXT("brawl goes on"), 3.4f, [this]() {});
+		AddShot(TEXT("24a_brawl"), 0.6f);
+		AddStep(TEXT("brawl result"), 0.f, [this]()
+		{
+			int32 Blows = 0;
+			int32 Brawlers = 0;
+			for (TActorIterator<AFTOCrimeExtra> It(GetWorld()); It; ++It)
+			{
+				Blows += It->FindComponentByClass<UFTOKnockdownComponent>() ? It->FindComponentByClass<UFTOKnockdownComponent>()->GetMoveSerial() : 0;
+				Brawlers += It->GetRole() == EFTOExtraRole::Brawler ? 1 : 0;
+			}
+			Blows += TestPerp.IsValid() && TestPerp->FindComponentByClass<UFTOKnockdownComponent>() ? TestPerp->FindComponentByClass<UFTOKnockdownComponent>()->GetMoveSerial() : 0;
+			// (Each swing and each one landed counts.)
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: a street brawl with %d brawler(s): %s (%d swings and hits)."), Brawlers,
+				uint8(Blows - BlowsBefore) >= 3 ? TEXT("trading blows") : TEXT("NOBODY SWINGING"), uint8(Blows - BlowsBefore));
+		});
+		// (On their feet again first: the car bomb threw the officer over.)
+		AddWait(TEXT("officer back up"), 9.f, [this]()
+		{
+			const AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			return !Cop || Cop->IsReadyForAction();
+		});
+		AddStep(TEXT("fight: square up"), 0.3f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop)
+			{
+				return;
+			}
+			// Empty-handed, face to face with a suspect who'd rather fight.
+			if (Cop->GetDrawnWeapon() != EFTOWeapon::None)
+			{
+				Cop->SelectSlot(Cop->GetDrawnSlot()); // (put it away)
+			}
+			TestPerp = StagePerp(TEXT("Vandalism"), 110.f);
+			if (!TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: fist fight: NO SUSPECT."));
+				return;
+			}
+			TestPerp->SetForcedResponse(EFTOArrestResponse::Fight);
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetControlRotation((TestPerp->GetActorLocation() - Cop->GetActorLocation()).GetSafeNormal2D().Rotation());
+				PC->SetViewTargetWithBlend(Cop, 0.f);
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: squared up to a suspect %.0f cm away (officer %s)."), FVector::Dist2D(TestPerp->GetActorLocation(), Cop->GetActorLocation()),
+				Cop->CanFight() ? TEXT("ready") : TEXT("NOT READY TO FIGHT"));
+			// Filmed side on.
+			const FVector Mid = (TestPerp->GetActorLocation() + Cop->GetActorLocation()) * 0.5f;
+			const FVector Side = FVector::CrossProduct(FVector::UpVector, (TestPerp->GetActorLocation() - Cop->GetActorLocation()).GetSafeNormal2D());
+			const FVector Toward = (TestPerp->GetActorLocation() - Cop->GetActorLocation()).GetSafeNormal2D();
+			ViewFrom(ClearSpot(Mid + FVector(0.f, 0.f, 200.f), Mid - Toward * 320.f + Side * 260.f + FVector(0.f, 0.f, 220.f)), Mid);
+			OfficerHits = 0;
+		});
+		for (int32 Swing = 0; Swing < 12; ++Swing)
+		{
+			AddStep(TEXT("fight: swing"), 0.82f, [this, Swing]()
+			{
+				AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+				if (!Cop || !TestPerp.IsValid() || TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered)
+				{
+					return;
+				}
+				// Face them, then a jab, cross, hook... with a kick to finish every fourth.
+				if (APlayerController* PC = GetPC())
+				{
+					PC->SetControlRotation((TestPerp->GetActorLocation() - Cop->GetActorLocation()).GetSafeNormal2D().Rotation());
+				}
+				OfficerHits += Cop->FindComponentByClass<UFTOKnockdownComponent>() && Cop->FindComponentByClass<UFTOKnockdownComponent>()->GetMove() != EFTOAnimAction::None &&
+					uint8(Cop->FindComponentByClass<UFTOKnockdownComponent>()->GetMove()) >= uint8(EFTOAnimAction::HitLightFront) && uint8(Cop->FindComponentByClass<UFTOKnockdownComponent>()->GetMove()) <= uint8(EFTOAnimAction::HitHeavy) ? 1 : 0;
+				Swing % 4 == 3 ? Cop->KickPressed() : Cop->PunchPressed();
+			});
+			if (Swing == 2)
+			{
+				AddShot(TEXT("24b_punch"), 0.f);
+			}
+		}
+		AddStep(TEXT("fight result"), 0.5f, [this]()
+		{
+			const bool bDown = TestPerp.IsValid() && (TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered || (TestPerp->FindComponentByClass<UFTOKnockdownComponent>() && TestPerp->FindComponentByClass<UFTOKnockdownComponent>()->IsDown()));
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: fist fight with a suspect: %s (they fought back: %s, officer rocked %d time(s))."),
+				bDown ? TEXT("put them down") : TEXT("STILL STANDING"), TestPerp.IsValid() && (TestPerp->IsFighting() || bDown) ? TEXT("yes") : TEXT("NO"), OfficerHits);
+		});
+		AddWait(TEXT("fighter on their knees"), 5.f, [this]()
+		{
+			const AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			return !TestPerp.IsValid() || (TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered && Cop && Cop->IsReadyForAction());
+		});
+		AddStep(TEXT("cuff the fighter"), 0.f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (Cop && TestPerp.IsValid() && TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered)
+			{
+				if (UFTOKnockdownComponent* Down = TestPerp->FindComponentByClass<UFTOKnockdownComponent>(); Down && Down->IsDown())
+				{
+					Down->Recover();
+				}
+				TestPerp->Interact(Cop);
+			}
+		});
+		AddWait(TEXT("fighter cuffed"), 6.f, [this]() { return !TestPerp.IsValid() || TestPerp->IsActorBeingDestroyed(); });
+		AddStep(TEXT("fighter result"), 0.f, [this]()
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the fighter: %s."), !TestPerp.IsValid() || TestPerp->IsActorBeingDestroyed() ? TEXT("cuffed") :
+				*FString::Printf(TEXT("NOT CUFFED (%s)"), *StaticEnum<EFTOPerpArrest>()->GetNameStringByValue(int64(TestPerp->GetArrestState()))));
+		});
+		AddStep(TEXT("fight: grab"), 0.25f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop)
+			{
+				return;
+			}
+			TestPerp = StagePerp(TEXT("Vandalism"), 300.f);
+			if (!TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: grab: NO SUSPECT."));
+				return;
+			}
+			TestPerp->SetForcedResponse(EFTOArrestResponse::Comply);
+			const FVector At = TestPerp->GetActorLocation();
+			const FVector Back = TestPerp->GetActorForwardVector().GetSafeNormal2D();
+			Cop->TeleportTo(At + Back * 95.f + FVector(0.f, 0.f, 4.f), (-Back).Rotation());
+			if (APlayerController* PC = GetPC())
+			{
+				PC->SetControlRotation((-Back).Rotation());
+			}
+			const FVector Side = FVector::CrossProduct(FVector::UpVector, Back);
+			ViewFrom(ClearSpot(At + FVector(0.f, 0.f, 60.f), At + Back * 50.f + Side * 450.f + FVector(0.f, 0.f, 90.f)), At + Back * 50.f);
+		});
+		AddStep(TEXT("grab them"), 1.2f, [this]()
+		{
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+			{
+				Cop->TacklePressed(); // close and standing: a grab
+			}
+		});
+		AddShot(TEXT("24c_throw"), 1.6f);
+		AddStep(TEXT("grab result"), 0.f, [this]()
+		{
+			const bool bThrown = TestPerp.IsValid() && ((TestPerp->FindComponentByClass<UFTOKnockdownComponent>() && TestPerp->FindComponentByClass<UFTOKnockdownComponent>()->IsDown()) || TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: grabbed a suspect and threw them: %s."), bThrown ? TEXT("over they went") : TEXT("NOT THROWN"));
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});
 	}

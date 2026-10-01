@@ -15,7 +15,7 @@
 namespace
 {
 	/** From fight_timing.json (length, contact time, reach), and our own sense of how hard each one is. */
-	const FFTOMoveSpec Specs[] =
+	const FFTOMoveSpec MoveSpecs[] =
 	{
 		{},
 		{ EFTOAnimAction::Jab,            0.667f, 0.267f, 78.f, 14.f,  220.f, false, TEXT("head"),     TEXT("Punch") },
@@ -44,8 +44,8 @@ namespace
 
 const FFTOMoveSpec& FTOFighting::Spec(EFTOMove Move)
 {
-	const int32 Index = FMath::Clamp(int32(Move), 0, int32(UE_ARRAY_COUNT(Specs)) - 1);
-	return Specs[Index];
+	const int32 Index = FMath::Clamp(int32(Move), 0, int32(UE_ARRAY_COUNT(MoveSpecs)) - 1);
+	return MoveSpecs[Index];
 }
 
 bool FTOFighting::CanSwing(const AActor* Fighter)

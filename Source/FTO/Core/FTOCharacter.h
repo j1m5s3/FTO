@@ -89,6 +89,8 @@ public:
 	/** Flying tackle (what F does on foot): dive forward and bowl over whoever's in the way. Close to someone and not
 	 *  running, F grabs hold of them instead and throws them. */
 	void TacklePressed();
+	/** The dive itself, never a grab. */
+	void DiveTackle();
 
 	// ---- Hand to hand (Combat/FTOFighting) ----
 	/** A punch (what Fire does with no weapon up): jab, cross, hook, uppercut, one after another. */

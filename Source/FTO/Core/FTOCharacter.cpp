@@ -450,6 +450,11 @@ void AFTOCharacter::TacklePressed()
 		ServerFight(EFTOMove::Grab);
 		return;
 	}
+	DiveTackle();
+}
+
+void AFTOCharacter::DiveTackle()
+{
 	if (!CanTackle())
 	{
 		return;

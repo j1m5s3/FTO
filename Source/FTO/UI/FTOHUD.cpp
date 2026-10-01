@@ -447,7 +447,9 @@ void AFTOHUD::DrawWeaponPanel()
 			DrawText(Ammo, AmmoInk, X + 8.f * S, Y0 + 25.f * S, Font, S);
 		}
 	}
-	DrawText(TEXT("1-3 / wheel: weapons   RMB: raise   LMB: fire   R: reload"), FLinearColor(0.7f, 0.7f, 0.7f, 0.8f), X0, Y0 - 16.f * S, Font, S * 0.85f);
+	// (Empty-handed, the same buttons fight.)
+	DrawText(Me->GetDrawnWeapon() == EFTOWeapon::None ? TEXT("RMB: raise a weapon   LMB: punch   G: kick   F: grab (close) or tackle") :
+		TEXT("1-3 / wheel: weapons   RMB: lower   LMB: fire   R: reload"), FLinearColor(0.7f, 0.7f, 0.7f, 0.8f), X0, Y0 - 16.f * S, Font, S * 0.85f);
 
 	// Shot down: a banner until a partner comes.
 	if (Me->IsDowned())

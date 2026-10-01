@@ -1,4 +1,5 @@
 #include "Crime/FTOCrimeExtra.h"
+#include "Combat/FTOFighting.h"
 #include "Crime/FTOIncident.h"
 #include "Crime/FTOPerp.h"
 #include "Core/FTOCharacter.h"
@@ -69,7 +70,7 @@ EFTOAnimAction AFTOCrimeExtra::GetAnimAction() const
 	switch (ExtraRole)
 	{
 	case EFTOExtraRole::Brawler:
-		return bGoingOn ? EFTOAnimAction::Punch : EFTOAnimAction::Cower;
+		return bGoingOn ? EFTOAnimAction::FightIdle : EFTOAnimAction::Cower; // (the punches themselves play over the top)
 	case EFTOExtraRole::Arguer:
 		return EFTOAnimAction::Talk;
 	default:
@@ -100,9 +101,16 @@ void AFTOCrimeExtra::Tick(float DeltaSeconds)
 		Scarper();
 		return;
 	}
-	// The perp lands a good one now and then.
+	// Swinging back at the perp (for show: it rocks them, never floors them)...
 	const float Now = GetWorld()->GetTimeSeconds();
 	AFTOPerp* Perp = Incident->GetPerp();
+	if (Now >= NextSwing && Perp && FTOFighting::CanSwing(this) && FVector::Dist2D(Perp->GetActorLocation(), GetActorLocation()) < 230.f)
+	{
+		NextSwing = Now + Rng.FRandRange(1.6f, 3.2f);
+		FaceToward(Perp->GetActorLocation());
+		FTOFighting::Swing(this, FTOFighting::PickBrawlerMove(Rng), nullptr, Perp, true);
+	}
+	// ...and the perp lands a good one now and then.
 	if (Now >= NextKnockdown && Perp && FVector::Dist2D(Perp->GetActorLocation(), GetActorLocation()) < 250.f)
 	{
 		NextKnockdown = Now + Rng.FRandRange(KnockdownEvery.X, KnockdownEvery.Y);

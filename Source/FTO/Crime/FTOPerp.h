@@ -18,7 +18,8 @@ enum class EFTOPerpArrest : uint8
 	Struggling,		// fighting off an officer, who mashes Interact to win
 	Fleeing,		// legging it on foot
 	Cuffing,		// kneeling while an officer puts the cuffs on
-	Hiding			// got away: strolling about like anyone else, till someone recognises them
+	Hiding,			// got away: strolling about like anyone else, till someone recognises them
+	Fighting		// fists up, trading blows with an officer till one of them goes down
 };
 
 /** How a suspect takes an officer's attempt to arrest them. */
@@ -28,7 +29,8 @@ enum class EFTOArrestResponse : uint8
 	Roll,		// decide on the spot (the tests can force the others)
 	Comply,
 	Struggle,
-	Bolt
+	Bolt,
+	Fight
 };
 
 /**
@@ -75,6 +77,9 @@ public:
 
 	AFTOIncident* GetIncident() const { return Incident; }
 	bool IsCriminal() const { return bCriminal; }
+	/** Server: an officer laid a hand on us (a punch, a kick): fight back, run, or give in. */
+	void Provoked(AFTOCharacter* Officer);
+	bool IsFighting() const { return ArrestState == EFTOPerpArrest::Fighting; }
 	EFTOPerpArrest GetArrestState() const { return ArrestState; }
 	bool IsFleeing() const { return ArrestState == EFTOPerpArrest::Fleeing; }
 	bool IsHiding() const { return ArrestState == EFTOPerpArrest::Hiding; }
@@ -189,6 +194,16 @@ protected:
 
 	/** Server: the arrest side of things (struggles, chases, waiting for the cuffs). */
 	void TickArrest(float DeltaSeconds);
+	/** Server: squared up to an officer, fists up. */
+	void BeginFighting(AFTOCharacter* Officer);
+	/** Server: closing in and swinging, till someone's on the floor. */
+	void TickFighting(float DeltaSeconds);
+	/** Server: a brawl (bar fight, street brawl) before the police arrive: trading blows with the other brawlers. */
+	void TickBrawl(float DeltaSeconds);
+	/** Server: who we're fighting, when the next swing comes, and when the fight started. */
+	TWeakObjectPtr<AFTOCharacter> FightTarget;
+	float NextSwing = 0.f;
+	float FightStartTime = 0.f;
 	void TryArrest(AFTOCharacter* Officer);
 	EFTOArrestResponse RollResponse(const AFTOCharacter* Officer);
 	void BeginCuffing(AFTOCharacter* Officer);

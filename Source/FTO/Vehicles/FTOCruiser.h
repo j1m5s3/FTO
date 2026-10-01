@@ -178,6 +178,8 @@ protected:
 	bool BreakThrough(const FHitResult& Hit, FVector& Velocity);
 	/** Let the car through Thing for a moment (it's being knocked down). */
 	void IgnoreBriefly(UPrimitiveComponent* Thing, float Until);
+	/** When we last went through a wall. */
+	float LastWallBreak = -100.f;
 	UFUNCTION(Server, Reliable)
 	void ServerBreakThrough(FName Component, int32 Instance, FVector_NetQuantize Hit, FVector_NetQuantize10 Push);
 	/** Whoever simulates the car: it's run into something solid at Into cm/s. The car (and a car it hit) takes the knock. */

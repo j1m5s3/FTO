@@ -1,4 +1,6 @@
 #include "Crime/FTOPerp.h"
+#include "Crime/FTOCrimeExtra.h"
+#include "Combat/FTOFighting.h"
 #include "Crime/FTOIncident.h"
 #include "Crime/FTOGraffitiTag.h"
 #include "Art/FTOArt.h"
@@ -47,7 +49,7 @@ namespace
 	{
 		if (Crime == TEXT("BarFight") || Crime == TEXT("Riot"))
 		{
-			return EFTOAnimAction::Punch;
+			return EFTOAnimAction::FightIdle; // fists up, between swings at the other brawlers (TickBrawl)
 		}
 		if (Crime == TEXT("Vandalism"))
 		{
@@ -235,6 +237,9 @@ EFTOAnimAction AFTOPerp::GetAnimAction() const
 		return ServerNow(GetWorld()) - CuffStartTime < HandsBehindAfter ? EFTOAnimAction::Kneel : EFTOAnimAction::Cuffed;
 	case EFTOPerpArrest::Struggling:
 		return EFTOAnimAction::Struggle;
+	case EFTOPerpArrest::Fighting:
+		// Fists up; shuffling in when out of reach (the punches themselves play over this).
+		return Knockdown && Knockdown->IsDazed() ? EFTOAnimAction::Dazed : (GetCurrentSpeed() > 1.f ? EFTOAnimAction::FightStepFwd : EFTOAnimAction::FightIdle);
 	case EFTOPerpArrest::Surrendered:
 		// Seeing stars first, if they were put on the floor.
 		return Knockdown && Knockdown->IsDazed() ? EFTOAnimAction::Dazed : EFTOAnimAction::Kneel;
@@ -928,6 +933,7 @@ FText AFTOPerp::GetInteractPrompt(const AFTOCharacter* Officer) const
 	{
 	case EFTOPerpArrest::Surrendered: return INVTEXT("Cuff the suspect");
 	case EFTOPerpArrest::Struggling:  return INVTEXT("Help your partner! (mash)");
+	case EFTOPerpArrest::Fighting:    return INVTEXT("Put them down first! (punch, kick, grab)");
 	case EFTOPerpArrest::Hiding:      return INVTEXT("Talk to citizen"); // they don't look any different
 	default:                          return INVTEXT("Arrest the suspect");
 	}
@@ -972,6 +978,14 @@ EFTOArrestResponse AFTOPerp::RollResponse(const AFTOCharacter* Officer)
 	{
 		return EFTOArrestResponse::Comply;
 	}
+	// Brawlers (and drunks) would rather settle it with their fists.
+	const FName Crime = Info.TemplateId;
+	const bool bBrawler = Crime == TEXT("BarFight") || Crime == TEXT("Riot") || Crime == TEXT("DomesticDispute") || Crime == TEXT("Vandalism") ||
+		Crime == TEXT("Mugging") || Info.Twist == TEXT("Drunk");
+	if (bBrawler && Rng.FRand() < 0.55f)
+	{
+		return EFTOArrestResponse::Fight;
+	}
 	// "Keeps trying to hug the officers": a drunk wrestles, never runs.
 	return Info.Twist == TEXT("Drunk") || Rng.FRand() < 0.5f ? EFTOArrestResponse::Struggle : EFTOArrestResponse::Bolt;
 }
@@ -984,6 +998,9 @@ void AFTOPerp::TryArrest(AFTOCharacter* Officer)
 	{
 	case EFTOArrestResponse::Struggle:
 		BeginStruggle(Officer);
+		break;
+	case EFTOArrestResponse::Fight:
+		BeginFighting(Officer);
 		break;
 	case EFTOArrestResponse::Bolt:
 		ToastOfficersNear(INVTEXT("They're making a run for it! Sprint after them (Shift) and tackle (F)!"), Warning, 3000.f);
@@ -1043,6 +1060,158 @@ void AFTOPerp::FinishCuffing()
 	Arrester = nullptr;
 	// Handled: the director swaps us for a cuffed arrestee who follows this officer (so nothing after this line).
 	Incident->CompleteArrest(Officer);
+}
+
+void AFTOPerp::Provoked(AFTOCharacter* Officer)
+{
+	check(HasAuthority());
+	if (!bCriminal || !Officer || (Knockdown && Knockdown->IsDown()) ||
+		(ArrestState != EFTOPerpArrest::None && ArrestState != EFTOPerpArrest::Hiding))
+	{
+		return; // already fighting, running, kneeling or being cuffed
+	}
+	if (Incident)
+	{
+		Incident->ReportByOfficer();
+	}
+	// Hit first, asked later: mostly they hit back.
+	EFTOArrestResponse Response = ForcedResponse;
+	if (Response == EFTOArrestResponse::Roll)
+	{
+		const float Roll = Rng.FRand();
+		Response = Roll < 0.55f ? EFTOArrestResponse::Fight : Roll < 0.8f ? EFTOArrestResponse::Bolt : EFTOArrestResponse::Comply;
+	}
+	switch (Response)
+	{
+	case EFTOArrestResponse::Bolt:
+		ToastOfficersNear(INVTEXT("They're making a run for it! Sprint after them (Shift) and tackle (F)!"), Warning, 3000.f);
+		BeginFleeing(Officer);
+		break;
+	case EFTOArrestResponse::Comply:
+		if (AFTOPlayerController* PC = PCOf(Officer))
+		{
+			PC->ClientToast(INVTEXT("\"Ow! Alright, alright, I give up!\""), FLinearColor::White);
+		}
+		GiveUp(Officer->GetController());
+		break;
+	default:
+		BeginFighting(Officer);
+		break;
+	}
+}
+
+void AFTOPerp::BeginFighting(AFTOCharacter* Officer)
+{
+	check(HasAuthority());
+	GetWorldTimerManager().ClearTimer(ResumeTimer);
+	bHandsUp = false;
+	bChatting = false;
+	bShooting = false;
+	AimPitch = 0.f;
+	Hold();
+	FaceToward(Officer->GetActorLocation());
+	ArrestState = EFTOPerpArrest::Fighting;
+	FightTarget = Officer;
+	FightStartTime = GetWorld()->GetTimeSeconds();
+	NextSwing = FightStartTime + Rng.FRandRange(0.4f, 0.9f);
+	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+	{
+		GS->MulticastPlaySound(AFTOGameState::Sounds().Scuffle, GetActorLocation(), 0.8f);
+	}
+	if (AFTOPlayerController* PC = PCOf(Officer))
+	{
+		PC->ClientToast(INVTEXT("They want a fight! Punch (LMB), kick (G), or grab and throw them (F)!"), Warning);
+	}
+	ToastOfficersNear(INVTEXT("Your partner's in a fist fight: get stuck in!"), Warning, 2500.f, Officer);
+}
+
+void AFTOPerp::TickFighting(float DeltaSeconds)
+{
+	if (Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed()))
+	{
+		return; // (put on the floor by the police: Subdued has them giving up)
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	// Out of puff after a while.
+	if (Now - FightStartTime > 30.f)
+	{
+		ToastOfficersNear(INVTEXT("The suspect's had enough. Cuff them (E)!"), ArrestBlue, 3000.f);
+		GiveUp(nullptr);
+		return;
+	}
+	// Whoever we were fighting is down, gone or driving off: the next officer near will do, or it's time to run.
+	auto Fit = [this](const AFTOCharacter* Who)
+	{
+		return Who && !Who->GetCurrentVehicle() && Who->IsReadyForAction() && FVector::Dist2D(Who->GetActorLocation(), GetActorLocation()) < 1200.f;
+	};
+	AFTOCharacter* Officer = FightTarget.Get();
+	if (!Fit(Officer))
+	{
+		Officer = nullptr;
+		for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+		{
+			if (Fit(*It) && (!Officer || FVector::DistSquared(It->GetActorLocation(), GetActorLocation()) < FVector::DistSquared(Officer->GetActorLocation(), GetActorLocation())))
+			{
+				Officer = *It;
+			}
+		}
+		if (!Officer)
+		{
+			ToastOfficersNear(INVTEXT("The suspect's made a run for it! Sprint (Shift) and tackle (F)!"), Warning, 3000.f);
+			BeginFleeing(FightTarget.Get());
+			return;
+		}
+		FightTarget = Officer;
+	}
+	if (Knockdown && Knockdown->IsBusy())
+	{
+		return; // mid-swing, or reeling
+	}
+	// In close (just out of arm's length), then swinging every so often.
+	const FVector To = Officer->GetActorLocation() - GetActorLocation();
+	const float Distance = To.Size2D();
+	if (Distance > 125.f)
+	{
+		MoveTo(Officer->GetActorLocation() - To.GetSafeNormal2D() * 95.f, 380.f);
+	}
+	else
+	{
+		Hold();
+		FaceToward(Officer->GetActorLocation());
+	}
+	if (Distance < 150.f && Now >= NextSwing && FTOFighting::CanSwing(this))
+	{
+		FaceToward(Officer->GetActorLocation());
+		const EFTOMove Move = FTOFighting::PickBrawlerMove(Rng);
+		FTOFighting::Swing(this, Move, nullptr, Officer);
+		const bool bDrunk = Incident && Incident->GetInfo().Twist == TEXT("Drunk");
+		NextSwing = Now + FTOFighting::Spec(Move).Length + Rng.FRandRange(0.6f, 1.4f) * (bDrunk ? 1.5f : 1.f);
+	}
+}
+
+void AFTOPerp::TickBrawl(float DeltaSeconds)
+{
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now < NextSwing || !FTOFighting::CanSwing(this) || GetCurrentSpeed() > 1.f)
+	{
+		return;
+	}
+	NextSwing = Now + Rng.FRandRange(1.2f, 2.4f);
+	// Whichever brawler's nearest takes a swing (all for show: it rocks them, never floors them).
+	AFTOCrimeExtra* Nearest = nullptr;
+	for (TActorIterator<AFTOCrimeExtra> It(GetWorld()); It; ++It)
+	{
+		if (It->GetRole() == EFTOExtraRole::Brawler && FVector::Dist2D(It->GetActorLocation(), GetActorLocation()) < 230.f && FTOFighting::CanSwing(*It) &&
+			(!Nearest || FVector::DistSquared(It->GetActorLocation(), GetActorLocation()) < FVector::DistSquared(Nearest->GetActorLocation(), GetActorLocation())))
+		{
+			Nearest = *It;
+		}
+	}
+	if (Nearest)
+	{
+		FaceToward(Nearest->GetActorLocation());
+		FTOFighting::Swing(this, FTOFighting::PickBrawlerMove(Rng), nullptr, Nearest, true);
+	}
 }
 
 void AFTOPerp::BeginStruggle(AFTOCharacter* Officer)
@@ -1328,7 +1497,7 @@ void AFTOPerp::TickArrest(float DeltaSeconds)
 	if (!Incident || !Incident->IsActive())
 	{
 		// The call's over (gone cold, say) mid-arrest: let the officer go rather than leave them locked to us.
-		if (ArrestState == EFTOPerpArrest::Cuffing || ArrestState == EFTOPerpArrest::Struggling)
+		if (ArrestState == EFTOPerpArrest::Cuffing || ArrestState == EFTOPerpArrest::Struggling || ArrestState == EFTOPerpArrest::Fighting)
 		{
 			GetWorldTimerManager().ClearTimer(CuffTimer);
 			ReleaseArrester();
@@ -1339,6 +1508,22 @@ void AFTOPerp::TickArrest(float DeltaSeconds)
 	const float Now = GetWorld()->GetTimeSeconds();
 	switch (ArrestState)
 	{
+	case EFTOPerpArrest::Fighting:
+		TickFighting(DeltaSeconds);
+		return;
+
+	case EFTOPerpArrest::None:
+		// A bar fight or a street brawl before the police get there: trading blows with the others.
+		if (Incident->GetState() == EFTOIncidentState::Unreported || Incident->GetState() == EFTOIncidentState::Reported)
+		{
+			const FName Crime = Incident->GetInfo().TemplateId;
+			if (Crime == TEXT("BarFight") || Crime == TEXT("Riot"))
+			{
+				TickBrawl(DeltaSeconds);
+			}
+		}
+		break;
+
 	case EFTOPerpArrest::Struggling:
 		if (!IsArresterWithUs())
 		{
