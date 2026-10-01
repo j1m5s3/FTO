@@ -767,7 +767,9 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 	const float Into = -FVector::DotProduct(Velocity, Hit.ImpactNormal.GetSafeNormal2D());
 	if (bWall)
 	{
-		if (Into < AFTODestruction::BreakThroughSpeed)
+		// (Just through one panel, a car carries on through the next, slower as it now is.)
+		const bool bMomentum = GetWorld()->GetTimeSeconds() - LastWallBreak < 0.35f;
+		if (Into < (bMomentum ? AFTODestruction::BreakThroughSpeed * 0.35f : AFTODestruction::BreakThroughSpeed))
 		{
 			return false; // (it takes the knock in Crash)
 		}
@@ -835,6 +837,7 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 		// That's a wall: it costs the car (and the panels round the hole feel it too).
 		Velocity *= 0.55f;
 		Crash(Hit, Into * 0.55f);
+		LastWallBreak = GetWorld()->GetTimeSeconds();
 		return true;
 	}
 	if (HasAuthority())

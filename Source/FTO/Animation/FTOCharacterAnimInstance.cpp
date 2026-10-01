@@ -1,4 +1,5 @@
 #include "Animation/FTOCharacterAnimInstance.h"
+#include "Physics/FTOKnockdownComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimationPoseData.h"
 #include "GameFramework/Character.h"
@@ -33,9 +34,18 @@ namespace
 	/** Actions whose clip has another name. */
 	FString ClipNameFor(const FString& Action)
 	{
-		if (Action == TEXT("Punch"))     return TEXT("Cross");
-		if (Action == TEXT("IdleBored")) return TEXT("Idle_Bored");
-		return Action;
+		static const TMap<FString, FString> Renamed =
+		{
+			{ TEXT("Punch"), TEXT("Cross") }, { TEXT("IdleBored"), TEXT("Idle_Bored") },
+			{ TEXT("KickFront"), TEXT("Kick_Front") }, { TEXT("KickSide"), TEXT("Kick_Side") }, { TEXT("KickRoundhouse"), TEXT("Kick_Roundhouse") },
+			{ TEXT("FightGrab"), TEXT("Fight_Grab") }, { TEXT("Block"), TEXT("Block_Loop") },
+			{ TEXT("HitLightFront"), TEXT("HitReact_Light_Front") }, { TEXT("HitLightBack"), TEXT("HitReact_Light_Back") },
+			{ TEXT("HitLightLeft"), TEXT("HitReact_Light_Left") }, { TEXT("HitLightRight"), TEXT("HitReact_Light_Right") },
+			{ TEXT("HitHeavy"), TEXT("HitReact_Heavy") }, { TEXT("FightIdle"), TEXT("Fight_Idle") },
+			{ TEXT("FightStepFwd"), TEXT("Fight_Step_Fwd") }, { TEXT("FightStepBack"), TEXT("Fight_Step_Back") },
+		};
+		const FString* Clip = Renamed.Find(Action);
+		return Clip ? *Clip : Action;
 	}
 
 	/** Is Bone (a mesh bone index) the upper body: the chest and everything on it, or the hand IK bones? */
@@ -120,6 +130,15 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 	// kneeling in cuffs mustn't stand up in between).
 	if (Action != EFTOAnimAction::None)
 	{
+		// The same move again (a second jab): start it over, crossfading from where the first one got to.
+		if (ShownAction == Action && Serial != ShownSerial)
+		{
+			const bool bShowing = ActionWeight > 0.05f;
+			FadingAction = bShowing ? ShownAction : EFTOAnimAction::None;
+			FadingTime = ActionTime;
+			CrossAlpha = bShowing ? 0.f : 1.f;
+			ActionTime = 0.f;
+		}
 		if (ShownAction != Action)
 		{
 			const bool bCrossfade = ShownAction != EFTOAnimAction::None && ActionWeight > 0.05f;
@@ -130,6 +149,7 @@ void FFTOCharacterAnimProxy::Update(float DeltaSeconds)
 			ActionTime = 0.f;
 		}
 		ActionWeight = FMath::FInterpTo(ActionWeight, 1.f, DeltaSeconds, 8.f);
+		ShownSerial = Serial;
 	}
 	else
 	{
@@ -449,8 +469,21 @@ void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		Proxy.bInAir = Animated->IsAnimAirborne();
 		Proxy.bRising = Owner && Owner->GetVelocity().Z > 50.f;
 		Proxy.Action = Animated->GetAnimActionFor(GetSkelMeshComponent());
+		Proxy.Serial = Animated->GetAnimActionSerial();
 		Proxy.Aim = Animated->GetAimPose();
 		Proxy.AimPitch = Animated->GetAimPitch();
+		// A blow thrown or taken (FTOFighting) shows over whatever else they're doing, the weapon put by for it.
+		if (!Knockdown.IsValid() && Owner)
+		{
+			Knockdown = Owner->FindComponentByClass<UFTOKnockdownComponent>();
+		}
+		const UFTOKnockdownComponent* Blows = Knockdown.Get();
+		if (Blows && Blows->GetMove() != EFTOAnimAction::None && Blows->GetSkelMesh() == GetSkelMeshComponent())
+		{
+			Proxy.Action = Blows->GetMove();
+			Proxy.Serial = 1000u + Blows->GetMoveSerial();
+			Proxy.Aim = EFTOAimPose::None;
+		}
 	}
 	else if (Owner)
 	{

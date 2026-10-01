@@ -49,6 +49,14 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   in one someone's already driving. F (B on a gamepad) is
   a flying tackle that bowls over whoever's in front (citizens cost a little chaos). Cuffed suspects follow in your
   footsteps: walk them into the precinct's holding cells to book them.
+- **Hand to hand**: with no weapon raised, LMB (right trigger) punches (jab, cross, hook, uppercut, strung together
+  if you keep them coming), G (right bumper) kicks (a roundhouse on the end of a run of punches), and F right up close
+  to someone (not running) grabs hold of them and throws them over. Every blow rocks whoever takes it, their upper
+  body knocked loose under physics for a moment, and leaves them groggier; enough of them, or a big one when they're
+  already groggy, or a throw, and they go down. A suspect put down is caught (cuff them with E). A suspect you lay a
+  hand on may fight back, run or give in, and brawlers may choose to fight rather than come quietly: they square up,
+  close in and swing, and can put you down too. Roughing up citizens costs chaos. RMB raises a weapon; with one up,
+  LMB fires.
 - **Upstairs**: every building with floors above the ground has a way up. Towers, the bank and the precinct have a
   lift: steel doors on the street (by the corner, under a floor sign); E brings up the buttons (up a floor, down a
   floor, the top, the street) and everyone standing at the doors rides along. Every floor has a stop inside, with
@@ -64,9 +72,9 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   A suspect lying low talks like anyone else (if nervously; they may bolt), and a search turns up the goods. A crook
   lying low indoors may confess when asked what they've seen.
 - **Arrests**: E on a suspect arrests them. One who's given up (talked down by standing at the scene, run to ground,
-  or put on the floor) kneels and you step in behind them to cuff them. One who hasn't may come quietly, or fight
-  back (mash E to wrestle them down before the meter drains; partners can pile in with E; lose and you're shoved
-  over) or bolt on foot (sprint after them and tackle with F, or run them over; the whistle stops them for a moment).
+  or put on the floor) kneels and you step in behind them to cuff them. One who hasn't may come quietly, wrestle
+  (mash E to wrestle them down before the meter drains; partners can pile in with E; lose and you're shoved over),
+  put their fists up for a fight (see *Hand to hand*) or bolt on foot (sprint after them and tackle with F, or run them over; the whistle stops them for a moment).
   A suspect left kneeling with nobody about, or who outruns everyone, gets away into the crowd. Car chases end with the driver
   climbing out and kneeling beside their car.
 - **Crimes play out**: crooks get on with it (a tagger sprays the wall a letter at a time, a vandal goes from bin to
@@ -255,6 +263,17 @@ host). Finally the client checks it sees everything the host broke broken too.
   are always on the gun. Actors animating several
   people (a car's driver and passengers) pick each one's action per mesh. Two-person moves (cuffing, a struggle) lock
   the officer onto a spot beside the suspect (`AFTOCharacter::BeginSyncedAction`) so the two clips line up.
+- **Hand to hand** (`Source/FTO/Combat/FTOFighting`): one move table (from `fight_timing.json`: each clip's length,
+  moment of contact and reach, plus how groggy and how far each blow sends them). `FTOFighting::Swing` plays a move
+  on the fighter's `UFTOKnockdownComponent` (`PlayMove`: a short replicated full-body override every machine shows over
+  whatever they're doing, the anim instance picking it up, with a serial so the same punch twice restarts) and lands it
+  at contact on whoever's then in reach in front. `TakeHit` rocks them (`TakeBlow`: a reaction by the direction it came
+  from, and on every machine the upper body below `spine_02` goes physics-simulated with a decaying blend weight under
+  the blow's impulse, so it lolls and swings back) and adds to their grogginess; at 100 (or a heavy blow past 55, or a
+  throw) `FTOImpact::Strike` floors them (a suspect floored by the police is caught; citizens cost chaos). Officers
+  punch with Fire when unarmed (`ServerFight` strings the combo), kick with G, and grab-then-throw with F up close;
+  suspects can answer an arrest, or a blow, by fighting (`AFTOPerp::BeginFighting`/`TickFighting`), and brawlers in bar
+  fights and street brawls trade staged blows (rock, never floor) until the police arrive.
 - **Destruction** (`Source/FTO/Physics`): `AFTODestruction` keeps the list of broken pieces of the city, a replicated
   fast array of instanced-component name plus instance index (every machine builds the city identically, so those
   agree everywhere). Each machine tucks the broken instance away and has `UFTODebris` put on the show: Chaos rigid-body

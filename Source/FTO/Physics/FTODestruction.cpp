@@ -46,7 +46,7 @@ namespace
 	const FLinearColor Metal(0.3f, 0.32f, 0.35f);
 	const FLinearColor Leaves(0.25f, 0.55f, 0.2f);
 	const FLinearColor OwnPaint(1.f, 1.f, 1.f, 0.f); // alpha 0: use the instance's own paint
-	const FLinearColor DustColor(0.47f, 0.44f, 0.40f);
+	const FLinearColor BuildingDust(0.47f, 0.44f, 0.40f);
 	const FLinearColor SmokeColor(0.09f, 0.085f, 0.08f);
 	const FLinearColor FireColor(1.f, 0.45f, 0.08f);
 
@@ -528,7 +528,7 @@ void AFTODestruction::Show(EFTOBreakKind Kind, const UInstancedStaticMeshCompone
 		{
 			// Nothing under it: off the building it comes, whole, toppling outwards.
 			Debris->Throw(Mesh, Was, Color, Out * 160.f + FVector(0.f, 0.f, -40.f), FVector::CrossProduct(FVector::UpVector, Out) * FMath::FRandRange(-60.f, 60.f), 8.f, 900.f);
-			Debris->Dust(Middle, 120.f, DustColor, 3.f, 4);
+			Debris->Dust(Middle, 120.f, BuildingDust, 3.f, 4);
 			break;
 		}
 		if (Piece.How == FTOBreakHow::Along)
@@ -556,7 +556,7 @@ void AFTODestruction::Show(EFTOBreakKind Kind, const UInstancedStaticMeshCompone
 				Middle + FVector(0.f, 0.f, FMath::FRandRange(-80.f, 80.f)), FVector(0.25f, FMath::FRandRange(0.6f, 0.9f), FMath::FRandRange(0.5f, 0.8f)));
 			Debris->Throw(Cube, Slab, Color, Blow * 0.35f + FVector(0.f, 0.f, 120.f), FMath::VRand() * 200.f, 7.f, 300.f);
 		}
-		Debris->Dust(Was.GetLocation() + FVector(0.f, 0.f, 40.f), 150.f, DustColor, 4.5f, 10);
+		Debris->Dust(Was.GetLocation() + FVector(0.f, 0.f, 40.f), 150.f, BuildingDust, 4.5f, 10);
 		break;
 	}
 
@@ -844,7 +844,7 @@ void AFTODestruction::ShowWallHit(const FFTOWallHit& Hit)
 	{
 		Clean = &CleanPaint.Add(Key, InstanceColor(ISM, Hit.Instance));
 	}
-	const FLinearColor Worn = FMath::Lerp(*Clean, DustColor * 0.6f, 0.55f * Hit.Damage / WallStrength);
+	const FLinearColor Worn = FMath::Lerp(*Clean, BuildingDust * 0.6f, 0.55f * Hit.Damage / WallStrength);
 	ISM->SetCustomData(Hit.Instance, { Worn.R, Worn.G, Worn.B }, false);
 
 	UFTODebris* Debris = UFTODebris::Get(GetWorld());
@@ -869,7 +869,7 @@ void AFTODestruction::ShowWallHit(const FFTOWallHit& Hit)
 	Debris->Chunks(Hit.Hit + Normal * 10.f, Normal * 350.f, Worn, bKnock ? 5 : 1, bKnock ? 16.f : 7.f, 3.f);
 	if (bKnock)
 	{
-		Debris->Dust(Hit.Hit + Normal * 40.f, 60.f, DustColor, 2.5f, 4);
+		Debris->Dust(Hit.Hit + Normal * 40.f, 60.f, BuildingDust, 2.5f, 4);
 	}
 }
 
@@ -1282,11 +1282,11 @@ void AFTODestruction::ApplyCollapse(const FFTOCollapse& Event)
 		// A great cloud of dust rolling out from the bottom, and more as the rest comes down into it.
 		const float Reach = FMath::Max(S->HalfX, S->HalfY);
 		const FVector Foot(S->Center.X, S->Center.Y, BaseZ);
-		Debris->Dust(Foot, Reach * 0.7f, DustColor, 4.5f, 20);
-		Debris->Dust(Foot, Reach * 0.9f, DustColor, 5.f, 30, 1.5f);
+		Debris->Dust(Foot, Reach * 0.7f, BuildingDust, 4.5f, 20);
+		Debris->Dust(Foot, Reach * 0.9f, BuildingDust, 5.f, 30, 1.5f);
 		for (const FVector& Corner : { FVector(1.f, 1.f, 0.f), FVector(-1.f, 1.f, 0.f), FVector(-1.f, -1.f, 0.f), FVector(1.f, -1.f, 0.f) })
 		{
-			Debris->Dust(Foot + FVector(Corner.X * S->HalfX, Corner.Y * S->HalfY, 0.f), 220.f, DustColor * 0.9f, 4.5f, 8, 1.5f);
+			Debris->Dust(Foot + FVector(Corner.X * S->HalfX, Corner.Y * S->HalfY, 0.f), 220.f, BuildingDust * 0.9f, 4.5f, 8, 1.5f);
 		}
 		for (int32 i = 0; i < 4; ++i)
 		{

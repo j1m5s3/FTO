@@ -35,6 +35,8 @@ public:
 	UPROPERTY() TObjectPtr<UInputAction> Camera;
 	/** On foot: flying tackle. */
 	UPROPERTY() TObjectPtr<UInputAction> Tackle;
+	/** Hand to hand: a kick (punches are Fire with no weapon up). */
+	UPROPERTY() TObjectPtr<UInputAction> Kick;
 	/** On foot: weapons. Draw brings the last weapon up (or puts it away); Slots are 1, 2, 3. */
 	UPROPERTY() TObjectPtr<UInputAction> Draw;
 	UPROPERTY() TObjectPtr<UInputAction> Fire;

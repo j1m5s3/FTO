@@ -45,7 +45,28 @@ enum class EFTOAnimAction : uint8
 	Spray,		// spraying graffiti
 	Smash,		// kicking and battering street furniture
 	Grab,		// rummaging (a shoplifter filling a sack)
-	Dance2
+	Dance2,
+	// Hand to hand (Combat/FTOFighting.h)
+	Jab,
+	Cross,
+	Hook,
+	Uppercut,
+	KickFront,
+	KickSide,
+	KickRoundhouse,
+	Shove,
+	FightGrab,	// grabbing hold of someone (the clinch)
+	Throw,		// and throwing them over
+	Block,
+	HitLightFront,	// rocked by a blow from in front (and so on round)
+	HitLightBack,
+	HitLightLeft,
+	HitLightRight,
+	HitHeavy,	// staggered back by a big one
+	Taunt,
+	FightIdle,	// fists up
+	FightStepFwd,
+	FightStepBack
 };
 
 /** Upper-body pose layered over whatever the legs are doing: a weapon up, or hands cuffed behind the back. */
@@ -82,4 +103,6 @@ public:
 	virtual EFTOAimPose GetAimPose() const { return EFTOAimPose::None; }
 	/** Degrees; positive looks up. */
 	virtual float GetAimPitch() const { return 0.f; }
+	/** Bumps whenever the same action starts over (a second jab straight after the first). */
+	virtual uint8 GetAnimActionSerial() const { return 0; }
 };

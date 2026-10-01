@@ -6,6 +6,7 @@
 #include "Vehicles/FTOVehicleSeats.h"
 #include "Interaction/FTOInteractable.h"
 #include "Weapons/FTOWeapons.h"
+#include "Combat/FTOFighting.h"
 #include "FTOCharacter.generated.h"
 
 class USpringArmComponent;
@@ -85,8 +86,21 @@ public:
 	/** Blow the police whistle (what Q does on foot). */
 	void BlowWhistle() { ServerWhistle(); }
 
-	/** Flying tackle (what F does on foot): dive forward and bowl over whoever's in the way. */
+	/** Flying tackle (what F does on foot): dive forward and bowl over whoever's in the way. Close to someone and not
+	 *  running, F grabs hold of them instead and throws them. */
 	void TacklePressed();
+	/** The dive itself, never a grab. */
+	void DiveTackle();
+
+	// ---- Hand to hand (Combat/FTOFighting) ----
+	/** A punch (what Fire does with no weapon up): jab, cross, hook, uppercut, one after another. */
+	void PunchPressed();
+	/** A kick (G): a front kick, or a roundhouse to finish a run of punches. */
+	void KickPressed();
+	/** On foot, empty-handed, on their feet and not mid-move. */
+	bool CanFight() const;
+	/** Server: fists up for a while (after throwing or taking a punch). */
+	void EnterFightStance(float Seconds = 3.f);
 
 	/** Local player: what E does (use whatever's in focus; heave in a struggle). */
 	void PressInteract() { InteractPressed(); }
@@ -308,6 +322,26 @@ protected:
 	void LaunchTackle();
 	UFUNCTION(Server, Reliable)
 	void ServerTackle();
+	UFUNCTION(Server, Reliable)
+	void ServerFight(EFTOMove Move, float Yaw);
+	/** Server: a press that came in just before the last move finished (lag): thrown the moment it does. */
+	EFTOMove BufferedMove = EFTOMove::None;
+	float BufferedYaw = 0.f;
+	FTimerHandle BufferTimer;
+	void ThrowBuffered();
+	/** Everything CanFight asks but being mid-move (a press then can be buffered). */
+	bool CanFightSoon() const;
+	/** Owner: face where the camera looks and ask the server for Move. */
+	void RequestFight(EFTOMove Move);
+	/** Server: whoever we've got hold of goes over. */
+	void ThrowGrabbed();
+	/** Server: punches strung together (and when the last one went). */
+	int32 FightCombo = 0;
+	float LastSwingTime = -100.f;
+	TWeakObjectPtr<AActor> Grabbed;
+	FTimerHandle ThrowTimer;
+	/** Server world time the fists come down again. */
+	UPROPERTY(Replicated) float FightStanceUntil = 0.f;
 	/** Server: during the dive, look for someone to land on. */
 	void CheckTackle();
 	FTimerHandle TackleTimer;

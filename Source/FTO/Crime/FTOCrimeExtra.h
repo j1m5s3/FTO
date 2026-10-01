@@ -67,4 +67,6 @@ protected:
 	float SpotYaw = 0.f;
 	bool bScarpering = false;
 	float NextKnockdown = 0.f;
+	/** Server: when a brawler next swings back at the perp. */
+	float NextSwing = 0.f;
 };
