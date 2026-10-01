@@ -37,11 +37,11 @@ public:
 	/** Where someone stepping out of these doors stands (capsule centre). */
 	FVector GetArrivalPoint() const;
 
-	/** Server: take everyone at these doors to Target (a floor number), after the doors close. */
-	void Ride(int32 Target);
+	/** Server: take Presser and everyone else at these doors to Target (a floor number), after the doors close. */
+	void Ride(int32 Target, AFTOCharacter* Presser);
 
 	// IFTOInteractable
-	virtual bool CanInteract(const AFTOCharacter* Officer) const override { return Officer != nullptr; }
+	virtual bool CanInteract(const AFTOCharacter* Officer) const override { return Officer != nullptr && !bClosed; }
 	virtual FText GetInteractPrompt(const AFTOCharacter* Officer) const override;
 	virtual void Interact(AFTOCharacter* Officer) override;
 	virtual FVector GetInteractLocation() const override;
@@ -62,6 +62,11 @@ protected:
 	FText FloorName(int32 Which) const;
 
 	UFUNCTION() void OnRep_Floor();
+	UFUNCTION() void OnRep_Closed();
+	/** Every machine: the lamp says whether a ride's under way. */
+	void UpdateLamp();
+	/** Can this officer go in the lift right now (on their feet, not busy, on our side of the wall)? */
+	bool CanRide(const AFTOCharacter* Who) const;
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USceneComponent> Root;
 	/** What officers focus on to use the lift (queries only; it blocks nothing). */
@@ -75,7 +80,9 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Floor) int32 Floor = 0;
 	UPROPERTY(ReplicatedUsing=OnRep_Floor) int32 NumFloors = 1;
 	/** Doors shut (a ride's under way from or to here). */
-	UPROPERTY(Replicated) bool bClosed = false;
+	UPROPERTY(ReplicatedUsing=OnRep_Closed) bool bClosed = false;
+	/** Server: rides on their way here (the doors stay shut till the last one arrives). */
+	int32 Incoming = 0;
 
 	UPROPERTY(Transient) TObjectPtr<UMaterialInstanceDynamic> LampMaterial;
 

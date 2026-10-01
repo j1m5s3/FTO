@@ -1932,27 +1932,46 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				It->Destroy();
 			}
-			// The shop front nearest the officer: its window, from out on the pavement.
-			const FFTOBuilding* Shop = nullptr;
+			// The shop front nearest the officer with nothing (a bus stop, a tree) between the pavement and its window.
+			TArray<const FFTOBuilding*> Shops;
 			for (const FFTOBuilding& Building : City->GetBuildings())
 			{
-				if (Building.Type == EFTOBuildingType::Shop && (!Shop ||
-					FVector::DistSquared(Building.DoorOutside, Cop->GetActorLocation()) < FVector::DistSquared(Shop->DoorOutside, Cop->GetActorLocation())))
+				if (Building.Type == EFTOBuildingType::Shop)
 				{
-					Shop = &Building;
+					Shops.Add(&Building);
 				}
 			}
+			const FVector From = Cop->GetActorLocation();
+			Shops.Sort([&From](const FFTOBuilding& A, const FFTOBuilding& B) { return FVector::DistSquared(A.DoorOutside, From) < FVector::DistSquared(B.DoorOutside, From); });
 			UInstancedStaticMeshComponent* Glass = nullptr;
-			FTransform Pane;
-			if (!Shop || !FindCityInstance(TEXT("SM_Wall_G_Shop_Glass"), Shop->DoorOutside, Glass, TestInstance, Pane))
+			FVector Stand = FVector::ZeroVector;
+			for (const FFTOBuilding* Shop : Shops)
+			{
+				UInstancedStaticMeshComponent* Found = nullptr;
+				FTransform Pane;
+				if (!FindCityInstance(TEXT("SM_Wall_G_Shop_Glass"), Shop->DoorOutside, Found, TestInstance, Pane))
+				{
+					continue;
+				}
+				TestAway = (Shop->DoorOutside - Shop->Room.GetLocation()).GetSafeNormal2D();
+				TestTarget = Pane.TransformPosition(Found->GetStaticMesh()->GetBoundingBox().GetCenter());
+				Stand = TestTarget + TestAway * 450.f;
+				FHitResult Sight;
+				FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeSight), false, Cop);
+				const FVector Eye(Stand.X, Stand.Y, GroundZ(Stand) + 160.f);
+				if (!GetWorld()->LineTraceSingleByChannel(Sight, Eye, TestTarget, ECC_FTOProjectile, Params) ||
+					(Sight.GetComponent() == Found && Sight.Item == TestInstance))
+				{
+					Glass = Found;
+					break;
+				}
+			}
+			if (!Glass)
 			{
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: window: NO SHOP WINDOW."));
 				return;
 			}
 			TestISM = Glass;
-			TestAway = (Shop->DoorOutside - Shop->Room.GetLocation()).GetSafeNormal2D();
-			TestTarget = Pane.TransformPosition(Glass->GetStaticMesh()->GetBoundingBox().GetCenter());
-			const FVector Stand = TestTarget + TestAway * 450.f;
 			Cop->TeleportTo(FVector(Stand.X, Stand.Y, GroundZ(Stand) + 98.f), (-TestAway).Rotation());
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(Cop, 0.f); }
 			if (Cop->GetDrawnWeapon() != EFTOWeapon::Shotgun)

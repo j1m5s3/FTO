@@ -4,6 +4,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Core/FTOCharacter.h"
+#include "Crime/FTOArrestee.h"
+#include "GameFramework/PlayerController.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Engine/StaticMesh.h"
@@ -106,6 +108,7 @@ void AFTOLift::OnRep_Floor()
 		FTOArt::ApplyColor(Frame, LoadObject<UMaterialInterface>(nullptr, FTOArt::BaseMaterialPath), FrameGrey);
 		FTOArt::ApplyColor(DoorLeft, LoadObject<UMaterialInterface>(nullptr, FTOArt::BaseMaterialPath), Steel);
 		FTOArt::ApplyColor(DoorRight, LoadObject<UMaterialInterface>(nullptr, FTOArt::BaseMaterialPath), Steel);
+		UpdateLamp();
 	}
 }
 
@@ -117,19 +120,41 @@ FText AFTOLift::FloorName(int32 Which) const
 void AFTOLift::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	// Doors slide shut for a ride and open again at the other end.
+	// Doors slide shut for a ride and open again at the other end (and the tick rests once they're there).
 	const float Want = bClosed ? 0.f : 1.f;
-	if (Open != Want)
+	Open = FMath::FInterpConstantTo(Open, Want, DeltaSeconds, 1.6f);
+	const float Slide = HalfWide * 0.9f * Open;
+	DoorLeft->SetRelativeLocation(FVector(8.f, -HalfWide * 0.5f - Slide, Tall * 0.5f));
+	DoorRight->SetRelativeLocation(FVector(8.f, HalfWide * 0.5f + Slide, Tall * 0.5f));
+	if (Open == Want)
 	{
-		Open = FMath::FInterpConstantTo(Open, Want, DeltaSeconds, 1.6f);
-		const float Slide = HalfWide * 0.9f * Open;
-		DoorLeft->SetRelativeLocation(FVector(8.f, -HalfWide * 0.5f - Slide, Tall * 0.5f));
-		DoorRight->SetRelativeLocation(FVector(8.f, HalfWide * 0.5f + Slide, Tall * 0.5f));
+		SetActorTickEnabled(false);
 	}
+}
+
+void AFTOLift::OnRep_Closed()
+{
+	SetActorTickEnabled(true);
+	UpdateLamp();
+}
+
+void AFTOLift::UpdateLamp()
+{
 	if (LampMaterial)
 	{
 		FTOArt::SetColor(LampMaterial, bClosed ? FLinearColor(1.f, 0.3f, 0.1f) : FLinearColor(1.f, 0.7f, 0.2f), bClosed ? 3.f : 1.5f);
 	}
+}
+
+bool AFTOLift::CanRide(const AFTOCharacter* Who) const
+{
+	if (!Who || Who->GetCurrentVehicle() || Who->IsDowned() || Who->IsInSyncedAction() || !Who->IsReadyForAction())
+	{
+		return false;
+	}
+	// On the doors' side of the wall, on this floor.
+	const FVector Off = Who->GetActorLocation() - GetActorLocation();
+	return FVector::DotProduct(Off, GetActorForwardVector()) > 0.f && Off.Z > -50.f && Off.Z < 250.f;
 }
 
 void AFTOLift::BeginPlay()
@@ -193,23 +218,36 @@ bool AFTOLift::TalkChoice(AFTOCharacter* Officer, int32 Index)
 	{
 		return true; // nothing to do: the buttons stay up
 	}
-	Ride(Target);
+	if (!CanRide(Officer))
+	{
+		return true;
+	}
+	Ride(Target, Officer);
 	return false;
 }
 
-void AFTOLift::Ride(int32 Target)
+void AFTOLift::Ride(int32 Target, AFTOCharacter* Presser)
 {
 	check(HasAuthority());
-	if (bClosed || !Stops.IsValidIndex(Target) || !Stops[Target].IsValid())
+	AFTOLift* To = Stops.IsValidIndex(Target) ? Stops[Target].Get() : nullptr;
+	if (bClosed || !To)
 	{
 		return;
 	}
-	// Everyone standing at the doors goes along.
+	// Whoever pressed, and everyone else standing at the doors, goes along (with any suspect they're escorting).
 	Riders.Reset();
+	if (Presser)
+	{
+		Riders.Add(Presser);
+		if (Presser->GetTalkingTo() == this)
+		{
+			Presser->EndTalk();
+		}
+	}
 	const FVector Front = GetArrivalPoint();
 	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
 	{
-		if (!It->GetCurrentVehicle() && FVector::Dist(It->GetActorLocation(), Front) < 260.f)
+		if (*It != Presser && CanRide(*It) && FVector::Dist(It->GetActorLocation(), Front) < 260.f)
 		{
 			Riders.Add(*It);
 			if (It->GetTalkingTo() == this)
@@ -220,7 +258,13 @@ void AFTOLift::Ride(int32 Target)
 	}
 	RideTo = Target;
 	bClosed = true;
+	OnRep_Closed();
 	ForceNetUpdate();
+	// The car's on its way there: those doors stay shut till it arrives.
+	++To->Incoming;
+	To->bClosed = true;
+	To->OnRep_Closed();
+	To->ForceNetUpdate();
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{
 		GS->MulticastPlaySound(AFTOGameState::Sounds().ElevatorDing, GetInteractLocation() + FVector(0.f, 0.f, 150.f), 0.8f);
@@ -245,14 +289,29 @@ void AFTOLift::Arrive()
 			}
 			const FVector Side = FVector::CrossProduct(FVector::UpVector, To->GetActorForwardVector()) * ((Slot % 3) - 1) * 70.f;
 			const FVector Behind = To->GetActorForwardVector() * (Slot / 3) * 80.f;
-			Who->TeleportTo(To->GetArrivalPoint() + Side + Behind, To->GetActorForwardVector().Rotation());
-			if (AController* Controller = Who->GetInstigatorController())
+			const FVector Out = To->GetArrivalPoint() + Side + Behind;
+			Who->TeleportTo(Out, To->GetActorForwardVector().Rotation());
+			if (APlayerController* PC = Cast<APlayerController>(Who->GetInstigatorController()))
 			{
-				Controller->SetControlRotation(To->GetActorForwardVector().Rotation());
+				PC->ClientSetRotation(To->GetActorForwardVector().Rotation());
+			}
+			// Their prisoner steps out with them, at their shoulder.
+			for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+			{
+				if (It->GetEscort() == Who && It->GetArrestState() == EFTOArresteeState::Escorted)
+				{
+					It->RideAlongTo(Out - Side.GetSafeNormal() * 70.f + To->GetActorForwardVector() * 60.f + FVector(0.f, 0.f, -6.f), To->GetActorRotation().Yaw);
+				}
 			}
 			++Slot;
 		}
-		To->bClosed = false;
+		To->Incoming = FMath::Max(0, To->Incoming - 1);
+		// (Unless another ride's on its way there, or leaving from there.)
+		if (To->Incoming == 0 && To->RideTo == INDEX_NONE)
+		{
+			To->bClosed = false;
+			To->OnRep_Closed();
+		}
 		To->ForceNetUpdate();
 		if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 		{
@@ -262,7 +321,11 @@ void AFTOLift::Arrive()
 	}
 	Riders.Reset();
 	RideTo = INDEX_NONE;
-	// These doors open again once the car's gone.
-	bClosed = false;
+	// These doors open again once the car's gone (unless one's on its way here).
+	if (Incoming == 0)
+	{
+		bClosed = false;
+		OnRep_Closed();
+	}
 	ForceNetUpdate();
 }

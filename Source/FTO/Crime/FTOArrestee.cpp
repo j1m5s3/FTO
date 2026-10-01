@@ -300,6 +300,13 @@ bool AFTOArrestee::IsAtHoldingCells() const
 	return Precinct && Precinct->Contains(Feet) && FVector::DistSquared2D(GetActorLocation(), City->GetHoldingCellsLocation()) < FMath::Square(CellRadius);
 }
 
+void AFTOArrestee::RideAlongTo(const FVector& Where, float Yaw)
+{
+	check(HasAuthority());
+	Trail.Reset();
+	SetActorLocationAndRotation(Where, FRotator(0.f, Yaw, 0.f), false, nullptr, ETeleportType::TeleportPhysics);
+}
+
 void AFTOArrestee::SetInCruiser(AActor* Cruiser)
 {
 	// Behind the passenger, unless someone's already sulking there.
