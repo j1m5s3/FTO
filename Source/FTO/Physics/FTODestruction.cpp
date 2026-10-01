@@ -276,6 +276,7 @@ void AFTODestruction::AddBroken(FName Component, int32 Instance, const FVector& 
 bool AFTODestruction::Break(UPrimitiveComponent* Component, int32 Instance, const FVector& Hit, const FVector& Push, AController* ByWhom)
 {
 	check(HasAuthority());
+	EnsureIndexed();
 	const EFTOBreakKind Kind = KindOf(Component);
 	const TPair<FName, int32> Key(Component ? Component->GetFName() : NAME_None, Instance);
 	if (!Component || Instance == INDEX_NONE || BrokenKeys.Contains(Key))
@@ -387,7 +388,27 @@ void AFTODestruction::BreakLocally(UPrimitiveComponent* Component, int32 Instanc
 	Piece.Push = Push;
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	Piece.Time = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+	const TPair<FName, int32> Key(Piece.Component, Instance);
+	const UInstancedStaticMeshComponent* ISM = Cast<UInstancedStaticMeshComponent>(Component);
+	FTransform Was;
+	if (HasAuthority() || Applied.Contains(Key) || !ISM || !ISM->GetInstanceTransform(Instance, Was, true))
+	{
+		return;
+	}
 	Apply(Piece);
+	// Till the server agrees (it may not, if it saw things differently): put back if it hasn't before long.
+	Predicted.Add(Key, TPair<FTransform, float>(Was, GetWorld()->GetTimeSeconds()));
+}
+
+bool AFTODestruction::IsPieceNear(const UPrimitiveComponent* Component, int32 Instance, const FVector& Point, float Radius) const
+{
+	const UInstancedStaticMeshComponent* ISM = Cast<UInstancedStaticMeshComponent>(Component);
+	FTransform Where;
+	if (!ISM || !ISM->GetInstanceTransform(Instance, Where, true) || !ISM->GetStaticMesh())
+	{
+		return false;
+	}
+	return ISM->GetStaticMesh()->GetBoundingBox().TransformBy(Where).ComputeSquaredDistanceToPoint(Point) < FMath::Square(Radius);
 }
 
 void AFTODestruction::Apply(const FFTOBrokenPiece& Piece)
@@ -395,6 +416,7 @@ void AFTODestruction::Apply(const FFTOBrokenPiece& Piece)
 	const TPair<FName, int32> Key(Piece.Component, Piece.Instance);
 	if (Applied.Contains(Key))
 	{
+		Predicted.Remove(Key); // (the server's word on one we broke ahead of it)
 		return;
 	}
 	AFTOCityGenerator* TheCity = FindCity();
@@ -402,9 +424,9 @@ void AFTODestruction::Apply(const FFTOBrokenPiece& Piece)
 	if (!ISM || !ISM->IsValidInstance(Piece.Instance))
 	{
 		// The city isn't built here yet (just joined): later.
-		if ((!TheCity || !TheCity->IsGeometryBuilt()) &&
-			!Pending.ContainsByPredicate([&Piece](const FFTOBrokenPiece& Waiting) { return Waiting.Component == Piece.Component && Waiting.Instance == Piece.Instance; }))
+		if ((!TheCity || !TheCity->IsGeometryBuilt()) && !PendingKeys.Contains(Key))
 		{
+			PendingKeys.Add(Key);
 			Pending.Add(Piece);
 		}
 		return;
@@ -417,7 +439,7 @@ void AFTODestruction::Apply(const FFTOBrokenPiece& Piece)
 
 	// Tucked away out of sight and reach (instances keep their numbers, so moving it beats removing it).
 	const FTransform Gone(Was.GetRotation(), Was.GetLocation() - FVector(0.f, 0.f, 100000.f), FVector(0.001f));
-	ISM->UpdateInstanceTransform(Piece.Instance, Gone, true, true, true);
+	ISM->UpdateInstanceTransform(Piece.Instance, Gone, true, false, true);
 
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	// (No server clock yet, just joined: it's old news, no replay.)
@@ -587,6 +609,20 @@ bool AFTODestruction::EnsureIndexed()
 				{
 					C.Wall[Cell] = p;
 					C.Pieces[Cell].Insert(p, 0);
+				}
+			}
+		}
+		// A roller door is two panels wide (and placed on the line between them): it fills the one before too.
+		for (int32 p = 0; p < S.Pieces.Num(); ++p)
+		{
+			const FFTOStructurePiece& Piece = S.Pieces[p];
+			if (Piece.Role == EFTOPieceRole::Wall && Piece.Face >= 0 && Piece.Column > 0 && Piece.Level < C.Levels &&
+				Piece.Component.ToString().StartsWith(TEXT("SM_Wall_G_Roller")))
+			{
+				const int32 Before = Piece.Level * C.Ring + S.RingOf(Piece.Face, Piece.Column - 1);
+				if (C.Wall[Before] == INDEX_NONE)
+				{
+					C.Wall[Before] = p;
 				}
 			}
 		}
@@ -763,6 +799,7 @@ void AFTODestruction::DamageWall(UPrimitiveComponent* Component, int32 Instance,
 	Item->Damage = uint8(FMath::Clamp(FMath::RoundToInt(Worn), 1, 99));
 	Item->Hit = Hit;
 	Item->Normal = Normal.GetSafeNormal();
+	Item->Time = GetWorld()->GetTimeSeconds();
 	WallHits.MarkItemDirty(*Item);
 	const FFTOWallHit Copy = *Item;
 	ShowWallHit(Copy);
@@ -808,11 +845,18 @@ void AFTODestruction::ShowWallHit(const FFTOWallHit& Hit)
 		Clean = &CleanPaint.Add(Key, InstanceColor(ISM, Hit.Instance));
 	}
 	const FLinearColor Worn = FMath::Lerp(*Clean, DustColor * 0.6f, 0.55f * Hit.Damage / WallStrength);
-	ISM->SetCustomData(Hit.Instance, { Worn.R, Worn.G, Worn.B }, true);
+	ISM->SetCustomData(Hit.Instance, { Worn.R, Worn.G, Worn.B }, false);
 
 	UFTODebris* Debris = UFTODebris::Get(GetWorld());
 	if (!Debris)
 	{
+		return;
+	}
+	// Catching up (just joined): the cracks are there, but nothing's flying.
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	if (!GS || GS->GetServerWorldTimeSeconds() - Hit.Time > FreshSeconds)
+	{
+		Debris->Crack(Hit.Hit, FVector(Hit.Normal).IsNearlyZero() ? FVector::UpVector : FVector(Hit.Normal), FMath::Min(70.f + Hit.Damage * 1.2f, 200.f));
 		return;
 	}
 	// A real knock (or a quarter more of it gone) cracks it; a stray round just chips it.
@@ -891,6 +935,15 @@ void AFTODestruction::CrumbleCell(int32 Structure, int32 Cell, const FVector& Hi
 		return;
 	}
 	C.Down[Cell] = true;
+	// (A roller door's two panels go together.)
+	const int32 Level = Cell / FMath::Max(1, C.Ring);
+	for (int32 Other = Level * C.Ring; Other < (Level + 1) * C.Ring; ++Other)
+	{
+		if (C.Wall[Other] == C.Wall[Cell])
+		{
+			C.Down[Other] = true;
+		}
+	}
 	const FFTOStructure& S = *GetStructure(Structure);
 	for (const int32 p : C.Pieces[Cell])
 	{
@@ -1000,7 +1053,8 @@ void AFTODestruction::Settle(int32 Structure, AController* ByWhom)
 		bool bGives = Have > 0 && Left < Have * 0.6f;
 		for (int32 Face = 0; Face < 4; ++Face)
 		{
-			bGives |= FaceHave[Face] >= 3 && FaceLeft[Face] <= FaceHave[Face] / 4;
+			// (Under a quarter of a side left: a short side has to go altogether.)
+			bGives |= FaceHave[Face] >= 3 && FaceLeft[Face] * 4 < FaceHave[Face];
 		}
 		if (bGives)
 		{
@@ -1058,13 +1112,29 @@ void AFTODestruction::Collapse(int32 Structure, int32 FromLevel, AController* By
 		const FVector Out = (Where - S.Center).GetSafeNormal2D();
 		Knockdown->Knockdown(Out * 350.f + FVector(0.f, 0.f, 200.f), 5.f);
 	}
-	// Its lift's out of order for good.
+	// Its lift: the stops that came down are gone, and it runs between the floors that are left (if two are).
+	TArray<AFTOLift*> Kept;
+	TArray<AFTOLift*> Gone;
 	for (TActorIterator<AFTOLift> It(GetWorld()); It; ++It)
 	{
 		if (S.Contains2D(It->GetActorLocation(), 80.f))
 		{
-			It->Destroy();
+			(It->GetFloor() < FromLevel ? Kept : Gone).Add(*It);
 		}
+	}
+	if (Kept.Num() < 2)
+	{
+		Gone.Append(Kept);
+		Kept.Reset();
+	}
+	for (AFTOLift* Stop : Gone)
+	{
+		Stop->Destroy();
+	}
+	if (!Kept.IsEmpty())
+	{
+		Kept.Sort([](const AFTOLift& A, const AFTOLift& B) { return A.GetFloor() < B.GetFloor(); });
+		AFTOLift::LinkStops(Kept);
 	}
 	// Nobody's going to be in there now.
 	if (FromLevel == 0 && S.Building != INDEX_NONE)
@@ -1134,21 +1204,22 @@ void AFTODestruction::ApplyCollapse(const FFTOCollapse& Event)
 	{
 		return; // (or later, once the city's built here: Tick)
 	}
+	AppliedCollapses.Add(Id);
 	const FFTOStructure* S = GetStructure(Event.Structure);
 	if (!S)
 	{
 		return;
 	}
-	AppliedCollapses.Add(Id);
 	const AGameStateBase* GS = GetWorld()->GetGameState();
 	const float Age = GS ? GS->GetServerWorldTimeSeconds() - Event.Time : TNumericLimits<float>::Max();
 	const bool bShow = Age < FreshCollapseSeconds && GetNetMode() != NM_DedicatedServer;
 	const float BaseZ = S->Center.Z + LevelZ(Event.FromLevel);
 	const float Now = GetWorld()->GetTimeSeconds();
 	FRandomStream Rng(Event.Structure * 7919 + Event.FromLevel);
+	// (The heap's own dice: the same on every machine whatever else rolled.)
+	FRandomStream RubbleRng(Event.Structure * 104729 + Event.FromLevel * 31 + 7);
 
 	// Everything from that storey up is tucked away at once (no one stands on it now); copies of it fall for show.
-	TSet<UInstancedStaticMeshComponent*> Touched;
 	for (const FFTOStructurePiece& Piece : S->Pieces)
 	{
 		if (Piece.Level < Event.FromLevel || Piece.Role == EFTOPieceRole::Foundation)
@@ -1156,6 +1227,7 @@ void AFTODestruction::ApplyCollapse(const FFTOCollapse& Event)
 			continue;
 		}
 		const TPair<FName, int32> Key(Piece.Component, Piece.Instance);
+		Predicted.Remove(Key);
 		UInstancedStaticMeshComponent* ISM = Applied.Contains(Key) ? nullptr : City->FindInstanced(Piece.Component);
 		if (!ISM || !ISM->IsValidInstance(Piece.Instance))
 		{
@@ -1183,11 +1255,6 @@ void AFTODestruction::ApplyCollapse(const FFTOCollapse& Event)
 		}
 		const FTransform Gone(Was.GetRotation(), Was.GetLocation() - FVector(0.f, 0.f, 100000.f), FVector(0.001f));
 		ISM->UpdateInstanceTransform(Piece.Instance, Gone, true, false, true);
-		Touched.Add(ISM);
-	}
-	for (UInstancedStaticMeshComponent* ISM : Touched)
-	{
-		ISM->MarkRenderStateDirty();
 	}
 	for (const TWeakObjectPtr<UTextRenderComponent>& Label : S->Labels)
 	{
@@ -1208,7 +1275,7 @@ void AFTODestruction::ApplyCollapse(const FFTOCollapse& Event)
 	}
 	// What's left: a heap of it, higher the more came down.
 	const int32 Storeys = Cells[Event.Structure].Levels - Event.FromLevel;
-	HeapRubble(*S, BaseZ, FMath::Clamp(3 + Storeys / 3, 3, 6), Rng);
+	HeapRubble(Event.Structure, Event.FromLevel, BaseZ, FMath::Clamp(3 + Storeys / 3, 3, 6), RubbleRng);
 
 	if (bShow && Debris)
 	{
@@ -1229,8 +1296,9 @@ void AFTODestruction::ApplyCollapse(const FFTOCollapse& Event)
 	}
 }
 
-void AFTODestruction::HeapRubble(const FFTOStructure& S, float FloorZ, int32 Heaps, FRandomStream& Rng)
+void AFTODestruction::HeapRubble(int32 Index, int32 FromLevel, float FloorZ, int32 Heaps, FRandomStream& Rng)
 {
+	const FFTOStructure& S = *GetStructure(Index);
 	if (!Rubble)
 	{
 		// Low, wide lumps (a car can climb the heap a step at a time; people walk over it).
@@ -1246,6 +1314,16 @@ void AFTODestruction::HeapRubble(const FFTOStructure& S, float FloorZ, int32 Hea
 		Rubble->SetNumCustomDataFloats(3);
 		Rubble->RegisterComponent();
 	}
+	// A heap left on an upper storey that's now come down too goes with it.
+	TArray<FIntPoint>& Heaped = RubbleOf.FindOrAdd(Index);
+	for (int32 i = Heaped.Num() - 1; i >= 0; --i)
+	{
+		if (Heaped[i].Y > FromLevel)
+		{
+			Rubble->UpdateInstanceTransform(Heaped[i].X, FTransform(FQuat::Identity, FVector(0.f, 0.f, -100000.f), FVector(0.001f)), true, false, true);
+			Heaped.RemoveAtSwap(i);
+		}
+	}
 	const float HX = FMath::Max(100.f, S.HalfX - 40.f);
 	const float HY = FMath::Max(100.f, S.HalfY - 40.f);
 	for (int32 k = 0; k < Heaps; ++k)
@@ -1259,9 +1337,10 @@ void AFTODestruction::HeapRubble(const FFTOStructure& S, float FloorZ, int32 Hea
 			const float H = Top * Rng.FRandRange(0.85f, 1.05f);
 			const FVector Spot(S.Center.X + Rng.FRandRange(-HX, HX) * Shrink, S.Center.Y + Rng.FRandRange(-HY, HY) * Shrink, FloorZ + H * 0.5f);
 			const FVector Size(Rng.FRandRange(90.f, 260.f), Rng.FRandRange(80.f, 220.f), H);
-			const int32 Index = Rubble->AddInstance(FTransform(FRotator(0.f, Rng.FRandRange(0.f, 360.f), 0.f), Spot, Size / 100.f), true);
+			const int32 Lump = Rubble->AddInstance(FTransform(FRotator(0.f, Rng.FRandRange(0.f, 360.f), 0.f), Spot, Size / 100.f), true);
 			const FLinearColor Color = FMath::Lerp(S.Paint, Concrete, Rng.FRandRange(0.3f, 0.8f)) * Rng.FRandRange(0.55f, 0.85f);
-			Rubble->SetCustomData(Index, { Color.R, Color.G, Color.B }, false);
+			Rubble->SetCustomData(Lump, { Color.R, Color.G, Color.B }, false);
+			Heaped.Add(FIntPoint(Lump, FromLevel));
 		}
 	}
 	// A few broken slabs leaning on the top of the heap.
@@ -1269,12 +1348,12 @@ void AFTODestruction::HeapRubble(const FFTOStructure& S, float FloorZ, int32 Hea
 	for (int32 n = 0; n < Heaps * 2 + 1; ++n)
 	{
 		const FVector Spot(S.Center.X + Rng.FRandRange(-HX, HX) * 0.3f, S.Center.Y + Rng.FRandRange(-HY, HY) * 0.3f, FloorZ + Peak + 20.f);
-		const int32 Index = Rubble->AddInstance(FTransform(FRotator(Rng.FRandRange(10.f, 35.f), Rng.FRandRange(0.f, 360.f), Rng.FRandRange(-12.f, 12.f)), Spot,
+		const int32 Slab = Rubble->AddInstance(FTransform(FRotator(Rng.FRandRange(10.f, 35.f), Rng.FRandRange(0.f, 360.f), Rng.FRandRange(-12.f, 12.f)), Spot,
 			FVector(Rng.FRandRange(1.6f, 2.4f), Rng.FRandRange(1.2f, 1.8f), 0.22f)), true);
 		const FLinearColor Color = S.Paint * Rng.FRandRange(0.6f, 0.9f);
-		Rubble->SetCustomData(Index, { Color.R, Color.G, Color.B }, false);
+		Rubble->SetCustomData(Slab, { Color.R, Color.G, Color.B }, false);
+		Heaped.Add(FIntPoint(Slab, FromLevel));
 	}
-	Rubble->MarkRenderStateDirty();
 }
 
 UInstancedStaticMeshComponent* AFTODestruction::ProxyFor(const UInstancedStaticMeshComponent* Source)
@@ -1308,7 +1387,6 @@ void AFTODestruction::TickFalling(float DeltaSeconds)
 		return;
 	}
 	const float Now = GetWorld()->GetTimeSeconds();
-	TSet<UInstancedStaticMeshComponent*> Moved;
 	for (int32 i = Falling.Num() - 1; i >= 0; --i)
 	{
 		FFalling& Fall = Falling[i];
@@ -1328,7 +1406,6 @@ void AFTODestruction::TickFalling(float DeltaSeconds)
 		{
 			// Down into the dust and gone.
 			Proxy->UpdateInstanceTransform(Fall.Index, FTransform(FQuat::Identity, FVector(0.f, 0.f, -100000.f), FVector(0.001f)), true, false, false);
-			Moved.Add(Proxy);
 			Falling.RemoveAtSwap(i);
 			continue;
 		}
@@ -1336,11 +1413,6 @@ void AFTODestruction::TickFalling(float DeltaSeconds)
 		Now3.SetLocation(Fall.Start.GetLocation() + Fall.Drift * T - FVector(0.f, 0.f, Drop));
 		Now3.SetRotation((Fall.Tumble * T).Quaternion() * Fall.Start.GetRotation());
 		Proxy->UpdateInstanceTransform(Fall.Index, Now3, true, false, false);
-		Moved.Add(Proxy);
-	}
-	for (UInstancedStaticMeshComponent* Proxy : Moved)
-	{
-		Proxy->MarkRenderStateDirty();
 	}
 	if (Falling.IsEmpty())
 	{
@@ -1438,11 +1510,30 @@ void AFTODestruction::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	TickFalling(DeltaSeconds);
+	// Pieces this driver broke ahead of the server that it never confirmed: back they go.
+	if (!Predicted.IsEmpty())
+	{
+		const float Now = GetWorld()->GetTimeSeconds();
+		for (auto It = Predicted.CreateIterator(); It; ++It)
+		{
+			if (Now - It.Value().Value < 2.5f)
+			{
+				continue;
+			}
+			if (UInstancedStaticMeshComponent* ISM = City ? City->FindInstanced(It.Key().Key) : nullptr)
+			{
+				ISM->UpdateInstanceTransform(It.Key().Value, It.Value().Key, true, false, true);
+			}
+			Applied.Remove(It.Key());
+			It.RemoveCurrent();
+		}
+	}
 	// A late joiner: apply what came in before the city was built.
 	if ((!Pending.IsEmpty() || !PendingHits.IsEmpty() || AppliedCollapses.Num() < Collapses.Num()) && FindCity() && City->IsGeometryBuilt())
 	{
 		TArray<FFTOBrokenPiece> Waiting = MoveTemp(Pending);
 		Pending.Reset();
+		PendingKeys.Reset();
 		for (const FFTOBrokenPiece& Piece : Waiting)
 		{
 			Apply(Piece);

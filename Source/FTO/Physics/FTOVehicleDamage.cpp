@@ -530,7 +530,7 @@ void UFTOVehicleDamage::TickComponent(float DeltaTime, ELevelTick TickType, FAct
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	// On fire, it burns down till it goes up.
-	if (GetOwner()->HasAuthority() && !IsWrecked() && State.Health < BurningBelow)
+	if (GetOwner()->HasAuthority() && !IsWrecked() && !bHoldFire && State.Health < BurningBelow)
 	{
 		State.Health = FMath::Max(0.f, State.Health - BurnRate * DeltaTime);
 		if (IsWrecked())

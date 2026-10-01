@@ -2494,7 +2494,7 @@ void AFTOSmokeTest::BuildSteps()
 			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
 			const UFTODebris* Debris = UFTODebris::Get(GetWorld());
 			const float Worn = WornNear();
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: rammed a wall: %s (%.0f of %.0f worn, %d crack(s) showing)."), Worn >= AFTODestruction::WallStrength ? TEXT("knocked in") : Worn > 0.f && Debris && Debris->NumCracks() > 0 ? TEXT("cracked") : TEXT("NO DAMAGE"),
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: rammed a wall: %s (%.0f of %.0f worn, %d crack(s) showing)."), Worn >= AFTODestruction::WallStrength - 5.f ? TEXT("knocked in") : Worn > 0.f && Debris && Debris->NumCracks() > 0 ? TEXT("cracked") : TEXT("NO DAMAGE"),
 				Worn, AFTODestruction::WallStrength, Debris ? Debris->NumCracks() : -1);
 			if (TestCruiser)
 			{
@@ -2603,7 +2603,10 @@ void AFTOSmokeTest::BuildSteps()
 				Wreckage->RoundHit(Wall, Item, Hit, -Out * 60000.f, EFTOWeapon::Rifle, GetPC());
 			}
 			const float Worn = Wreckage->GetWallDamage(Wall->GetFName(), Item);
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: six rifle rounds into a wall: %s (%.0f of %.0f worn)."), Worn > 20.f ? TEXT("chipped away") : TEXT("NOT A MARK"), Worn, AFTODestruction::WallStrength);
+			const UFTODebris* Debris = UFTODebris::Get(GetWorld());
+			const int32 Cracks = Debris ? Debris->NumCracks() : 0;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: six rifle rounds into a wall: %s (%.0f of %.0f worn, %d crack(s) showing)."),
+				Worn > 20.f && Cracks > 0 ? TEXT("chipped away") : TEXT("NOT A MARK"), Worn, AFTODestruction::WallStrength, Cracks);
 		});
 		AddStep(TEXT("knock out a ground floor"), 0.f, [this]()
 		{

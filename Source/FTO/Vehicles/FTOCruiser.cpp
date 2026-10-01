@@ -488,6 +488,12 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// A fire with someone at the wheel smoulders on; left empty, it burns down (and goes up).
+	if (Damage && HasAuthority())
+	{
+		Damage->bHoldFire = Driver != nullptr;
+	}
+
 	// Stop passing through people we bowled over a moment ago.
 	const float Now = GetWorld()->GetTimeSeconds();
 	for (int32 i = BowledOver.Num() - 1; i >= 0; --i)
@@ -733,6 +739,19 @@ void AFTOCruiser::ServerBowlOver_Implementation(AActor* Victim, FVector_NetQuant
 	}
 }
 
+void AFTOCruiser::IgnoreBriefly(UPrimitiveComponent* Thing, float Until)
+{
+	Collision->IgnoreComponentWhenMoving(Thing, true);
+	if (TPair<TWeakObjectPtr<UPrimitiveComponent>, float>* Already = BrokenThrough.FindByPredicate([Thing](const TPair<TWeakObjectPtr<UPrimitiveComponent>, float>& Entry) { return Entry.Key == Thing; }))
+	{
+		Already->Value = FMath::Max(Already->Value, Until);
+	}
+	else
+	{
+		BrokenThrough.Emplace(Thing, Until);
+	}
+}
+
 bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 {
 	UPrimitiveComponent* Thing = Hit.GetComponent();
@@ -741,7 +760,7 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 	int32 Item = Hit.Item;
 	// A building's wall (or a shop window in one, or what's stuck on its front), taken head on fast enough: straight
 	// through it.
-	EFTOPieceRole PieceRole;
+	EFTOPieceRole PieceRole = EFTOPieceRole::Trim;
 	const bool bWall = Wreckage && Hit.Item != INDEX_NONE && Wreckage->GetStructurePiece(Thing, Hit.Item, PieceRole) &&
 		(PieceRole == EFTOPieceRole::Wall || PieceRole == EFTOPieceRole::Glass || PieceRole == EFTOPieceRole::Trim);
 	const float Into = -FVector::DotProduct(Velocity, Hit.ImpactNormal.GetSafeNormal2D());
@@ -765,8 +784,7 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 			{
 				Wreckage->BreakLocally(Thing, Hit.Item, Hit.ImpactPoint, Velocity * 0.9f);
 			}
-			Collision->IgnoreComponentWhenMoving(Thing, true);
-			BrokenThrough.Emplace(Thing, GetWorld()->GetTimeSeconds() + 0.06f);
+			IgnoreBriefly(Thing, GetWorld()->GetTimeSeconds() + 0.06f);
 			Thing = Wall;
 			Item = WallItem;
 		}
@@ -788,9 +806,17 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 	const FVector Push = Velocity * 0.9f;
 	if (Kind == EFTOBreakKind::Crumble)
 	{
-		// A hole as wide as the car: this panel and whichever it overlaps either side, glass and all.
+		// A hole as wide as the car: this panel and whichever it overlaps either side, glass and all. (Where the
+		// car crosses the wall, as wide as it is across it: an angled car cuts a wider hole.)
+		const FVector Into2D = -Hit.ImpactNormal.GetSafeNormal2D();
+		const FVector Heading = Velocity.GetSafeNormal2D();
+		const float Square = FMath::Max(0.35f, FVector::DotProduct(Heading, Into2D));
+		const FVector Car = GetActorLocation();
+		const FVector Crossing = Car + Heading * (FVector::DotProduct(Hit.ImpactPoint - Car, Into2D) / Square);
+		const FVector Extent = Collision->GetScaledBoxExtent();
+		const float Across = FMath::Min((Extent.Y + Extent.X * FMath::Sqrt(1.f - Square * Square)) / Square, 350.f);
 		TArray<TPair<UInstancedStaticMeshComponent*, int32>> InTheWay;
-		Wreckage->WallsInTheWay(Thing, Item, GetActorLocation(), Collision->GetScaledBoxExtent().Y + 5.f, InTheWay);
+		Wreckage->WallsInTheWay(Thing, Item, Crossing, Across + 5.f, InTheWay);
 		const float Until = GetWorld()->GetTimeSeconds() + 0.06f;
 		for (const TPair<UInstancedStaticMeshComponent*, int32>& Piece : InTheWay)
 		{
@@ -803,8 +829,7 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 				Wreckage->BreakLocally(Piece.Key, Piece.Value, Hit.ImpactPoint, Push);
 				ServerBreakThrough(Piece.Key->GetFName(), Piece.Value, Hit.ImpactPoint, Push);
 			}
-			Collision->IgnoreComponentWhenMoving(Piece.Key, true);
-			BrokenThrough.Emplace(Piece.Key, Until);
+			IgnoreBriefly(Piece.Key, Until);
 		}
 		// That's a wall: it costs the car (and the panels round the hole feel it too).
 		Velocity *= 0.55f;
@@ -823,16 +848,7 @@ bool AFTOCruiser::BreakThrough(const FHitResult& Hit, FVector& Velocity)
 	}
 	// It's being tucked away: don't catch on it again meanwhile. (Briefly: this lets the car through every
 	// instance of that mesh, so the next fence panel along should still stop it.)
-	Collision->IgnoreComponentWhenMoving(Thing, true);
-	const float Until = GetWorld()->GetTimeSeconds() + 0.06f;
-	if (TPair<TWeakObjectPtr<UPrimitiveComponent>, float>* Already = BrokenThrough.FindByPredicate([Thing](const TPair<TWeakObjectPtr<UPrimitiveComponent>, float>& Entry) { return Entry.Key == Thing; }))
-	{
-		Already->Value = Until;
-	}
-	else
-	{
-		BrokenThrough.Emplace(Thing, Until);
-	}
+	IgnoreBriefly(Thing, GetWorld()->GetTimeSeconds() + 0.06f);
 	Velocity *= Kind == EFTOBreakKind::Topple ? 0.6f : 0.85f;
 	return true;
 }
@@ -848,7 +864,9 @@ void AFTOCruiser::ServerBreakThrough_Implementation(FName Component, int32 Insta
 		break;
 	}
 	UInstancedStaticMeshComponent* Thing = City ? City->FindInstanced(Component) : nullptr;
-	if (Wreckage && Thing && FVector::DistSquared(FVector(Hit), GetActorLocation()) < FMath::Square(900.f))
+	// (Checked against the piece itself: at speed and with lag, our copy of the car can be well behind the driver's.)
+	if (Wreckage && Thing && Wreckage->IsPieceNear(Thing, Instance, Hit, 400.f) &&
+		FVector::DistSquared(FVector(Hit), GetActorLocation()) < FMath::Square(2500.f))
 	{
 		Wreckage->Break(Thing, Instance, Hit, FVector(Push).GetClampedToMaxSize(MaxSpeed * 1.2f), GetController());
 	}

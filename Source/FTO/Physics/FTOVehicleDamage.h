@@ -90,6 +90,9 @@ public:
 	EFTOCarDamage GetStage() const;
 	bool IsWrecked() const { return State.Health <= 0.f; }
 
+	/** Someone's at the wheel: a fire smoulders on rather than burning the car down (set by the car). */
+	bool bHoldFire = false;
+
 	/** A citizen's car: the police writing it off costs the city chaos. */
 	UPROPERTY(EditAnywhere, Category="Damage") bool bCitizensCar = true;
 

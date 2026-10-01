@@ -91,6 +91,8 @@ struct FFTOWallHit : public FFastArraySerializerItem
 	/** The latest knock: where, and the face it landed on. */
 	UPROPERTY() FVector_NetQuantize10 Hit = FVector::ZeroVector;
 	UPROPERTY() FVector_NetQuantizeNormal Normal = FVector::ZeroVector;
+	/** Server time of the latest knock (a late joiner just sees the cracks, no bits flying). */
+	UPROPERTY() float Time = 0.f;
 
 	void PostReplicatedAdd(const struct FFTOWallHitList& List);
 	void PostReplicatedChange(const struct FFTOWallHitList& List);
@@ -176,6 +178,8 @@ public:
 	static bool IsLoose(const UPrimitiveComponent* Component);
 	/** Is this instance part of a building that can come down (and still up)? Its role in the building if so. */
 	bool GetStructurePiece(const UPrimitiveComponent* Component, int32 Instance, EFTOPieceRole& OutRole);
+	/** Is this building piece (or street breakable) within Radius of Point? (Checking a driver's say-so.) */
+	bool IsPieceNear(const UPrimitiveComponent* Component, int32 Instance, const FVector& Point, float Radius) const;
 	/** The wall panel a building's piece (a pane, or the panel itself) is in, if it's still standing. */
 	bool FindWallOf(const UPrimitiveComponent* Component, int32 Instance, UInstancedStaticMeshComponent*& OutWall, int32& OutInstance);
 	/**
@@ -253,8 +257,8 @@ protected:
 	void Collapse(int32 Structure, int32 FromLevel, AController* ByWhom);
 	/** Every machine: play a collapse out (pieces tucked away, falling copies, dust, rubble). */
 	void ApplyCollapse(const FFTOCollapse& Event);
-	/** Every machine: a heap of rubble on Floor (Z) over the structure's footprint. */
-	void HeapRubble(const FFTOStructure& S, float FloorZ, int32 Heaps, FRandomStream& Rng);
+	/** Every machine: a heap of rubble on Floor (Z) over structure Index's footprint, from storey FromLevel's fall. */
+	void HeapRubble(int32 Index, int32 FromLevel, float FloorZ, int32 Heaps, FRandomStream& Rng);
 	/** The falling copy of a city component's pieces (no collision, moved every frame). */
 	UInstancedStaticMeshComponent* ProxyFor(const UInstancedStaticMeshComponent* Source);
 	void TickFalling(float DeltaSeconds);
@@ -268,6 +272,11 @@ protected:
 
 	/** Pieces that arrived before the city was built here (a late joiner), applied once it is. */
 	TArray<FFTOBrokenPiece> Pending;
+	TSet<TPair<FName, int32>> PendingKeys;
+	/** A driver's machine: pieces broken ahead of the server, where they were and when (put back if it says no). */
+	TMap<TPair<FName, int32>, TPair<FTransform, float>> Predicted;
+	/** Every machine: each building's rubble (instance, and the storey whose fall heaped it). */
+	TMap<int32, TArray<FIntPoint>> RubbleOf;
 	TArray<FFTOWallHit> PendingHits;
 	/** Instances tucked away on this machine. */
 	TSet<TPair<FName, int32>> Applied;
