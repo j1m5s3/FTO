@@ -170,6 +170,52 @@ void AFTOSmokeTest::AimAt(const FVector& Target)
 	}
 }
 
+namespace
+{
+	/** Which way a building's wall panel faces (out of the building). */
+	FVector WallFacing(const UInstancedStaticMeshComponent* ISM, int32 Item)
+	{
+		FTransform Panel;
+		ISM->GetInstanceTransform(Item, Panel, true);
+		return Panel.GetRotation().GetForwardVector();
+	}
+}
+
+FVector AFTOSmokeTest::ClearSpot(const FVector& From, const FVector& Wanted) const
+{
+	// As far towards Wanted as the camera can get from From without ending up inside something.
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeView), false, GetPawn());
+	FCollisionObjectQueryParams Things(ECC_WorldStatic);
+	Things.AddObjectTypesToQuery(ECC_WorldDynamic);
+	if (GetWorld()->SweepSingleByObjectType(Hit, From, Wanted, FQuat::Identity, Things, FCollisionShape::MakeSphere(60.f), Params))
+	{
+		return Hit.Location - (Wanted - From).GetSafeNormal() * 40.f;
+	}
+	return Wanted;
+}
+
+bool AFTOSmokeTest::FindWall(int32 S, int32 Face, int32 Column, int32 Level, UInstancedStaticMeshComponent*& OutISM, int32& OutInstance, FVector& OutAt) const
+{
+	const AFTOCityGenerator* City = GetCity();
+	const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+	if (!City || !Wreckage || !City->GetStructures().IsValidIndex(S))
+	{
+		return false;
+	}
+	for (const FFTOStructurePiece& Piece : City->GetStructures()[S].Pieces)
+	{
+		if (Piece.Role == EFTOPieceRole::Wall && Piece.Face == Face && Piece.Column == Column && Piece.Level == Level && !Wreckage->IsBroken(Piece.Component, Piece.Instance))
+		{
+			OutISM = City->FindInstanced(Piece.Component);
+			OutInstance = Piece.Instance;
+			OutAt = Piece.Location;
+			return OutISM != nullptr;
+		}
+	}
+	return false;
+}
+
 float AFTOSmokeTest::GroundZ(const FVector& At) const
 {
 	FHitResult Ground;
@@ -2328,6 +2374,461 @@ void AFTOSmokeTest::BuildSteps()
 				TestCar.IsValid() && TestCar->GetCarState() == EFTOCarState::Wrecked ? TEXT("wrecked, stopped") : TEXT("NOT WRECKED"),
 				GS ? GS->PropertyBroken : -1, GS ? GS->CarsWrecked : -1);
 			// Good as new for whoever needs a cruiser next.
+			if (TestCruiser && TestCruiser->GetDamage())
+			{
+				TestCruiser->GetDamage()->Repair();
+			}
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		// Demolition. A wall rammed (cracked), then driven straight through; rounds wearing a panel down; a stretch of
+		// ground floor knocked out so the panels above it drop; a house brought down to its foundations; a car going up
+		// beside a building.
+		AddStep(TEXT("demolition: find a wall"), 0.f, [this]()
+		{
+			AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const AFTOCityGenerator* City = GetCity();
+			if (!Wreckage || !City || !TestCruiser)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: demolition: NO CITY OR CAR."));
+				return;
+			}
+			TestStructure = INDEX_NONE;
+			const TArray<FFTOStructure>& All = City->GetStructures();
+			const FVector Car = TestCruiser->GetActorLocation();
+			TArray<int32> Order;
+			for (int32 s = 0; s < All.Num(); ++s)
+			{
+				if (!Wreckage->IsStructureDown(s, 99) && All[s].Floors >= 2)
+				{
+					Order.Add(s);
+				}
+			}
+			Order.Sort([&All, &Car](int32 A, int32 B) { return FVector::DistSquared(All[A].Center, Car) < FVector::DistSquared(All[B].Center, Car); });
+			FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOSmokeRunUp), false, TestCruiser);
+			if (GetPawn())
+			{
+				Params.AddIgnoredActor(GetPawn());
+			}
+			for (int32 k = 0; k < Order.Num() && TestStructure == INDEX_NONE; ++k)
+			{
+				const FFTOStructure& S = All[Order[k]];
+				for (const FFTOStructurePiece& Piece : S.Pieces)
+				{
+					if (Piece.Role != EFTOPieceRole::Wall || Piece.Level != 0 || Piece.Face < 0)
+					{
+						continue;
+					}
+					const FVector Out = Piece.Face == 0 ? FVector(1.f, 0.f, 0.f) : Piece.Face == 1 ? FVector(-1.f, 0.f, 0.f) : Piece.Face == 2 ? FVector(0.f, 1.f, 0.f) : FVector(0.f, -1.f, 0.f);
+					const FVector Far = Piece.Location + Out * 1100.f;
+					const float Z = GroundZ(Far) + AFTOCruiser::RideHeight;
+					FHitResult First;
+					EFTOPieceRole Role;
+					UInstancedStaticMeshComponent* Wall = nullptr;
+					int32 WallItem = INDEX_NONE;
+					if (GetWorld()->SweepSingleByChannel(First, FVector(Far.X, Far.Y, Z), FVector(Piece.Location.X, Piece.Location.Y, Z) + Out * 5.f, (-Out).ToOrientationQuat(), ECC_Pawn,
+							FCollisionShape::MakeBox(FVector(240.f, 108.f, 72.f)), Params) &&
+						Wreckage->GetStructurePiece(First.GetComponent(), First.Item, Role) && (Role == EFTOPieceRole::Wall || Role == EFTOPieceRole::Glass) &&
+						FVector::Dist2D(First.ImpactPoint, Piece.Location) < 120.f &&
+						Wreckage->FindWallOf(First.GetComponent(), First.Item, Wall, WallItem) && FMath::Abs(GroundZ(Far) - S.Center.Z) < 40.f)
+					{
+						TestStructure = Order[k];
+						TestTarget = Piece.Location;
+						TestAway = Out;
+						TestWallName = Wall->GetFName();
+						TestWallInstance = WallItem;
+						break;
+					}
+				}
+			}
+			if (TestStructure == INDEX_NONE)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: demolition: NO CLEAR WALL."));
+				return;
+			}
+			if (TestCruiser->GetDamage())
+			{
+				TestCruiser->GetDamage()->Repair();
+			}
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+			{
+				const FVector Clear = TestTarget + TestAway * 1800.f + FVector::CrossProduct(FVector::UpVector, TestAway) * 1000.f;
+				Cop->TeleportTo(FVector(Clear.X, Clear.Y, GroundZ(Clear) + 98.f), (-TestAway).Rotation());
+			}
+			// A gentle run at it first.
+			TestCruiser->SetAutopilot(false);
+			TestCruiser->StopDead();
+			const FVector Start = TestTarget + TestAway * 600.f;
+			TestCruiser->SetActorLocationAndRotation(FVector(Start.X, Start.Y, GroundZ(Start) + AFTOCruiser::RideHeight), (-TestAway).Rotation(), false, nullptr,
+				ETeleportType::TeleportPhysics);
+			TestCruiser->SetAutopilot(true, 1.f, 0.f);
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+			ViewFrom(TestTarget + TestAway * 700.f + Across * 700.f + FVector(0.f, 0.f, 250.f), TestTarget + FVector(0.f, 0.f, 180.f));
+		});
+		// (Whichever panels the bumper caught: the one aimed at, or its neighbours.)
+		auto WornNear = [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const AFTOCityGenerator* City = GetCity();
+			float Most = 0.f;
+			if (Wreckage && City && City->GetStructures().IsValidIndex(TestStructure))
+			{
+				for (const FFTOStructurePiece& Piece : City->GetStructures()[TestStructure].Pieces)
+				{
+					if (Piece.Role == EFTOPieceRole::Wall && Piece.Level == 0 && FVector::Dist(Piece.Location, TestTarget) < 450.f)
+					{
+						Most = FMath::Max(Most, Wreckage->GetWallDamage(Piece.Component, Piece.Instance));
+					}
+				}
+			}
+			return Most;
+		};
+		AddWait(TEXT("ram lands"), 4.f, [WornNear]() { return WornNear() > 0.f; });
+		AddStep(TEXT("ram result"), 0.5f, [this, WornNear]()
+		{
+			if (TestCruiser)
+			{
+				TestCruiser->SetAutopilot(false);
+				TestCruiser->StopDead();
+			}
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const UFTODebris* Debris = UFTODebris::Get(GetWorld());
+			const float Worn = WornNear();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: rammed a wall: %s (%.0f of %.0f worn, %d crack(s) showing)."), Worn >= AFTODestruction::WallStrength - 5.f ? TEXT("knocked in") : Worn > 0.f && Debris && Debris->NumCracks() > 0 ? TEXT("cracked") : TEXT("NO DAMAGE"),
+				Worn, AFTODestruction::WallStrength, Debris ? Debris->NumCracks() : -1);
+			if (TestCruiser)
+			{
+				// Back off for the photo.
+				const FVector Back = TestTarget + TestAway * 900.f;
+				TestCruiser->SetActorLocation(FVector(Back.X, Back.Y, GroundZ(Back) + AFTOCruiser::RideHeight), false, nullptr, ETeleportType::TeleportPhysics);
+			}
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+			ViewFrom(TestTarget + TestAway * 420.f + Across * 260.f + FVector(0.f, 0.f, 170.f), TestTarget + FVector(0.f, 0.f, 120.f));
+		});
+		AddShot(TEXT("23a_cracked_wall"), 0.3f);
+		AddStep(TEXT("through the wall"), 0.f, [this]()
+		{
+			if (!TestCruiser || TestStructure == INDEX_NONE)
+			{
+				return;
+			}
+			if (TestCruiser->GetDamage())
+			{
+				TestCruiser->GetDamage()->Repair();
+			}
+			BrokenBefore = AFTODestruction::Get(GetWorld()) ? AFTODestruction::Get(GetWorld())->NumBroken() : 0;
+			const FVector Start = TestTarget + TestAway * 700.f;
+			TestCruiser->SetActorLocationAndRotation(FVector(Start.X, Start.Y, GroundZ(Start) + AFTOCruiser::RideHeight), (-TestAway).Rotation(), false, nullptr,
+				ETeleportType::TeleportPhysics);
+			TestCruiser->Launch(2300.f);
+			TestCruiser->SetAutopilot(true, 1.f, 0.f);
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+			ViewFrom(TestTarget + TestAway * 900.f + Across * 900.f + FVector(0.f, 0.f, 300.f), TestTarget + FVector(0.f, 0.f, 150.f));
+		});
+		AddWait(TEXT("wall goes"), 2.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			return Wreckage && Wreckage->IsBroken(TestWallName, TestWallInstance);
+		});
+		AddStep(TEXT("drive on in"), 0.4f, [this]() {});
+		AddStep(TEXT("brake inside"), 0.35f, [this]()
+		{
+			if (TestCruiser)
+			{
+				TestCruiser->SetAutopilot(false);
+				TestCruiser->StopDead();
+			}
+		});
+		AddShot(TEXT("23b_through_the_wall"), 0.5f);
+		AddStep(TEXT("through the wall result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const bool bGone = Wreckage && Wreckage->IsBroken(TestWallName, TestWallInstance);
+			// (How far in its front bumper got.)
+			const float Past = TestCruiser ? 240.f - FVector::DotProduct(TestCruiser->GetActorLocation() - TestTarget, TestAway) : 0.f;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: drove through a wall: %s (front %.0f cm in, %d pieces broken, cruiser health %.0f)."),
+				bGone && Past > 50.f ? TEXT("through it") : bGone ? TEXT("WALL BROKE, CAR STOPPED") : TEXT("BOUNCED OFF"), Past,
+				Wreckage ? Wreckage->NumBroken() - BrokenBefore : -1, TestCruiser && TestCruiser->GetDamage() ? TestCruiser->GetDamage()->GetHealth() : -1.f);
+			if (TestCruiser)
+			{
+				// Out of there and good as new.
+				const FVector Back = TestTarget + TestAway * 1500.f;
+				TestCruiser->SetActorLocation(FVector(Back.X, Back.Y, GroundZ(Back) + AFTOCruiser::RideHeight), false, nullptr, ETeleportType::TeleportPhysics);
+				if (TestCruiser->GetDamage())
+				{
+					TestCruiser->GetDamage()->Repair();
+				}
+			}
+		});
+		AddStep(TEXT("rounds into a wall"), 0.3f, [this]()
+		{
+			AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			UInstancedStaticMeshComponent* Wall = nullptr;
+			int32 Item = INDEX_NONE;
+			FVector At = FVector::ZeroVector;
+			const AFTOCityGenerator* City = GetCity();
+			const APawn* Cop = GetPawn();
+			// A first-floor panel on the nearest building still standing.
+			TArray<int32> Order;
+			for (int32 s = 0; City && Wreckage && Cop && s < City->GetStructures().Num(); ++s)
+			{
+				if (!Wreckage->IsStructureDown(s, 99) && City->GetStructures()[s].Floors >= 1)
+				{
+					Order.Add(s);
+				}
+			}
+			const TArray<FFTOStructure>* All = City ? &City->GetStructures() : nullptr;
+			Order.Sort([All, Cop](int32 A, int32 B) { return FVector::DistSquared((*All)[A].Center, Cop->GetActorLocation()) < FVector::DistSquared((*All)[B].Center, Cop->GetActorLocation()); });
+			const int32 Columns = Order.Num();
+			bool bFound = false;
+			for (int32 k = 0; k < Order.Num() && !bFound; ++k)
+			{
+				for (int32 Face = 0; Face < 4 && !bFound; ++Face)
+				{
+					for (int32 Col = 1; Col < 4 && !bFound; ++Col)
+					{
+						bFound = FindWall(Order[k], Face, Col, 1, Wall, Item, At);
+					}
+				}
+			}
+			if (!bFound)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: rounds into a wall: NO WALL (%d buildings standing)."), Columns);
+				return;
+			}
+			const FVector Out = WallFacing(Wall, Item);
+			for (int32 Shot = 0; Shot < 6; ++Shot)
+			{
+				const FVector Hit = At + FVector(0.f, 0.f, 120.f + Shot * 12.f) + FVector::CrossProduct(FVector::UpVector, Out) * (Shot * 9.f - 25.f);
+				Wreckage->RoundHit(Wall, Item, Hit, -Out * 60000.f, EFTOWeapon::Rifle, GetPC());
+			}
+			const float Worn = Wreckage->GetWallDamage(Wall->GetFName(), Item);
+			const UFTODebris* Debris = UFTODebris::Get(GetWorld());
+			const int32 Cracks = Debris ? Debris->NumCracks() : 0;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: six rifle rounds into a wall: %s (%.0f of %.0f worn, %d crack(s) showing)."),
+				Worn > 20.f && Cracks > 0 ? TEXT("chipped away") : TEXT("NOT A MARK"), Worn, AFTODestruction::WallStrength, Cracks);
+		});
+		AddStep(TEXT("knock out a ground floor"), 0.f, [this]()
+		{
+			AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const AFTOCityGenerator* City = GetCity();
+			const APawn* Cop = GetPawn();
+			if (!Wreckage || !City || !Cop)
+			{
+				return;
+			}
+			// A long face (seven panels or more) on a building with storeys above, still standing.
+			const TArray<FFTOStructure>& All = City->GetStructures();
+			int32 Best = INDEX_NONE;
+			int32 BestFace = INDEX_NONE;
+			for (int32 s = 0; s < All.Num(); ++s)
+			{
+				if (s == TestStructure || All[s].Floors < 1 || Wreckage->IsStructureDown(s, 99))
+				{
+					continue;
+				}
+				for (int32 Face = 0; Face < 4; ++Face)
+				{
+					if (All[s].Columns[Face] >= 7 && (Best == INDEX_NONE ||
+						FVector::DistSquared(All[s].Center, Cop->GetActorLocation()) < FVector::DistSquared(All[Best].Center, Cop->GetActorLocation())))
+					{
+						Best = s;
+						BestFace = Face;
+					}
+				}
+			}
+			if (Best == INDEX_NONE)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: knock out a ground floor: NO BUILDING."));
+				return;
+			}
+			TestStructure = Best;
+			TestInstance = BestFace;
+			BrokenBefore = Wreckage->NumBroken();
+			// Five panels in a row along it, leaving one at each end.
+			FVector Middle = FVector::ZeroVector;
+			for (int32 Col = 1; Col <= 5; ++Col)
+			{
+				UInstancedStaticMeshComponent* Wall = nullptr;
+				int32 Item = INDEX_NONE;
+				FVector At = FVector::ZeroVector;
+				if (FindWall(Best, BestFace, Col, 0, Wall, Item, At))
+				{
+					const FVector Out = WallFacing(Wall, Item);
+					Wreckage->Break(Wall, Item, At + FVector(0.f, 0.f, 150.f), -Out * 500.f, nullptr);
+					if (Col == 3)
+					{
+						Middle = At;
+						TestAway = Out;
+					}
+				}
+			}
+			TestTarget = Middle;
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, TestAway);
+			ViewFrom(ClearSpot(Middle + TestAway * 60.f + FVector(0.f, 0.f, 300.f), Middle + TestAway * 1300.f + Across * 400.f + FVector(0.f, 0.f, 450.f)), Middle + FVector(0.f, 0.f, 350.f));
+		});
+		AddShot(TEXT("23c_ground_floor_out"), 0.7f);
+		AddStep(TEXT("ground floor result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			UInstancedStaticMeshComponent* Wall = nullptr;
+			int32 Item = INDEX_NONE;
+			FVector At = FVector::ZeroVector;
+			// The panel above the middle had nothing within reach to hold it: it should have dropped.
+			const bool bAboveStanding = FindWall(TestStructure, TestInstance, 3, 1, Wall, Item, At);
+			const bool bDown = Wreckage && Wreckage->IsStructureDown(TestStructure, 99);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: five ground-floor panels knocked out: %s, %s (%d pieces down)."),
+				bAboveStanding ? TEXT("THE PANEL ABOVE IS HANGING IN THE AIR") : TEXT("the panel above dropped"),
+				bDown ? TEXT("AND THE WHOLE BUILDING CAME DOWN") : TEXT("the rest still standing"), Wreckage ? Wreckage->NumBroken() - BrokenBefore : -1);
+		});
+		AddStep(TEXT("bring a house down"), 1.1f, [this]()
+		{
+			AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const AFTOCityGenerator* City = GetCity();
+			const APawn* Cop = GetPawn();
+			if (!Wreckage || !City || !Cop)
+			{
+				return;
+			}
+			// The nearest two-storey house.
+			const TArray<FFTOStructure>& All = City->GetStructures();
+			int32 House = INDEX_NONE;
+			for (int32 s = 0; s < All.Num(); ++s)
+			{
+				const FFTOBuilding* Room = City->GetBuilding(All[s].Building);
+				if (Room && Room->Type == EFTOBuildingType::Home && All[s].Floors == 1 && !Wreckage->IsStructureDown(s, 99) && (House == INDEX_NONE ||
+					FVector::DistSquared(All[s].Center, Cop->GetActorLocation()) < FVector::DistSquared(All[House].Center, Cop->GetActorLocation())))
+				{
+					House = s;
+				}
+			}
+			if (House == INDEX_NONE)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: bring a house down: NO HOUSE."));
+				return;
+			}
+			TestStructure = House;
+			// Knock out one side of the ground floor, a panel at a time, till it gives.
+			int32 Knocked = 0;
+			FVector Side = All[House].Center;
+			FVector Out = FVector::ForwardVector;
+			for (int32 Col = 0; Col < All[House].Columns[0] && !Wreckage->IsStructureDown(House); ++Col)
+			{
+				UInstancedStaticMeshComponent* Wall = nullptr;
+				int32 Item = INDEX_NONE;
+				FVector At = FVector::ZeroVector;
+				if (FindWall(House, 0, Col, 0, Wall, Item, At))
+				{
+					Out = WallFacing(Wall, Item);
+					Side = At;
+					Wreckage->Break(Wall, Item, At + FVector(0.f, 0.f, 150.f), -Out * 500.f, GetPC());
+					++Knocked;
+				}
+			}
+			TestInstance = Knocked;
+			TestAway = Out;
+			TestTarget = All[House].Center;
+			// Watched from up over the street out front.
+			const FFTOBuilding* Room = City->GetBuilding(All[House].Building);
+			const FVector Front = Room ? (Room->DoorOutside - All[House].Center).GetSafeNormal2D() : Out;
+			const FVector Aside = FVector::CrossProduct(FVector::UpVector, Front);
+			ViewFrom(ClearSpot(TestTarget + Front * 650.f + FVector(0.f, 0.f, 700.f), TestTarget + Front * 1900.f + Aside * 500.f + FVector(0.f, 0.f, 900.f)),
+				TestTarget + FVector(0.f, 0.f, 250.f));
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: bringing a house down: %s after %d panel(s), %d piece(s) falling."),
+				Wreckage->IsStructureDown(House) ? TEXT("it gave way") : TEXT("STILL STANDING"), Knocked, Wreckage->NumFalling());
+		});
+		AddShot(TEXT("23d_house_coming_down"), 0.2f);
+		AddStep(TEXT("let the dust settle"), 6.5f, [this]() {});
+		AddShot(TEXT("23e_rubble"), 0.f);
+		AddStep(TEXT("house result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const AFTOCityGenerator* City = GetCity();
+			const FFTOStructure* S = City && City->GetStructures().IsValidIndex(TestStructure) ? &City->GetStructures()[TestStructure] : nullptr;
+			int32 Left = 0;
+			for (const FFTOStructurePiece& Piece : S ? S->Pieces : TArray<FFTOStructurePiece>())
+			{
+				Left += Piece.Role != EFTOPieceRole::Foundation && Wreckage && !Wreckage->IsBroken(Piece.Component, Piece.Instance) ? 1 : 0;
+			}
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the house: %s, %d piece(s) left standing, %d lumps of rubble, still falling %d (chaos %.0f)."),
+				S && Wreckage && Wreckage->IsBuildingDown(S->Building) ? TEXT("down to its foundations") : TEXT("NOT DOWN"), Left, Wreckage ? Wreckage->NumRubble() : -1,
+				Wreckage ? Wreckage->NumFalling() : -1, GS ? GS->GetChaos() : -1.f);
+		});
+		AddStep(TEXT("car goes up by a wall"), 0.f, [this]()
+		{
+			AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const AFTOCityGenerator* City = GetCity();
+			const APawn* Cop = GetPawn();
+			if (!Wreckage || !City || !Cop || !TestCruiser || !TestCruiser->GetDamage())
+			{
+				return;
+			}
+			// A standing wall near the officer, the cruiser parked against it, set alight and left to go up.
+			const TArray<FFTOStructure>& All = City->GetStructures();
+			TArray<int32> Order;
+			for (int32 s = 0; s < All.Num(); ++s)
+			{
+				if (!Wreckage->IsStructureDown(s, 99) && s != TestStructure)
+				{
+					Order.Add(s);
+				}
+			}
+			Order.Sort([&All, Cop](int32 A, int32 B) { return FVector::DistSquared(All[A].Center, Cop->GetActorLocation()) < FVector::DistSquared(All[B].Center, Cop->GetActorLocation()); });
+			UInstancedStaticMeshComponent* Wall = nullptr;
+			int32 Item = INDEX_NONE;
+			FVector At = FVector::ZeroVector;
+			bool bFound = false;
+			for (int32 k = 0; k < Order.Num() && !bFound; ++k)
+			{
+				for (int32 Face = 0; Face < 4 && !bFound; ++Face)
+				{
+					bFound = FindWall(Order[k], Face, 1, 0, Wall, Item, At) && FMath::Abs(GroundZ(At + WallFacing(Wall, Item) * 300.f) - At.Z) < 40.f;
+				}
+			}
+			if (!bFound)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: car bomb: NO WALL."));
+				return;
+			}
+			const FVector Out = WallFacing(Wall, Item);
+			TestISM = Wall;
+			TestInstance = Item;
+			TestTarget = At;
+			TestAway = Out;
+			TestCruiser->SetAutopilot(false);
+			TestCruiser->StopDead();
+			const FVector Park = At + Out * 260.f;
+			TestCruiser->SetActorLocationAndRotation(FVector(Park.X, Park.Y, GroundZ(Park) + AFTOCruiser::RideHeight), FVector::CrossProduct(FVector::UpVector, Out).Rotation(),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			TestCruiser->GetDamage()->Repair();
+			TestCruiser->GetDamage()->ApplyDamage(90.f, Park + FVector(0.f, 0.f, 40.f), nullptr);
+			// The officer's standing a little too close.
+			if (AFTOCharacter* Officer = Cast<AFTOCharacter>(GetPawn()))
+			{
+				const FVector Near = Park + Out * 330.f;
+				Officer->SetActorLocationAndRotation(FVector(Near.X, Near.Y, GroundZ(Near) + 98.f), (-Out).Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
+			}
+			const FVector Across = FVector::CrossProduct(FVector::UpVector, Out);
+			ViewFrom(At + Out * 1300.f + Across * 700.f + FVector(0.f, 0.f, 300.f), At + Out * 150.f + FVector(0.f, 0.f, 150.f));
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: car bomb: cruiser %s by the wall (health %.0f)."),
+				TestCruiser->GetDamage()->GetStage() == EFTOCarDamage::Burning ? TEXT("burning") : TEXT("NOT BURNING"), TestCruiser->GetDamage()->GetHealth());
+		});
+		AddWait(TEXT("it goes up"), 14.f, [this]()
+		{
+			return TestCruiser && TestCruiser->GetDamage() && TestCruiser->GetDamage()->IsWrecked();
+		});
+		AddShot(TEXT("23f_car_bomb"), 0.25f);
+		AddStep(TEXT("car bomb result"), 0.f, [this]()
+		{
+			const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+			const float Worn = Wreckage && TestISM.IsValid() ? Wreckage->GetWallDamage(TestISM->GetFName(), TestInstance) : 0.f;
+			const bool bGone = Wreckage && TestISM.IsValid() && Wreckage->IsBroken(TestISM->GetFName(), TestInstance);
+			const UFTOKnockdownComponent* Knockdown = GetPawn() ? GetPawn()->FindComponentByClass<UFTOKnockdownComponent>() : nullptr;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: car went up by a wall: %s, the wall %s (%.0f worn), the officer beside it %s."),
+				TestCruiser && TestCruiser->GetDamage() && TestCruiser->GetDamage()->IsWrecked() ? TEXT("burned down and blew") : TEXT("NEVER WENT UP"),
+				bGone ? TEXT("blown in") : Worn > 0.f ? TEXT("blackened and cracked") : TEXT("UNTOUCHED"), Worn,
+				Knockdown && Knockdown->IsDown() ? TEXT("thrown off their feet") : TEXT("STILL STANDING"));
 			if (TestCruiser && TestCruiser->GetDamage())
 			{
 				TestCruiser->GetDamage()->Repair();

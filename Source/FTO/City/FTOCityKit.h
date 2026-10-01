@@ -90,3 +90,89 @@ struct FFTOBuilding
 		return Local.X > -Slack && Local.X < Depth + Slack && Local.Y > YMin - Slack && Local.Y < YMax + Slack && Local.Z > -100.f && Local.Z < FTOKit::GroundHeight;
 	}
 };
+
+/** What a piece of a building is to the building (AFTODestruction knocks them down). */
+enum class EFTOPieceRole : uint8
+{
+	Wall,		// a facade panel: it holds up whatever's above it
+	Glass,		// a pane in one
+	Trim,		// stuck on the outside: corners, cornices, awnings, signs, parapets, the roof, porches, stairs
+	Floor,		// a slab, a ceiling, a floor covering
+	Inside,		// furniture, lights, partitions
+	Foundation	// the ground floor's floor: what's left when it's all come down
+};
+
+/** One instance of the city that belongs to a building. */
+struct FFTOStructurePiece
+{
+	/** The city's instanced component (AFTOCityGenerator::FindInstanced) and the instance in it. */
+	FName Component;
+	int32 Instance = INDEX_NONE;
+	/** Its pivot, in the world. */
+	FVector Location = FVector::ZeroVector;
+	EFTOPieceRole Role = EFTOPieceRole::Trim;
+	/** Which face (AFTOCityGenerator's EFace: +X, -X, +Y, -Y) and which panel along it, for pieces in the facade. */
+	int8 Face = -1;
+	int8 Column = -1;
+	/** 0: the ground floor; 1.. the storeys above (the parapet is one past the top). */
+	int8 Level = 0;
+};
+
+/**
+ * A building as a structure, for knocking down: every piece of it, sorted into the cells of its facade (a panel on
+ * a face on a storey), which hold each other up. Built identically on every machine with the city.
+ */
+struct FFTOStructure
+{
+	/** The footprint (centre at street level) and how tall. */
+	FVector Center = FVector::ZeroVector;
+	float HalfX = 0.f;
+	float HalfY = 0.f;
+	/** Storeys above the ground floor. */
+	int32 Floors = 0;
+	/** Panels along each face (by EFace). */
+	int32 Columns[4] = { 0, 0, 0, 0 };
+	/** Its ground-floor room (AFTOCityGenerator::GetBuildings), if it has one. */
+	int32 Building = INDEX_NONE;
+	FLinearColor Paint = FLinearColor::White;
+	TArray<FFTOStructurePiece> Pieces;
+	/** Lettering stuck on it (the bank's name), which goes with it. */
+	TArray<TWeakObjectPtr<class UTextRenderComponent>> Labels;
+
+	/** The faces in order round the building (each starts where the last one ends). */
+	static constexpr int32 RingFaces[4] = { 0, 2, 1, 3 };
+	/** Panels all the way round. */
+	int32 RingLength() const { return Columns[0] + Columns[1] + Columns[2] + Columns[3]; }
+	/** Where panel Column of Face is, going round. */
+	int32 RingOf(int32 Face, int32 Column) const
+	{
+		int32 At = 0;
+		for (const int32 F : RingFaces)
+		{
+			if (F == Face)
+			{
+				return At + Column;
+			}
+			At += Columns[F];
+		}
+		return INDEX_NONE;
+	}
+	/** Which face a place round the ring is on. */
+	int32 FaceAt(int32 Ring) const
+	{
+		for (const int32 F : RingFaces)
+		{
+			if (Ring < Columns[F])
+			{
+				return F;
+			}
+			Ring -= Columns[F];
+		}
+		return INDEX_NONE;
+	}
+	/** Is this world point inside the footprint (with Slack round it)? */
+	bool Contains2D(const FVector& Where, float Slack = 0.f) const
+	{
+		return FMath::Abs(Where.X - Center.X) < HalfX + Slack && FMath::Abs(Where.Y - Center.Y) < HalfY + Slack;
+	}
+};

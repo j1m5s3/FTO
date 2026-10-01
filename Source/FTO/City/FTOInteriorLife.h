@@ -36,6 +36,9 @@ public:
 	/** Server: fill building Index now if it's empty (it'll empty again once no officer is near). */
 	void Wake(int32 Index);
 
+	/** Server: building Index has come down: whoever was in it is gone, and nobody's in it again. */
+	void Abandon(int32 Index);
+
 	/** Server: sneak a crook into building Index, on a free standing spot (tests, scripted trouble). */
 	AFTOOccupant* PlantCrook(int32 Index);
 
@@ -65,6 +68,8 @@ protected:
 		/** After trouble's handled, everyone cheers the officers until then. */
 		float CheerUntil = 0.f;
 		bool bAwake = false;
+		/** It's come down. */
+		bool bGone = false;
 	};
 
 	void Sleep(int32 Index);

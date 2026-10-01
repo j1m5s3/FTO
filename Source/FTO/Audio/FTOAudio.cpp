@@ -19,7 +19,7 @@ namespace FTOAudio
 				{ TEXT("Punch"), 4 }, { TEXT("Kick"), 3 }, { TEXT("BodyFall"), 3 }, { TEXT("Whoosh"), 3 },
 				{ TEXT("Land_Concrete"), 2 }, { TEXT("Scuff"), 3 },
 				{ TEXT("CarImpactLight"), 3 }, { TEXT("CarImpactHeavy"), 3 }, { TEXT("MetalCreak"), 2 },
-				{ TEXT("Rubble"), 4 }, { TEXT("WallBreak"), 3 },
+				{ TEXT("Rubble"), 4 }, { TEXT("WallBreak"), 3 }, { TEXT("Explosion"), 3 },
 			};
 			for (const TCHAR* Surface : { TEXT("Concrete"), TEXT("Wood"), TEXT("Tile"), TEXT("Carpet"), TEXT("Metal"), TEXT("Grass") })
 			{
