@@ -43,7 +43,7 @@ Seven upgrades from the "what would make it more fun" review, one reviewed PR ea
   talked down, brawls that need two officers.
 - [x] **Shift shape**: a set piece mid-shift (bank heist and getaway, bomb defusal, city-wide pursuit, in rotation)
   and a rush hour in the last two minutes.
-- [ ] **Teamwork**: jobs for two (one drives while the other shoots tyres, one guards a door while the other
+- [x] **Teamwork**: jobs for two (one drives while the other shoots tyres, one guards a door while the other
   searches) and a squad-wide combo.
 - [ ] **Comedy**: a mutator per shift (low gravity, bouncy cars, hot dog suits...), more absurd crimes, newspaper
   headlines after big incidents.

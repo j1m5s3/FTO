@@ -13,6 +13,8 @@
 #include "Physics/FTOImpact.h"
 #include "Physics/FTOKnockdownComponent.h"
 #include "Physics/FTOVehicleDamage.h"
+#include "Core/FTOCharacter.h"
+#include "City/FTOTrafficCar.h"
 #include "GameFramework/Pawn.h"
 #include "Sound/SoundBase.h"
 
@@ -129,6 +131,11 @@ bool UFTOBallistics::Advance(FRound& Round, float Dt)
 	const FVector To = From + Round.Velocity * Dt;
 
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOBallistics), false, Round.Shooter.Get());
+	// Fired from a car's window: not into the car itself.
+	if (const AFTOCharacter* Officer = Cast<AFTOCharacter>(Round.Shooter.Get()); Officer && Officer->GetCurrentVehicle())
+	{
+		Params.AddIgnoredActor(Officer->GetCurrentVehicle());
+	}
 	for (int32 Pass = 0; Pass < 4; ++Pass)
 	{
 		FHitResult Hit;
@@ -196,6 +203,10 @@ bool UFTOBallistics::Land(FRound& Round, const FHitResult& Hit)
 		if (UFTOVehicleDamage* Car = Victim ? Victim->FindComponentByClass<UFTOVehicleDamage>() : nullptr)
 		{
 			Car->ApplyDamage(Spec.CarDamage, Hit.ImpactPoint, InstigatorOf(Round));
+			if (AFTOTrafficCar* Traffic = Cast<AFTOTrafficCar>(Car->GetOwner()); Traffic && !Spec.bStun) // (a dart doesn't burst a tyre)
+			{
+				Traffic->RoundHit(Hit.ImpactPoint, InstigatorOf(Round));
+			}
 		}
 		else if (AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld()))
 		{

@@ -87,6 +87,8 @@ public:
 	bool HasLoot() const { return bHasLoot; }
 	/** What a witness would tell dispatch about us ("striped jumper, carrying a sack"). */
 	FString DescribeSuspect() const;
+	/** Tests: stay right here (no wandering off to the next shelf or bin, no leaving with the goods). */
+	void StayPut() { DeedStops.Reset(); DeedEndTime = 0.f; }
 	/** Tests: finish the crime now (a crook with somewhere to be leaves with the goods). */
 	void FinishDeedNow();
 	/** Server: dressed as the citizen they were a moment ago (found with contraband on a stop and search). */
@@ -202,6 +204,12 @@ protected:
 	void DrunkOptions(int32 Stage, int32 OutOrder[3]) const;
 	/** Server: the officer said one of the answers on the panel (3: "You're under arrest"). */
 	bool DrunkAnswer(AFTOCharacter* Officer, int32 Index);
+	/** An officer on foot standing guard at our building's front door, if there is one (a burglar). */
+	AFTOCharacter* DoorGuard(const AActor* Except = nullptr) const;
+	/** Server: heading out of the door, straight into Guard: caught, and that's teamwork. */
+	void CaughtAtTheDoor(AFTOCharacter* Guard);
+	/** Server: the burglar's done (or nobody found them): out of the door with the goods, unless someone's guarding it. */
+	void SlipOut();
 	/** Server: talked round: off home, and that's the call handled. */
 	void CalmDown(AFTOCharacter* Officer);
 

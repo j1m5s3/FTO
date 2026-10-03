@@ -1994,6 +1994,25 @@ void AFTOSmokeTest::BuildSteps()
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: heist: NO HEIST."));
 				return;
 			}
+			// (A car going by the bank for the crew to take: the nearest one, brought round to the door.)
+			if (const AFTOCityGenerator* City = GetCity())
+			{
+				const FFTOBuilding* Bank = City->FindBuilding(EFTOBuildingType::Bank);
+				AFTOTrafficCar* Nearest = nullptr;
+				for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It && Bank; ++It)
+				{
+					if (It->GetCarState() == EFTOCarState::Driving &&
+						(!Nearest || FVector::DistSquared(It->GetActorLocation(), Bank->DoorOutside) < FVector::DistSquared(Nearest->GetActorLocation(), Bank->DoorOutside)))
+					{
+						Nearest = *It;
+					}
+				}
+				if (Nearest && FVector::Dist2D(Nearest->GetActorLocation(), Bank->DoorOutside) > 5000.f)
+				{
+					const FVector Out = (Bank->DoorOutside - Bank->Room.GetLocation()).GetSafeNormal2D();
+					Nearest->SetActorLocation(Bank->DoorOutside + Out * 600.f + FVector(0.f, 0.f, AFTOTrafficCar::RideHeight));
+				}
+			}
 			GM->GetCrimeDirector()->TriggerHeistGetaway();
 			const AFTOIncident* Chase = nullptr;
 			for (const AFTOIncident* Incident : GetWorld()->GetGameState<AFTOGameState>()->GetIncidents())
@@ -2060,6 +2079,115 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				GM->FTOShiftTimeLeft(600.f);
 			}
+		});
+
+		// Teamwork. Two rounds into a getaway car's tyres stop it (whoever shot them gets the credit).
+		AddStep(TEXT("tyres"), 0.f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOTrafficCar* Car = nullptr;
+			float Best = TNumericLimits<float>::Max();
+			for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It && Cop; ++It)
+			{
+				const float D = FVector::DistSquared(It->GetActorLocation(), Cop->GetActorLocation());
+				if (It->GetCarState() == EFTOCarState::Driving && It->NumWheels() >= 4 && D < Best)
+				{
+					Best = D;
+					Car = *It;
+				}
+			}
+			if (!GM || !Cop || !Car)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: tyres: NO CAR."));
+				return;
+			}
+			TestCar = Car;
+			Car->MakeGetaway();
+			TeamworkBefore = Cop->GetPlayerState<AFTOPlayerState>() ? Cop->GetPlayerState<AFTOPlayerState>()->GetStats().Teamwork : 0;
+			UFTOBallistics* Ballistics = UFTOBallistics::Get(GetWorld());
+			for (int32 Wheel = 0; Wheel < 2 && Ballistics; ++Wheel)
+			{
+				const FVector At = Car->GetWheelLocation(Wheel);
+				const FVector From = At + Car->GetActorRightVector() * (Wheel == 0 ? -120.f : 120.f) + FVector(0.f, 0.f, 20.f);
+				Ballistics->Fire(Cop, EFTOWeapon::Pistol, From, (At - From).GetSafeNormal(), 1234 + Wheel, true, true, true);
+			}
+			ViewFrom(Car->GetActorLocation() + Car->GetActorRightVector() * 600.f + FVector(0.f, 0.f, 250.f), Car->GetActorLocation());
+		});
+		AddShot(TEXT("21l_tyres"), 0.6f);
+		AddStep(TEXT("tyres result"), 0.f, [this]()
+		{
+			const AFTOPlayerState* PS = GetPawn() ? GetPawn()->GetPlayerState<AFTOPlayerState>() : nullptr;
+			const AFTOIncident* Chase = TestCar.IsValid() ? TestCar->GetChaseIncident() : nullptr;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: tyres: %d shot out, the getaway %s, teamwork scored %d."), TestCar.IsValid() ? TestCar->GetFlatTyres() : -1,
+				TestCar.IsValid() && TestCar->GetCarState() == EFTOCarState::Busted ? TEXT("stopped dead") : (Chase && Chase->IsSubdued() ? TEXT("stopped dead") : TEXT("STILL GOING")),
+				PS ? PS->GetStats().Teamwork - TeamworkBefore : -1);
+			// (Tidy it away.)
+			for (AFTOIncident* Incident : TArray<TObjectPtr<AFTOIncident>>(GetWorld()->GetGameState<AFTOGameState>()->GetIncidents()))
+			{
+				if (Incident && Incident->GetInfo().TemplateId == TEXT("CarChase"))
+				{
+					Incident->Destroy();
+				}
+			}
+			if (TestCar.IsValid())
+			{
+				TestCar->Destroy();
+			}
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+		// A burglar slipping out runs straight into the officer guarding the front door.
+		AddStep(TEXT("door guard"), 0.5f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			const AFTOCityGenerator* City = GetCity();
+			AFTOIncident* Incident = GM ? GM->GetCrimeDirector()->SpawnIncident(TEXT("Burglary"), true) : nullptr;
+			TestPerp = Incident ? Incident->GetPerp() : nullptr;
+			const FFTOBuilding* Building = City && Incident ? City->GetBuilding(Incident->GetBuildingIndex()) : nullptr;
+			if (!Cop || !TestPerp.IsValid() || !Building)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: door guard: NO BURGLAR."));
+				return;
+			}
+			TeamworkBefore = Cop->GetPlayerState<AFTOPlayerState>() ? Cop->GetPlayerState<AFTOPlayerState>()->GetStats().Teamwork : 0;
+			Cop->TeleportTo(Building->DoorOutside + FVector(0.f, 0.f, 100.f), Cop->GetActorRotation());
+		});
+		AddStep(TEXT("burglar heads out"), 0.6f, [this]()
+		{
+			if (TestPerp.IsValid())
+			{
+				TestPerp->FinishDeedNow();
+			}
+		});
+		AddStep(TEXT("door guard result"), 0.f, [this]()
+		{
+			const AFTOPlayerState* PS = GetPawn() ? GetPawn()->GetPlayerState<AFTOPlayerState>() : nullptr;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: door guard: the burglar %s at the door (teamwork scored %d)."),
+				TestPerp.IsValid() && TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered ? TEXT("was caught") : TEXT("WAS NOT CAUGHT"),
+				PS ? PS->GetStats().Teamwork - TeamworkBefore : -1);
+			if (TestPerp.IsValid() && TestPerp->GetIncident())
+			{
+				TestPerp->GetIncident()->Destroy();
+			}
+			TestPerp.Reset();
+		});
+		// The squad's streak: good work in quick succession builds it, a penalty breaks it.
+		AddStep(TEXT("squad combo"), 0.f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			if (!Cop || !GS)
+			{
+				return;
+			}
+			const int32 First = FTOScoring::Award(Cop, EFTOScore::Ticket, Cop->GetActorLocation());
+			FTOScoring::Award(Cop, EFTOScore::Ticket, Cop->GetActorLocation());
+			const int32 Third = FTOScoring::Award(Cop, EFTOScore::Ticket, Cop->GetActorLocation());
+			const int32 Streak = GS->GetSquadCombo();
+			const float Multiplier = GS->GetSquadMultiplier();
+			FTOScoring::Award(Cop, EFTOScore::Collateral, Cop->GetActorLocation());
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: squad combo: %d in a row, x%.2f (a ticket worth %d, then %d); after a penalty: %d."), Streak, Multiplier, First, Third, GS->GetSquadCombo());
 		});
 
 		// A word with a passer-by: the conversation panel.
@@ -3436,6 +3564,10 @@ void AFTOSmokeTest::BuildSteps()
 				Cop->SelectSlot(Cop->GetDrawnSlot()); // (put it away)
 			}
 			TestPerp = StagePerp(TEXT("Vandalism"), 110.f);
+			if (TestPerp.IsValid())
+			{
+				TestPerp->StayPut(); // (no wandering off to the next bin mid-fight)
+			}
 			if (!TestPerp.IsValid())
 			{
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: fist fight: NO SUSPECT."));
@@ -3515,7 +3647,11 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				return;
 			}
-			TestPerp = StagePerp(TEXT("Shoplifting"), 300.f); // (no victim in the way, and a moment before they move: a vandal wanders off to the next bin)
+			TestPerp = StagePerp(TEXT("Shoplifting"), 300.f); // (no victim in the way)
+			if (TestPerp.IsValid())
+			{
+				TestPerp->StayPut();
+			}
 			if (!TestPerp.IsValid())
 			{
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: grab: NO SUSPECT."));
@@ -3669,7 +3805,7 @@ void AFTOSmokeTest::BuildSteps()
 		{
 			// Wait for the host to be parked up at the wheel in the precinct lot (they run extra checks first, and their
 			// test drives across town have a driver too).
-			AddWait(TEXT("find a ride"), 150.f, [this]()
+			AddWait(TEXT("find a ride"), 420.f, [this]()
 			{
 				const AFTOCityGenerator* City = GetCity();
 				for (TActorIterator<AFTOCruiser> It(GetWorld()); It && City; ++It)
@@ -3701,6 +3837,26 @@ void AFTOSmokeTest::BuildSteps()
 				if (APlayerController* PC = GetPC()) { PC->SetControlRotation(PC->GetControlRotation() + FRotator(-5.f, -75.f, 0.f)); }
 			});
 			AddShot(TEXT("11b2_seat_view_driver"), 0.5f);
+			// Riding shotgun, the window's open: out comes the taser (first press), and a round goes out of the window.
+			AddStep(TEXT("client leans out"), 0.6f, [this]()
+			{
+				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn()))
+				{
+					Me->FirePressed();
+				}
+			});
+			AddStep(TEXT("client fires from the seat"), 0.3f, [this]()
+			{
+				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn()))
+				{
+					const int32 Before = Me->GetClip(Me->GetDrawnSlot() == INDEX_NONE ? 0 : Me->GetDrawnSlot());
+					Me->FirePressed();
+					const UFTOBallistics* Ballistics = UFTOBallistics::Get(GetWorld());
+					UE_LOG(LogFTO, Display, TEXT("SMOKE: client riding shotgun: %s the %s (%d rounds in flight, clip %d -> %d)."),
+						Me->IsRidingShotgun() ? TEXT("fired") : TEXT("NOT RIDING"), *FTOWeapons::DisplayName(Me->GetDrawnWeapon()).ToString(),
+						Ballistics ? Ballistics->NumInFlight() : -1, Before, Me->GetClip(FMath::Max(0, Me->GetDrawnSlot())));
+				}
+			});
 			AddStep(TEXT("chase view"), 0.5f, [this]()
 			{
 				if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn())) { Me->ToggleSeatView(); }

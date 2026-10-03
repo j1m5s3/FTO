@@ -26,6 +26,7 @@ int32 FTOScoring::BasePoints(EFTOScore Event, EFTOCrimeTier Tier)
 	case EFTOScore::Collateral:   return -100;
 	case EFTOScore::FriendlyFire: return -200;
 	case EFTOScore::WrongfulArrest: return -150;
+	case EFTOScore::Teamwork:     return 250;
 	default:                      return 0;
 	}
 }
@@ -45,6 +46,7 @@ FString FTOScoring::Label(EFTOScore Event)
 	case EFTOScore::Collateral:   return TEXT("COLLATERAL");
 	case EFTOScore::FriendlyFire: return TEXT("FRIENDLY FIRE");
 	case EFTOScore::WrongfulArrest: return TEXT("WRONGFUL ARREST");
+	case EFTOScore::Teamwork:     return TEXT("TEAMWORK!");
 	default:                      return FString();
 	}
 }
@@ -52,6 +54,21 @@ FString FTOScoring::Label(EFTOScore Event)
 bool FTOScoring::IsPenalty(EFTOScore Event)
 {
 	return Event == EFTOScore::Collateral || Event == EFTOScore::FriendlyFire || Event == EFTOScore::WrongfulArrest;
+}
+
+float FTOScoring::SquadMultiplier(int32 Streak, bool bTagTeam, int32 Officers)
+{
+	if (Streak < 2)
+	{
+		return 1.f;
+	}
+	return FMath::Min(1.5f, 1.f + 0.1f / FMath::Max(1, Officers) * (Streak - 1) + (bTagTeam ? 0.1f : 0.f));
+}
+
+bool FTOScoring::BuildsSquadCombo(EFTOScore Event)
+{
+	return Event == EFTOScore::Arrest || Event == EFTOScore::Bust || Event == EFTOScore::CallHandled || Event == EFTOScore::Ticket ||
+		Event == EFTOScore::Revive || Event == EFTOScore::Teamwork;
 }
 
 float FTOScoring::ComboMultiplier(int32 Combo)
@@ -230,6 +247,7 @@ TArray<FString> FTOScoring::AwardsFor(const AFTOPlayerState* Officer, const TArr
 	if (Leads([](const FFTOOfficerStats& S) { return S.Arrests + S.Busts; }))                     { Awards.Add(TEXT("Long Arm of the Law")); }
 	if (Leads([](const FFTOOfficerStats& S) { return S.Tickets; }))                               { Awards.Add(TEXT("Traffic Warden")); }
 	if (Leads([](const FFTOOfficerStats& S) { return S.Revives; }))                               { Awards.Add(TEXT("Guardian Angel")); }
+	if (Leads([](const FFTOOfficerStats& S) { return S.Teamwork; }))                              { Awards.Add(TEXT("Team Player")); }
 	if (Leads([](const FFTOOfficerStats& S) { return S.CaughtInAct; }))                           { Awards.Add(TEXT("Eagle Eye")); }
 	if (Leads([](const FFTOOfficerStats& S) { return S.BestCombo >= 3 ? S.BestCombo : 0; }))     { Awards.Add(TEXT("On a Roll")); }
 	if (Leads([](const FFTOOfficerStats& S) { return S.Collateral + S.FriendlyFire; }))           { Awards.Add(TEXT("Bull in a China Shop")); }

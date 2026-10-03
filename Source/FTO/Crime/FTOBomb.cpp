@@ -32,7 +32,7 @@ namespace
 		{ TEXT("the colour of a rubber duck"), TEXT("the colour of a banana"), TEXT("the colour of a smiley face") },
 	};
 
-	float ServerNow(const UWorld* World)
+	float BombNow(const UWorld* World)
 	{
 		const AGameStateBase* GS = World ? World->GetGameState() : nullptr;
 		return GS ? GS->GetServerWorldTimeSeconds() : (World ? World->GetTimeSeconds() : 0.f);
@@ -122,7 +122,7 @@ void AFTOBomb::Arm(AFTOIncident* InIncident, float Fuse, int32 InSeed)
 
 float AFTOBomb::GetTimeLeft() const
 {
-	return FMath::Max(0.f, FuseEndTime - ServerNow(GetWorld()));
+	return FMath::Max(0.f, FuseEndTime - BombNow(GetWorld()));
 }
 
 void AFTOBomb::SetTimeLeft(float Seconds)

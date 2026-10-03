@@ -4,6 +4,7 @@
 #include "Physics/FTOVehicleDamage.h"
 #include "City/FTOCityGenerator.h"
 #include "Core/FTOCharacter.h"
+#include "Vehicles/FTOCruiser.h"
 #include "Core/FTOGameMode.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
@@ -131,6 +132,7 @@ void AFTOTrafficCar::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AFTOTrafficCar, CarState);
 	DOREPLIFETIME(AFTOTrafficCar, Violation);
 	DOREPLIFETIME(AFTOTrafficCar, bDriverOut);
+	DOREPLIFETIME(AFTOTrafficCar, FlatTyres);
 }
 
 void AFTOTrafficCar::BeginPlay()
@@ -354,7 +356,7 @@ void AFTOTrafficCar::DriveToNextIntersection()
 
 	float Speed = CruiseSpeed * Rng.FRandRange(0.85f, 1.1f);
 	if (Violation == EFTOCarViolation::Speeding) { Speed *= 1.7f; }
-	if (CarState == EFTOCarState::Fleeing)      { Speed = CruiseSpeed * 2.2f; }
+	if (CarState == EFTOCarState::Fleeing)      { Speed = CruiseSpeed * 2.2f * (1.f - 0.3f * GetFlatTyres()); }
 
 	PendingTarget = LanePoint(Node.X, Node.Y, Heading);
 	PendingSpeed = Speed;
@@ -622,6 +624,75 @@ void AFTOTrafficCar::MakeGetaway(FName ChaseCrime, float Seconds, float Toughnes
 
 	// Rejoin the grid from the nearest intersection in our direction of travel.
 	DriveToNextIntersection();
+}
+
+FVector AFTOTrafficCar::GetWheelLocation(int32 Index) const
+{
+	return Wheels.IsValidIndex(Index) ? Wheels[Index]->GetComponentLocation() : GetActorLocation();
+}
+
+void AFTOTrafficCar::OnRep_Tyres()
+{
+	// A flat sags onto its rim.
+	for (int32 i = 0; i < Wheels.Num(); ++i)
+	{
+		if ((FlatTyres & (1 << i)) && !(ShownFlat & (1 << i)))
+		{
+			ShownFlat |= (1 << i);
+			Wheels[i]->AddRelativeLocation(FVector(0.f, 0.f, -9.f));
+		}
+	}
+}
+
+void AFTOTrafficCar::RoundHit(const FVector& At, AController* By)
+{
+	check(HasAuthority());
+	// Only a getaway's tyres count (no letting a car's tyres down at a traffic stop for later).
+	if (CarState != EFTOCarState::Fleeing || !ChaseIncident)
+	{
+		return;
+	}
+	for (int32 i = 0; i < Wheels.Num() && i < 8; ++i)
+	{
+		if ((FlatTyres & (1 << i)) || FVector::DistSquared(Wheels[i]->GetComponentLocation(), At) > FMath::Square(75.f))
+		{
+			continue;
+		}
+		FlatTyres |= (1 << i);
+		OnRep_Tyres();
+		if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+		{
+			GS->MulticastPlaySound(AFTOGameState::Sounds().Ricochet, At, 1.f);
+		}
+		AFTOPlayerController* Shooter = Cast<AFTOPlayerController>(By);
+		if (GetFlatTyres() < 2)
+		{
+			if (Shooter)
+			{
+				Shooter->ClientToast(INVTEXT("Tyre's out! One more and they're going nowhere."), FLinearColor(0.6f, 0.85f, 1.f));
+			}
+			break;
+		}
+		// Two flats: the getaway's over. Shot out from the passenger seat with a partner at the wheel, that's teamwork
+		// for both of them (on foot, or alone, it's just a good shot: the bust's the reward).
+		const AFTOCharacter* Gunner = Shooter ? Cast<AFTOCharacter>(Shooter->GetPawn()) : nullptr;
+		const AFTOCruiser* Cruiser = Gunner && Gunner->IsRidingShotgun() ? Cast<AFTOCruiser>(Gunner->GetCurrentVehicle()) : nullptr;
+		if (Cruiser && Cruiser->GetController() && Cruiser->GetController()->IsPlayerController())
+		{
+			FTOScoring::Award(Gunner, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 250.f));
+			FTOScoring::Award(Cruiser, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 300.f));
+		}
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(It->Get()); PC && PC->GetPawn() &&
+				FVector::DistSquared2D(PC->GetPawn()->GetActorLocation(), GetActorLocation()) < FMath::Square(6000.f))
+			{
+				PC->ClientToast(INVTEXT("Tyres shot out! The getaway car grinds to a halt. Cuff the driver (E)!"), FLinearColor(0.4f, 1.f, 0.5f));
+			}
+		}
+		ChaseIncident->TalkedDown();
+		break;
+	}
 }
 
 void AFTOTrafficCar::DriverSurrenders()

@@ -110,6 +110,13 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   paint. Cruisers take a beating before they smoke, catch fire and are written off (the motor pool fetches a
   write-off back to the lot, good as new, once it's been left empty for a while).
 - **Riding shotgun**: the mouse / right stick looks around, Q works the lights and siren, C swaps cameras, E gets out.
+  The window's open: 1-3 pick a weapon (the first LMB brings out the last one used) and LMB fires out of it. Two rounds
+  in a getaway car's tyres stop it dead (the driver gives up), and that's teamwork for the gunner and the driver.
+- **Teamwork**: some jobs want two. One drives while the other shoots out a getaway's tyres; one guards a burgled
+  building's front door while the other searches it (a burglar who bolts or tries to slip out runs straight into the
+  guard). Both score TEAMWORK! for everyone in on it. The whole squad shares a streak too: every bit of good work
+  within 20 s of the last adds to it, up to x1.5 on everyone's points (0.1 a step solo, less in a bigger squad; another 0.1 if officers are taking
+  turns: TAG TEAM!), shown under the chaos meter; a penalty knocks it back three steps.
 - **Radio** (anywhere, on foot or in a car): hold V (d-pad down) to talk to the squad; teammates hear you through a
   walkie-talkie filter with a squelch at each end, and see who's on air. Hold T (d-pad up) for the callout wheel:
   point with the mouse / right stick and let go, or press 1-4: *Need backup!*, *Suspect fleeing!* (pings the nearest
@@ -150,12 +157,13 @@ tower and climbs a house's outside stairs, starts the shift's set piece on sched
 lets another go off, watches the heist crew make off in a getaway car and starts a city-wide pursuit, runs the clock
 into rush hour, picks a pickpocket out of a crowd of look-alikes (searching a bystander first),
 finds a burglar hiding upstairs, talks a drunk round (after one answer that winds them up), checks one officer can't
-break up a bar fight, films a tagger
+break up a bar fight, shoots out a getaway car's tyres, catches a burglar at the door they're guarding, builds the
+squad's streak and breaks it, films a tagger
 and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
 hydrant, knocks a lamp post flat with a cruiser, crashes the cruiser until it's a burning wreck, and writes off a
 citizen's car; the log (`SMOKE:` lines) reports each check.
 For a two-player check, run a listen-server host and a client (see *Play*) both with `-FTOSmokeTest -FTOSmokeTag=host`
-(or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, gets out
+(or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, fires out of the window, gets out
 and arrests a shoplifter the host puts beside them. Then the client calls for backup and stays on air, and the host
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
 host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece.
