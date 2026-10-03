@@ -1,4 +1,5 @@
 #include "Physics/FTOKnockdownComponent.h"
+#include "Core/FTOMutators.h"
 #include "GameFramework/GameStateBase.h"
 #include "Audio/FTOAudio.h"
 #include "Animation/FTOCharacterAnimInstance.h"
@@ -197,6 +198,10 @@ void UFTOKnockdownComponent::Knockdown(const FVector& LaunchVelocity, float Dura
 	check(GetOwner()->HasAuthority());
 	State.bDown = true;
 	State.Launch = LaunchVelocity;
+	if (FTOMutators::Is(this, TEXT("LowGravity")))
+	{
+		State.Launch.Z *= FMath::Sqrt(FTOMutators::LowGravityScale); // (same peak, a slower fall: no landing on roofs)
+	}
 	++State.Serial;
 	RecoverAt = Duration > 0.f ? GetWorld()->GetTimeSeconds() + Duration : 0.f;
 	GetOwner()->ForceNetUpdate();

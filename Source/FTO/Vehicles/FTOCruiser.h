@@ -219,6 +219,13 @@ protected:
 	// ---- Components ----
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UBoxComponent> Collision;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Body;
+	/** Bouncy cars (every machine): when we last bounced off something, and whether we were bobbing last frame. */
+	float HopStart = -100.f;
+	bool bWasBouncy = false;
+	/** Bounced off something (bouncy cars): the driver tells the server, which tells everyone. */
+	UFUNCTION(Server, Unreliable) void ServerBounce();
+	UPROPERTY(ReplicatedUsing=OnRep_Hops) uint8 Hops = 0;
+	UFUNCTION() void OnRep_Hops();
 	UPROPERTY(VisibleAnywhere, Category="Components") TArray<TObjectPtr<UStaticMeshComponent>> Wheels;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> LightRed;
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> LightBlue;

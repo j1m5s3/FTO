@@ -128,6 +128,14 @@ protected:
 
 	void HandleRecovered();
 
+	/** Every machine: dressed as a hot dog (the HotDogs mutator) if WantsHotDogSuit says so. */
+	void UpdateHotDogSuit();
+	/** Suspects (and a pickpocket's crowd) on hot dog day. */
+	virtual bool WantsHotDogSuit() const { return false; }
+	/** Dressed as a hot dog whatever the day (the "Costumed" twist). */
+	virtual bool ForcesHotDogSuit() const { return false; }
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> HotDogSuit;
+
 	/** Civilian variants to pick from (Tools/Blender/build_civilians.py). */
 	UPROPERTY() TArray<TObjectPtr<USkeletalMesh>> Looks;
 

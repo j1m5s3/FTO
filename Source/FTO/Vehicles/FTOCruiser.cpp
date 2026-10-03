@@ -1,4 +1,6 @@
 #include "Vehicles/FTOCruiser.h"
+#include "Core/FTOMutators.h"
+#include "Kismet/GameplayStatics.h"
 #include "City/FTOCityKit.h"
 #include "Audio/FTOAudio.h"
 #include "Crime/FTOArrestee.h"
@@ -131,6 +133,7 @@ AFTOCruiser::AFTOCruiser()
 void AFTOCruiser::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AFTOCruiser, Hops);
 	// The driver is authoritative over their own car, so never correct them.
 	DOREPLIFETIME_CONDITION(AFTOCruiser, NetState, COND_SkipOwner);
 	DOREPLIFETIME(AFTOCruiser, bSiren);
@@ -485,9 +488,39 @@ void AFTOCruiser::ServerHorn_Implementation()
 // Simulation
 // ------------------------------------------------------------------------------------------
 
+void AFTOCruiser::ServerBounce_Implementation()
+{
+	++Hops;
+	OnRep_Hops();
+}
+
+void AFTOCruiser::OnRep_Hops()
+{
+	if (GetWorld()->GetTimeSeconds() - HopStart < 0.4f)
+	{
+		return; // (the driver's own bounce, already seen)
+	}
+	HopStart = GetWorld()->GetTimeSeconds();
+	UGameplayStatics::PlaySoundAtLocation(this, AFTOGameState::Sounds().Bonk, GetActorLocation(), 0.9f, 0.8f, 0.f, AFTOGameState::Sounds().World);
+}
+
 void AFTOCruiser::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	// Bouncy cars: always bobbing a little, and a big hop off whatever we bounced off (just for show).
+	// (Not for whoever's sitting in it: the seat view and a passenger's aim would bob along.)
+	const AFTOCharacter* Local = Cast<AFTOCharacter>(GetWorld()->GetFirstPlayerController() ? GetWorld()->GetFirstPlayerController()->GetPawn() : nullptr);
+	const bool bInside = GetWorld()->GetFirstPlayerController() && (GetWorld()->GetFirstPlayerController()->GetPawn() == this || (Local && Local->GetCurrentVehicle() == this));
+	const bool bBouncy = FTOMutators::Is(this, TEXT("BouncyCars")) && !bInside;
+	if (bBouncy || bWasBouncy)
+	{
+		bWasBouncy = bBouncy;
+		const float Since = GetWorld()->GetTimeSeconds() - HopStart;
+		const float BigHop = Since < 0.7f ? 90.f * FMath::Sin(PI * Since / 0.7f) : 0.f;
+		const float Bob = 10.f * FMath::Abs(FMath::Sin(GetWorld()->GetTimeSeconds() * 6.f));
+		Body->SetRelativeLocation(FVector(0.f, 0.f, -RideHeight + (bBouncy ? BigHop + Bob : 0.f)));
+	}
 
 	// A fire with someone at the wheel smoulders on; left empty, it burns down (and goes up).
 	if (Damage && HasAuthority())
@@ -694,7 +727,21 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 		{
 			Scrape(Hit); // grinding along it
 		}
-		Velocity = (Velocity - 1.4f * FVector::DotProduct(Velocity, Normal) * Normal) * 0.5f;
+		// (Bouncy cars bounce right back off, and hop.)
+		const bool bBouncy = FTOMutators::Is(this, TEXT("BouncyCars"));
+		Velocity = (Velocity - (bBouncy ? 2.f : 1.4f) * FVector::DotProduct(Velocity, Normal) * Normal) * (bBouncy ? 0.9f : 0.5f);
+		if (bBouncy && Into > 300.f && GetWorld()->GetTimeSeconds() - HopStart > 0.4f)
+		{
+			OnRep_Hops(); // here and now, and everyone else a moment later
+			if (HasAuthority())
+			{
+				++Hops;
+			}
+			else
+			{
+				ServerBounce();
+			}
+		}
 	}
 	SetActorRotation(NewRotation);
 

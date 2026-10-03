@@ -86,6 +86,8 @@ protected:
 	TArray<TWeakObjectPtr<AFTOPedestrian>> Pins;
 	TWeakObjectPtr<AFTOPedestrian> TackleTarget;
 	float ChaosBefore = 0.f;
+	/** Where the low-gravity jump took off from. */
+	float JumpFromZ = 0.f;
 
 	/** The suspect in the arrest checks, and the getaway car. */
 	TWeakObjectPtr<AFTOPerp> TestPerp;

@@ -99,3 +99,9 @@ namespace FTOScoring
 	/** Shift awards for the scoreboard, one line per officer who earned one ("Top Cop", "Traffic Warden"...). */
 	FTO_API TArray<FString> AwardsFor(const AFTOPlayerState* Officer, const TArray<const AFTOPlayerState*>& Squad);
 }
+
+/** The Daily Siren's front pages: a silly headline after a big incident, handled (bHandled) or not. */
+namespace FTOHeadlines
+{
+	FTO_API FString For(const FFTOIncidentInfo& Info, bool bHandled, FRandomStream& Rng);
+}

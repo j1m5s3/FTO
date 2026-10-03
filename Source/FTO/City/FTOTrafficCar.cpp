@@ -19,6 +19,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "Scoring/FTOScoring.h"
+#include "Core/FTOMutators.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Animation/FTOCharacterAnimInstance.h"
@@ -413,6 +414,17 @@ void AFTOTrafficCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// Bouncy cars: hydraulics, every car bobbing along to its own beat (just for show: the car itself stays put).
+	const bool bBouncy = FTOMutators::Is(this, TEXT("BouncyCars"));
+	if (bBouncy || bWasBouncy)
+	{
+		bWasBouncy = bBouncy;
+		const AGameStateBase* GS = GetWorld()->GetGameState();
+		const float Clock = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+		const float Hop = bBouncy ? 28.f * FMath::Abs(FMath::Sin(Clock * 5.f + (LookSeed % 100) * 0.37f)) : 0.f;
+		Body->SetRelativeLocation(FVector(0.f, 0.f, -RideHeight + Hop));
+	}
+
 	// Spin the wheels while moving.
 	if (GetCurrentSpeed() > 0.f)
 	{
@@ -654,7 +666,9 @@ void AFTOTrafficCar::RoundHit(const FVector& At, AController* By)
 	}
 	for (int32 i = 0; i < Wheels.Num() && i < 8; ++i)
 	{
-		if ((FlatTyres & (1 << i)) || FVector::DistSquared(Wheels[i]->GetComponentLocation(), At) > FMath::Square(75.f))
+		// (Where the wheel is on the car, not where the hydraulics have bounced it this frame.)
+		const FVector Wheel = Wheels[i]->GetComponentLocation() - GetActorUpVector() * (Body->GetRelativeLocation().Z + RideHeight);
+		if ((FlatTyres & (1 << i)) || FVector::DistSquared(Wheel, At) > FMath::Square(75.f))
 		{
 			continue;
 		}

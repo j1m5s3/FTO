@@ -24,7 +24,7 @@ public:
 
 	/** Chance (0-1) that a rolled incident gets a modifier. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Crime")
-	float ModifierChance = 0.35f;
+	float ModifierChance = 0.5f;
 
 	const FFTOCrimeTemplate* FindTemplate(FName Id) const;
 

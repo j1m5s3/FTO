@@ -56,6 +56,9 @@ protected:
 	virtual FString AnswerWhatTheySaw() override;
 	virtual FString Contraband() override;
 
+	/** On hot dog day the pickpocket's crowd dresses up too (or they'd stand out). */
+	virtual bool WantsHotDogSuit() const override { return ExtraRole == EFTOExtraRole::Bystander; }
+
 	/** Is the perp still at it, right here (not caught, not gone)? */
 	bool IsCrimeGoingOn() const;
 	/** Server: off out of it (a brawler when the police arrive). */

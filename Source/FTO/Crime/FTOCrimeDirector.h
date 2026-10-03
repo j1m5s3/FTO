@@ -180,6 +180,7 @@ protected:
 	TArray<TObjectPtr<AFTOCrimeSpawnPoint>> SpawnPoints;
 
 	FRandomStream Rng;
+	FRandomStream HeadlineRng;
 	float NextSpawnTime = 0.f;
 	/** Whose turn it is to get a crime nearby. */
 	int32 NextOfficerFocus = 0;

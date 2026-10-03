@@ -152,6 +152,19 @@ public:
 	/** Server: the squad voted to keep going: Seconds more on the clock, chaos as it was. */
 	void StartOvertime(float Seconds);
 
+	// ---- Comedy: the shift's mutator, and the papers ----
+	FName GetMutator() const { return Mutator; }
+	/** Server: this shift's silly rule (FTOMutators). */
+	void SetMutator(FName Which);
+	/** Server: a headline for the front page (a big incident handled, or not: bGood). Everyone sees the paper. */
+	void PrintHeadline(const FString& Headline, bool bGood);
+	/** The latest good news, and the latest bad (for the scoreboard, to suit how the shift went). */
+	const FString& GetLatestHeadline(bool bGood) const { return bGood ? LatestGood : LatestBad; }
+	/** The latest front page and how long since it came out (every machine), and every one this shift. */
+	const FString& GetLatestHeadline() const { return LatestHeadline; }
+	float GetHeadlineAge() const { return GetServerWorldTimeSeconds() - HeadlineTime; }
+	const TArray<FString>& GetFrontPages() const { return FrontPages; }
+
 	// ---- The squad's streak ----
 	/** Server: good work by Officer: the squad's streak goes on (or starts again). Returns the multiplier now. */
 	float BumpSquadCombo(const APlayerState* Officer);
@@ -210,6 +223,15 @@ protected:
 	UPROPERTY(Replicated) float VoteDuration = 20.f;
 	UPROPERTY(Replicated) float OvertimeOffer = 300.f;
 	UPROPERTY(Replicated) int32 Overtimes = 0;
+	UPROPERTY(ReplicatedUsing=OnRep_Mutator) FName Mutator;
+	UFUNCTION() void OnRep_Mutator();
+	/** Every machine: the mutator's world-wide side (gravity). */
+	void ApplyMutator();
+	UPROPERTY(Replicated) FString LatestHeadline;
+	UPROPERTY(Replicated) float HeadlineTime = -1000.f;
+	UPROPERTY(Replicated) TArray<FString> FrontPages;
+	UPROPERTY(Replicated) FString LatestGood;
+	UPROPERTY(Replicated) FString LatestBad;
 	UPROPERTY(Replicated) int32 SquadCombo = 0;
 	UPROPERTY(Replicated) float SquadComboTime = -1000.f;
 	UPROPERTY(Replicated) bool bTagTeam = false;

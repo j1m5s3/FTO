@@ -27,6 +27,7 @@
 #include "Weapons/FTOBallistics.h"
 #include "Crime/FTOArrestee.h"
 #include "Crime/FTOBomb.h"
+#include "Core/FTOMutators.h"
 #include "Crime/FTOCrimeDirector.h"
 #include "Crime/FTOCrimeExtra.h"
 #include "Crime/FTOGraffitiTag.h"
@@ -402,6 +403,17 @@ void AFTOSmokeTest::BuildSteps()
 		GM->FTOAddChaos(35.f);
 	});
 	AddShot(TEXT("02_on_duty"), 1.f);
+
+	// Comedy: the shift rolled a mutator; the tour runs without one (the comedy checks try each in turn).
+	AddStep(TEXT("mutator"), 0.f, [this]()
+	{
+		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: today's mutator: %s."), GS && GS->GetMutator() != NAME_None ? *GS->GetMutator().ToString() : TEXT("NONE"));
+		if (AFTOGameMode* GM = GetAuthGameMode())
+		{
+			GM->FTOMutator(TEXT("None"));
+		}
+	});
 
 	// Pacing: a ten-minute shift, and the director putting new crimes a short run from the officer.
 	AddStep(TEXT("crimes nearby"), 0.f, [this]()
@@ -1474,7 +1486,11 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				return;
 			}
-			// Back up, and after them (the sprint the test skips): right behind them, and dive.
+			// Back up (straight away: no lying about), and after them (the sprint the test skips): right behind them, and dive.
+			if (UFTOKnockdownComponent* Knocked = Cop->GetKnockdown(); Knocked && Knocked->IsDown())
+			{
+				Knocked->Recover();
+			}
 			const FVector Dir = TestPerp->GetMoveDirection().GetSafeNormal2D();
 			const FVector Runner = TestPerp->GetActorLocation();
 			Cop->TeleportTo(Runner - Dir * 140.f + FVector(0.f, 0.f, 96.f - AFTOPedestrian::HalfHeight + 2.f), Dir.Rotation());
@@ -2188,6 +2204,104 @@ void AFTOSmokeTest::BuildSteps()
 			const float Multiplier = GS->GetSquadMultiplier();
 			FTOScoring::Award(Cop, EFTOScore::Collateral, Cop->GetActorLocation());
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: squad combo: %d in a row, x%.2f (a ticket worth %d, then %d); after a penalty: %d."), Streak, Multiplier, First, Third, GS->GetSquadCombo());
+		});
+
+		// Comedy. Each mutator in turn: low gravity, bouncy cars, hot dog suits, big heads.
+		AddStep(TEXT("low gravity"), 1.2f, [this]()
+		{
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOMutator(TEXT("LowGravity")); }
+			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+			{
+				Cop->Jump();
+				JumpFromZ = Cop->GetActorLocation().Z;
+			}
+		});
+		AddStep(TEXT("low gravity result"), 0.f, [this]()
+		{
+			const APawn* Cop = GetPawn();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: low gravity: world gravity %.0f, the officer %.0f cm up a second after jumping."), GetWorld()->GetGravityZ(),
+				Cop ? Cop->GetActorLocation().Z - JumpFromZ : -1.f);
+		});
+		AddStep(TEXT("bouncy cars"), 0.6f, [this]()
+		{
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOMutator(TEXT("BouncyCars")); }
+		});
+		AddStep(TEXT("bouncy cars result"), 0.f, [this]()
+		{
+			int32 Bobbing = 0;
+			int32 Cars = 0;
+			for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It; ++It)
+			{
+				const UStaticMeshComponent* Body = It->GetBodyMesh();
+				++Cars;
+				Bobbing += Body && Body->GetRelativeLocation().Z > -AFTOTrafficCar::RideHeight + 1.f ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: bouncy cars: %d of %d cars up on their hydraulics."), Bobbing, Cars);
+			if (AActor* Car = TActorIterator<AFTOTrafficCar>(GetWorld()) ? *TActorIterator<AFTOTrafficCar>(GetWorld()) : nullptr)
+			{
+				ViewFrom(Car->GetActorLocation() + FVector(-700.f, -300.f, 250.f), Car->GetActorLocation());
+			}
+		});
+		AddShot(TEXT("21m_bouncy_cars"), 0.2f);
+		AddStep(TEXT("hot dog day"), 0.6f, [this]()
+		{
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOMutator(TEXT("HotDogs")); }
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+			TestPerp = StagePerp(TEXT("Mime"), 380.f);
+		});
+		AddStep(TEXT("hot dog result"), 0.f, [this]()
+		{
+			int32 Pieces = 0;
+			if (TestPerp.IsValid())
+			{
+				TArray<UStaticMeshComponent*> Parts;
+				TestPerp->GetComponents(Parts);
+				for (const UStaticMeshComponent* Part : Parts)
+				{
+					Pieces += Part->IsVisible() && Part->GetStaticMesh() && Part->GetStaticMesh()->GetName() == TEXT("Sphere") && Part->GetRelativeScale3D().Z > 1.f ? 1 : 0;
+				}
+				const FVector At = TestPerp->GetActorLocation();
+				ViewFrom(At + TestPerp->GetActorForwardVector() * 300.f + FVector(0.f, 0.f, 60.f), At);
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: hot dog day: the %s suspect is %s."), TestPerp.IsValid() ? *TestPerp->GetIncident()->GetInfo().Title.ToString() : TEXT("NO"),
+				Pieces >= 3 ? TEXT("dressed as a hot dog") : TEXT("NOT IN A HOT DOG SUIT"));
+		});
+		AddShot(TEXT("21n_hot_dog"), 0.2f);
+		AddStep(TEXT("big heads"), 0.4f, [this]()
+		{
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOMutator(TEXT("BigHeads")); }
+			if (TestPerp.IsValid() && TestPerp->GetIncident()) { TestPerp->GetIncident()->Destroy(); }
+			TestPerp.Reset();
+			if (const ACharacter* Cop = Cast<ACharacter>(GetPawn()))
+			{
+				ViewFrom(Cop->GetActorLocation() + Cop->GetActorForwardVector() * 260.f + FVector(0.f, 0.f, 70.f), Cop->GetActorLocation() + FVector(0.f, 0.f, 50.f));
+			}
+		});
+		AddShot(TEXT("21o_big_heads"), 0.2f);
+		AddStep(TEXT("big heads result"), 0.f, [this]()
+		{
+			const ACharacter* Cop = Cast<ACharacter>(GetPawn());
+			const float Scale = Cop ? Cop->GetMesh()->GetSocketTransform(TEXT("head"), RTS_Component).GetScale3D().X : -1.f;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: big heads: the officer's head at x%.1f."), Scale);
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOMutator(TEXT("None")); }
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+		// A big incident handled makes the papers.
+		AddStep(TEXT("headline"), 0.5f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			AFTOIncident* Incident = GM ? GM->GetCrimeDirector()->SpawnIncident(TEXT("Burglary"), true) : nullptr;
+			if (Incident)
+			{
+				Incident->HandledPeacefully();
+			}
+		});
+		AddShot(TEXT("21p_newspaper"), 0.3f);
+		AddStep(TEXT("headline result"), 0.f, [this]()
+		{
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: front page: \"%s\" (%d this shift)."), GS && !GS->GetLatestHeadline().IsEmpty() ? *GS->GetLatestHeadline() : TEXT("NO HEADLINE"),
+				GS ? GS->GetFrontPages().Num() : -1);
 		});
 
 		// A word with a passer-by: the conversation panel.
@@ -3950,6 +4064,8 @@ void AFTOSmokeTest::BuildSteps()
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: client sees %d broken things in the city."), Wreckage ? Wreckage->NumApplied() : -1);
 				const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: client sees this shift's set piece: %s."), GS && GS->GetSetPiece() != NAME_None ? *GS->GetSetPiece().ToString() : TEXT("NONE"));
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: client has read %d front page(s); the mutator is %s."), GS ? GS->GetFrontPages().Num() : -1,
+					GS && GS->GetMutator() != NAME_None ? *GS->GetMutator().ToString() : TEXT("none"));
 			});
 		}
 	}

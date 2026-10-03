@@ -44,6 +44,11 @@ struct FFTOCharacterAnimProxy : public FAnimInstanceProxy
 	uint32 Serial = 0;
 	EFTOAimPose Aim = EFTOAimPose::None;
 	float AimPitch = 0.f;
+	/** The head's scale (the BigHeads mutator), and which bone it is in the mesh. */
+	float HeadScale = 1.f;
+	int32 HeadBone = INDEX_NONE;
+	/** The mesh HeadBone was found on (meshes get swapped: a disguise, the officer's model). */
+	TWeakObjectPtr<const class USkeletalMesh> HeadBoneMesh;
 
 	// Ground speeds (cm/s) at which the walk and run clips' strides match 1:1 with no sliding (Epic's walk and jog).
 	float WalkReferenceSpeed = 300.f;

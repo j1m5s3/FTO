@@ -1,6 +1,7 @@
 #include "UI/FTOHUD.h"
 #include "Interaction/FTOTalkable.h"
 #include "Core/FTOGameState.h"
+#include "Core/FTOMutators.h"
 #include "Core/FTOPlayerState.h"
 #include "Crime/FTOIncident.h"
 #include "Engine/Canvas.h"
@@ -91,6 +92,7 @@ void AFTOHUD::DrawHUD()
 		DrawChaosMeter(GS);
 		DrawShiftClock(GS);
 		DrawShiftBanner(GS);
+		DrawNewspaper(GS);
 		DrawDispatchBoard(GS);
 		DrawOnSceneProgress(GS);
 		DrawInteractPrompt();
@@ -204,6 +206,67 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 	if (bRush)
 	{
 		DrawCenteredText(TEXT("RUSH HOUR"), X + W * 0.5f, Y + H + 12.f * S, FLinearColor(1.f, 0.7f, 0.2f), GEngine->GetMediumFont(), S);
+	}
+	// Today's silly rule, small, under the clock.
+	if (GS->GetMutator() != NAME_None)
+	{
+		FString Rule = FTOMutators::Describe(GS->GetMutator());
+		Rule = Rule.Left(Rule.Find(TEXT(".")));
+		DrawCenteredText(Rule, X + W * 0.5f, Y + H + (bRush ? 36.f : 12.f) * S, FLinearColor(1.f, 0.6f, 0.9f), GEngine->GetSmallFont(), S * 1.1f);
+	}
+}
+
+void AFTOHUD::DrawNewspaper(const AFTOGameState* GS)
+{
+	const float Age = GS->GetHeadlineAge();
+	constexpr float Showing = 4.5f;
+	if (GS->GetLatestHeadline().IsEmpty() || Age > Showing || Age < 0.f)
+	{
+		return;
+	}
+	// Slides in from the right, sits a few seconds, slides back out.
+	const float S = UIScale();
+	const float W = 420.f * S;
+	const float In = FMath::Clamp(Age / 0.4f, 0.f, 1.f) * FMath::Clamp((Showing - Age) / 0.4f, 0.f, 1.f);
+	const float X = Canvas->ClipX - (W + 24.f * S) * In;
+	const float Y = 110.f * S; // up under the clock and the score, out of the way
+	UFont* Small = GEngine->GetSmallFont();
+	UFont* Medium = GEngine->GetMediumFont();
+	// Wrap the headline onto lines that fit (once per headline).
+	if (WrappedFor != GS->GetLatestHeadline())
+	{
+		WrappedFor = GS->GetLatestHeadline();
+		WrappedLines.Reset();
+		TArray<FString> Words;
+		WrappedFor.ParseIntoArray(Words, TEXT(" "));
+		FString Line;
+		for (const FString& Word : Words)
+		{
+			const FString Try = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+			float TW = 0.f, TH = 0.f;
+			GetTextSize(Try, TW, TH, Medium, S);
+			if (TW > W - 40.f * S && !Line.IsEmpty())
+			{
+				WrappedLines.Add(Line);
+				Line = Word;
+			}
+			else
+			{
+				Line = Try;
+			}
+		}
+		WrappedLines.Add(Line);
+	}
+	const TArray<FString>& Lines = WrappedLines;
+	const float H = (66.f + Lines.Num() * 22.f + 12.f) * S;
+	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), X + 6.f * S, Y + 6.f * S, W, H);
+	DrawRect(FLinearColor(0.96f, 0.93f, 0.84f), X, Y, W, H);
+	DrawCenteredText(TEXT("THE DAILY SIREN"), X + W * 0.5f, Y + 8.f * S, FLinearColor(0.1f, 0.1f, 0.1f), GEngine->GetLargeFont(), S * 0.9f);
+	DrawRect(FLinearColor(0.15f, 0.15f, 0.15f), X + 16.f * S, Y + 50.f * S, W - 32.f * S, 2.f * S);
+	DrawText(TEXT("EXTRA! EXTRA!"), FLinearColor(0.6f, 0.1f, 0.1f), X + 18.f * S, Y + 54.f * S, Small, S);
+	for (int32 i = 0; i < Lines.Num(); ++i)
+	{
+		DrawCenteredText(Lines[i], X + W * 0.5f, Y + (70.f + i * 22.f) * S, FLinearColor(0.08f, 0.08f, 0.08f), Medium, S);
 	}
 }
 
@@ -685,6 +748,10 @@ void AFTOHUD::DrawBriefing(const AFTOGameState* GS)
 	DrawCenteredText(TEXT("Keep the city's chaos under 100% until the end of the shift."), CX, CY + 30.f * S, FLinearColor::White, GEngine->GetMediumFont(), S);
 	DrawCenteredText(FString::Printf(TEXT("On duty in %s"), *FormatClock(GS->GetBriefingTimeRemaining())), CX, CY + 70.f * S, FLinearColor(1.f, 0.85f, 0.2f), GEngine->GetLargeFont(), S);
 	DrawCenteredText(TEXT("WASD move  |  Shift sprint  |  Space jump  |  E interact, arrest, drive  |  F tackle  |  stand at a scene to handle it"), CX, CY + 110.f * S, FLinearColor(0.7f, 0.7f, 0.7f), GEngine->GetSmallFont(), S * 1.1f);
+	if (GS->GetMutator() != NAME_None)
+	{
+		DrawCenteredText(FTOMutators::Describe(GS->GetMutator()), CX, CY + 150.f * S, FLinearColor(1.f, 0.6f, 0.9f), GEngine->GetMediumFont(), S * 1.1f);
+	}
 }
 
 void AFTOHUD::DrawShiftReport(const AFTOGameState* GS)

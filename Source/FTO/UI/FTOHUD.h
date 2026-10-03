@@ -43,6 +43,11 @@ protected:
 	void DrawShiftClock(const AFTOGameState* GS);
 	/** A big banner across the top for the set piece and rush hour, as they start. */
 	void DrawShiftBanner(const AFTOGameState* GS);
+	/** The Daily Siren, sliding in with the latest front page. */
+	void DrawNewspaper(const AFTOGameState* GS);
+	/** The paper's headline, wrapped (worked out once per headline). */
+	FString WrappedFor;
+	TArray<FString> WrappedLines;
 	void DrawDispatchBoard(const AFTOGameState* GS);
 	void DrawIncidentMarkers(const AFTOGameState* GS);
 	void DrawTeammateMarkers(const AFTOGameState* GS);
