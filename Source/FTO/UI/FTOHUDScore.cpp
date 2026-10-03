@@ -67,6 +67,14 @@ void AFTOHUD::AddScorePopup(const AFTOPlayerState* Officer, int32 Points, EFTOSc
 	{
 		Dispatch(TEXT("Teamwork"));
 	}
+	else if (Popup.bMine && (Event == EFTOScore::Arrest || Event == EFTOScore::Bust))
+	{
+		Dispatch(TEXT("Arrest"));
+	}
+	else if (Popup.bMine && Event == EFTOScore::Booked)
+	{
+		Dispatch(TEXT("Booked"));
+	}
 	if (Combo > 1)
 	{
 		Popup.Text += FString::Printf(TEXT(" x%s"), *FString::SanitizeFloat(FTOScoring::ComboMultiplier(Combo)));

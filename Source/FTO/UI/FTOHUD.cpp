@@ -223,8 +223,12 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 
 void AFTOHUD::Dispatch(FName Category, bool bForce)
 {
+	// The routine lines (a new call, your own arrest, a booking) are filler: they wait for a quiet radio, never hold up
+	// a line that matters (a big bust, a call gone cold, an oops), and get cut off by one.
 	const float Now = GetWorld()->GetRealTimeSeconds();
-	if (!bForce && Now < NextDispatchTime)
+	const bool bRoutine = Category == TEXT("NewCall") || Category == TEXT("Arrest") || Category == TEXT("Booked");
+	const float* NextOfCategory = NextDispatchOf.Find(Category);
+	if (!bForce && (Now < NextDispatchTime || (bRoutine && Now < NextRoutineTime) || (NextOfCategory && Now < *NextOfCategory)))
 	{
 		return;
 	}
@@ -248,7 +252,17 @@ void AFTOHUD::Dispatch(FName Category, bool bForce)
 	}
 	const FTOAudio::FDispatchLine& Line = *Lines[FMath::RandRange(0, Lines.Num() - 1)];
 	LastLineOf.Add(Category, Line.Text);
-	NextDispatchTime = Now + 25.f;
+	// A word every 12 s at most (bar the forced ones); each routine one less often than that, so they stay funny.
+	if (bRoutine)
+	{
+		NextRoutineTime = Now + 12.f;
+		NextDispatchOf.Add(Category, Now + (Category == TEXT("NewCall") ? 60.f : 35.f));
+	}
+	else
+	{
+		NextDispatchTime = Now + 12.f;
+		NextRoutineTime = Now + 12.f;
+	}
 	LastDispatch = Line.Text;
 	if (USoundBase* Voice = FTOAudio::DispatchSound(Line))
 	{
@@ -1000,6 +1014,10 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 
 	// Dispatch chatter for new calls; chimes and stings as incidents end.
 	const float Now = GetWorld()->GetRealTimeSeconds();
+	if (FirstCueTime < 0.f)
+	{
+		FirstCueTime = Now;
+	}
 	for (const AFTOIncident* Incident : GS->GetIncidents())
 	{
 		if (!Incident)
@@ -1013,6 +1031,11 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 		{
 			Play(Sounds.Radio, 0.55f);
 			LastRadioTime = Now;
+			// (Not for the calls already on the board when we join.)
+			if (Phase == EFTOShiftPhase::OnDuty && Now - FirstCueTime > 3.f)
+			{
+				Dispatch(TEXT("NewCall"));
+			}
 		}
 		if (Previous && *Previous != State)
 		{

@@ -139,6 +139,11 @@ protected:
 	/** Say something from Category (a random line), unless something was said just now (bForce: say it anyway). */
 	void Dispatch(FName Category, bool bForce = false);
 	float NextDispatchTime = 0.f;
+	/** The routine lines (a new call, an arrest, a booking) each wait a while longer before they come round again. */
+	TMap<FName, float> NextDispatchOf;
+	/** When the next routine line may come (they never hold up the others), and when this HUD started listening. */
+	float NextRoutineTime = 0.f;
+	float FirstCueTime = -1.f;
 	/** The last line said from each category (no saying it twice running), and the radio it's playing on. */
 	TMap<FName, FString> LastLineOf;
 	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> DispatchVoice;
