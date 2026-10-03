@@ -56,6 +56,12 @@ Every incident is built at runtime from a **template** + **modifiers**:
 
 Modifiers (random): *in progress* (witnessable), *armed*, *fleeing*, *repeat offender*, *drunk*, *absurd* (e.g. suspect is dressed as a hot dog). Escalation chains turn ignored incidents into higher-tier ones.
 
+**Twists:** the everyday crimes each play differently, so it's never just "walk up and press E":
+- Pickpocket: hidden in a crowd of look-alikes; picked out by the description (talk, search, arrest).
+- Burglary: the burglar hides in the building, often upstairs; the squad searches room by room.
+- Drunk and Disorderly: a conversation; the friendly answer talks them round, the wrong ones start a fight.
+- Bar fight / street brawl: takes two officers to pull apart (or one handy with their fists).
+
 **Reporting:** incidents are either *called in* (appear on the dispatch board after a delay) or only *witnessable* (a player must see them happen on patrol). Witnessing is rewarded.
 
 ## Player activities

@@ -110,6 +110,29 @@ public:
 	/** How far from the marker they could be by now (every machine): the area to search. */
 	float GetSearchRadius() const;
 
+	// ---- Each kind of crime's twist ----
+	/** A pickpocket working a crowd: pick them out by the description (nobody's talked down just by standing there). */
+	bool IsCrowd() const { return bCrowd; }
+	/** A burglar hiding somewhere in the building (upstairs, maybe): find them first. */
+	bool IsHiddenInside() const { return bHiddenInside; }
+	/** Server: set by the perp as they take up their place. */
+	void SetCrowd(bool bInCrowd);
+	void SetHiddenInside(bool bInHiding);
+	/** Server: the hidden perp's been found at Where: the scene's there now (out of the building's room if upstairs). */
+	void SuspectFound(const FVector& Where, bool bLeaveRoom);
+	/** Server: progress made some other way than standing about (talking a drunk round). */
+	void SetTalkProgress(float Value);
+	/** Server: handled without anyone cuffed (a drunk talked round and sent home): whoever's there gets the credit. */
+	void HandledPeacefully();
+	/** Is this one talked down just by officers being there (else it has a twist of its own)? */
+	bool IsTalkedDownByPresence() const;
+	/** A bar fight or street brawl: it takes two officers to pull them apart (or put them down by hand). */
+	bool IsBrawl() const;
+	/** Officers on scene before talking down even starts. */
+	int32 GetMinCrew() const { return IsBrawl() ? 2 : 1; }
+	/** One line for the officers about the twist (on the scene panel; every machine). */
+	FString GetTwistHint() const;
+
 	/** Everyone else caught up in it (the victim, the other brawlers); tidied away with the incident. */
 	void AddExtra(AActor* Extra) { Extras.Add(Extra); }
 
@@ -210,12 +233,23 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bSearch = false;
 	/** Server world times the search started and the last sighting came in. */
 	UPROPERTY(Replicated) float SearchStartTime = 0.f;
+	/** The twists: a pickpocket in a crowd, a burglar hiding in the building. */
+	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bCrowd = false;
+	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bHiddenInside = false;
+	/** Server: the twist's been explained to the officers who turned up. */
+	bool bTwistAnnounced = false;
+	/** Server: the scene's been left alone a while: escalate, or go cold. */
+	void TickNeglect(float DeltaSeconds);
 	UPROPERTY(Replicated) float LastSightingTime = 0.f;
 
 	/** Server: back off the search (they've been found and are running again, or they're caught). */
 	void EndSearch();
 	/** Server: the victim, the brawlers... (Setup). */
 	void SpawnExtras();
+	/** Server: the crowd a pickpocket hides in (the perp joins it). */
+	void SpawnCrowd();
+	/** Somewhere to stand Distance from Center along Dir (or closer, if there's a wall or a kerb in the way). */
+	FVector CrowdSpot(const FVector& Center, const FVector& Dir, float Distance) const;
 	UPROPERTY(Transient) TArray<TObjectPtr<AActor>> Extras;
 	float NextSightingTime = 0.f;
 

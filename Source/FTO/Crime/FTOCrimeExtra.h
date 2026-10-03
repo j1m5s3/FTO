@@ -12,7 +12,8 @@ enum class EFTOExtraRole : uint8
 {
 	Victim,		// being mugged or pickpocketed: hands up (or oblivious), then flags the police down
 	Brawler,	// trading blows with the perp; scarpers when the police turn up
-	Arguer		// the other half of a domestic
+	Arguer,		// the other half of a domestic
+	Bystander	// one of the crowd a pickpocket's working: idling, on the phone, none the wiser
 };
 
 /**
@@ -66,6 +67,8 @@ protected:
 	FVector Spot = FVector::ZeroVector;
 	float SpotYaw = 0.f;
 	bool bScarpering = false;
+	/** Server: a bystander shuffles about the crowd now and then. */
+	float NextShuffle = 0.f;
 	float NextKnockdown = 0.f;
 	/** Server: when a brawler next swings back at the perp. */
 	float NextSwing = 0.f;

@@ -68,8 +68,14 @@ public:
 	virtual bool IsMovementFrozen() const override;
 	UFTOKnockdownComponent* GetKnockdown() const { return Knockdown; }
 
+	int32 GetLookSeed() const { return LookSeed; }
+
 	/** What we look like, the way a witness would put it ("green top, bald with a beard"). */
 	FString DescribeLook() const;
+	/** The same, for someone dressed from Seed. */
+	FString DescribeLookOf(int32 Seed) const;
+	/** A look seed for someone who could be mistaken for Seed (the same outfit, or the same colour top) but isn't. */
+	int32 LookAlikeSeed(int32 Seed, int32 Salt) const;
 
 	/** Capsule half-height; the path runs this far above the sidewalk. */
 	static constexpr float HalfHeight = 92.f;

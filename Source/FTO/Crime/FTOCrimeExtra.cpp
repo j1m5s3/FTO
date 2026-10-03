@@ -47,13 +47,16 @@ void AFTOCrimeExtra::SetupExtra(AFTOIncident* InIncident, EFTOExtraRole InRole, 
 	TeleportAndHold(Spot);
 	FaceYaw(SpotYaw);
 	NextKnockdown = GetWorld()->GetTimeSeconds() + Rng.FRandRange(KnockdownEvery.X, KnockdownEvery.Y);
+	NextShuffle = GetWorld()->GetTimeSeconds() + Rng.FRandRange(3.f, 10.f);
 }
 
 bool AFTOCrimeExtra::IsCrimeGoingOn() const
 {
 	const AFTOPerp* Perp = Incident ? Incident->GetPerp() : nullptr;
+	// (A brawl goes on till there are enough officers to pull it apart.)
 	return Perp && Incident->IsActive() && !Incident->IsSubdued() && !Incident->IsSearching() && !Incident->IsFootChase() &&
-		Perp->GetArrestState() == EFTOPerpArrest::None && Incident->GetState() != EFTOIncidentState::Responding;
+		Perp->GetArrestState() == EFTOPerpArrest::None &&
+		(Incident->GetState() != EFTOIncidentState::Responding || (Incident->IsBrawl() && Incident->GetOfficersOnScene() < Incident->GetMinCrew()));
 }
 
 EFTOAnimAction AFTOCrimeExtra::GetAnimAction() const
@@ -73,6 +76,12 @@ EFTOAnimAction AFTOCrimeExtra::GetAnimAction() const
 		return bGoingOn ? EFTOAnimAction::FightIdle : EFTOAnimAction::Cower; // (the punches themselves play over the top)
 	case EFTOExtraRole::Arguer:
 		return EFTOAnimAction::Talk;
+	case EFTOExtraRole::Bystander:
+	{
+		// Each to their own: on the phone, bored, or chatting (the pickpocket among them does the same).
+		static const EFTOAnimAction Idles[] = { EFTOAnimAction::Phone, EFTOAnimAction::IdleBored, EFTOAnimAction::Talk, EFTOAnimAction::None };
+		return Idles[uint32(LookSeed) % UE_ARRAY_COUNT(Idles)];
+	}
 	default:
 		// A pickpocket's mark hasn't noticed (nose in the map); a mugging victim has their hands up. Once it's over,
 		// they're waving the police down.
@@ -89,6 +98,18 @@ void AFTOCrimeExtra::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (!HasAuthority() || !Incident)
 	{
+		return;
+	}
+	if (ExtraRole == EFTOExtraRole::Bystander && !bScarpering && !bChatting && !bHandsUp && !(Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed())))
+	{
+		// Milling about: a step or two this way or that every so often.
+		const float Now = GetWorld()->GetTimeSeconds();
+		if (Now >= NextShuffle && GetCurrentSpeed() < 1.f)
+		{
+			NextShuffle = Now + Rng.FRandRange(5.f, 12.f);
+			const FVector2D Off = FMath::RandPointInCircle(60.f);
+			MoveTo(Spot + FVector(Off, 0.f), 110.f);
+		}
 		return;
 	}
 	if (ExtraRole != EFTOExtraRole::Brawler || bScarpering || (Knockdown && Knockdown->IsDown()))
@@ -141,7 +162,7 @@ void AFTOCrimeExtra::OnArrived()
 {
 	if (!bScarpering)
 	{
-		FaceYaw(SpotYaw);
+		FaceYaw(ExtraRole == EFTOExtraRole::Bystander ? SpotYaw + Rng.FRandRange(-60.f, 60.f) : SpotYaw);
 	}
 }
 
@@ -166,6 +187,10 @@ void AFTOCrimeExtra::Resume()
 
 FText AFTOCrimeExtra::GetInteractPrompt(const AFTOCharacter* Officer) const
 {
+	if (ExtraRole == EFTOExtraRole::Bystander)
+	{
+		return Super::GetInteractPrompt(Officer); // the same as anyone in the crowd (the pickpocket included)
+	}
 	return ExtraRole == EFTOExtraRole::Victim ? INVTEXT("Take the victim's statement") : INVTEXT("Talk to them");
 }
 
@@ -173,6 +198,20 @@ FString AFTOCrimeExtra::AnswerWhatTheySaw()
 {
 	// A statement: what happened, what the suspect looks like, which way they went.
 	const AFTOPerp* Perp = Incident ? Incident->GetPerp() : nullptr;
+	if (ExtraRole == EFTOExtraRole::Bystander)
+	{
+		static const TCHAR* Lines[] =
+		{
+			TEXT("\"A pickpocket? Here? I'd better check my pockets.\""),
+			TEXT("\"I've been on the phone the whole time. Didn't see a thing.\""),
+			TEXT("\"Someone did brush past me a minute ago... no idea who.\""),
+		};
+		return Lines[Rng.RandRange(0, UE_ARRAY_COUNT(Lines) - 1)];
+	}
+	if (ExtraRole == EFTOExtraRole::Victim && Perp && Incident->IsCrowd())
+	{
+		return FString::Printf(TEXT("\"My wallet's gone! It was someone in this crowd, I'm sure of it: %s.\""), *Incident->GetInfo().SuspectDescription.ToString());
+	}
 	if (ExtraRole != EFTOExtraRole::Victim)
 	{
 		return ExtraRole == EFTOExtraRole::Brawler ? TEXT("\"They started it! Well, I finished it. Nearly.\"") : TEXT("\"Officer, tell them it's THEIR turn to do the dishes!\"");
@@ -204,6 +243,7 @@ FText AFTOCrimeExtra::GetTalkTitle() const
 	{
 	case EFTOExtraRole::Victim:  return FText::FromString(FString::Printf(TEXT("Victim: %s"), *DescribeLook()));
 	case EFTOExtraRole::Brawler: return FText::FromString(FString::Printf(TEXT("Brawler: %s"), *DescribeLook()));
+	case EFTOExtraRole::Bystander: return Super::GetTalkTitle(); // just another citizen
 	default:                     return FText::FromString(FString::Printf(TEXT("Caller: %s"), *DescribeLook()));
 	}
 }

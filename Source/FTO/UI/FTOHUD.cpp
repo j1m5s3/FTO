@@ -225,7 +225,7 @@ void AFTOHUD::DrawDispatchBoard(const AFTOGameState* GS)
 	float RowsH = FMath::Max(1, Rows) * RowH;
 	for (int32 i = 0; i < Rows; ++i)
 	{
-		RowsH += Calls[i]->IsSearching() ? SearchLineH : 0.f;
+		RowsH += Calls[i]->IsSearching() || Calls[i]->IsCrowd() ? SearchLineH : 0.f;
 	}
 	DrawPanel(X - 8.f * S, Y - 40.f * S, W + 16.f * S, 44.f * S + RowsH);
 	DrawText(FString::Printf(TEXT("DISPATCH  (%d open)"), Calls.Num()), FLinearColor(0.6f, 0.8f, 1.f), X, Y - 32.f * S, TitleFont, S);
@@ -242,22 +242,25 @@ void AFTOHUD::DrawDispatchBoard(const AFTOGameState* GS)
 		const FFTOIncidentInfo Info = Incident->GetInfo();
 		const FLinearColor TierColor = FTOCrime::TierColor(Info.Tier);
 
-		DrawRect(TierColor, X, Y + 4.f * S, 8.f * S, RowH - 12.f * S + (Incident->IsSearching() ? SearchLineH : 0.f));
+		DrawRect(TierColor, X, Y + 4.f * S, 8.f * S, RowH - 12.f * S + (Incident->IsSearching() || Incident->IsCrowd() ? SearchLineH : 0.f));
 
 		const float Distance = Me ? FVector::Dist2D(Me->GetActorLocation(), Incident->GetActorLocation()) / 100.f : 0.f;
 		DrawText(Info.Title.ToString(), FLinearColor::White, X + 18.f * S, Y + 2.f * S, TitleFont, S * 0.9f);
 
 		// A suspect lying low: the board carries what they look like and how long's left to find them.
 		const bool bSearch = Incident->IsSearching();
-		const float ThisRowH = RowH + (bSearch ? SearchLineH : 0.f);
+		const bool bDescribe = bSearch || Incident->IsCrowd();
+		const float ThisRowH = RowH + (bDescribe ? SearchLineH : 0.f);
 		const int32 SearchLeft = FMath::CeilToInt(Incident->GetSearchTimeLeft());
+		const TCHAR* Twist = Incident->IsCrowd() ? TEXT("  |  IN A CROWD") : Incident->IsHiddenInside() ? TEXT("  |  HIDING INSIDE")
+			: Info.TemplateId == TEXT("Drunk") ? TEXT("  |  TALK THEM ROUND") : Incident->IsBrawl() ? TEXT("  |  NEEDS 2") : TEXT("");
 		const FString Detail = bSearch
 			? FString::Printf(TEXT("SUSPECT FLED  |  search %d:%02d left  |  last seen %dm"), SearchLeft / 60, SearchLeft % 60, FMath::RoundToInt(Distance))
-			: FString::Printf(TEXT("%s  |  %d/%d officers  |  %dm%s"),
+			: FString::Printf(TEXT("%s  |  %d/%d officers  |  %dm%s%s"),
 				*FTOCrime::TierName(Info.Tier).ToString(), Incident->GetOfficersOnScene(), Info.OfficersRequired,
-				FMath::RoundToInt(Distance), Incident->WasWitnessed() ? TEXT("  |  SPOTTED") : TEXT(""));
-		DrawText(Detail, bSearch ? FLinearColor(1.f, 0.8f, 0.45f) : FLinearColor(0.8f, 0.8f, 0.8f), X + 18.f * S, Y + 26.f * S, SmallFont, S * 1.1f);
-		if (bSearch)
+				FMath::RoundToInt(Distance), Incident->WasWitnessed() ? TEXT("  |  SPOTTED") : TEXT(""), Twist);
+		DrawText(Detail, bDescribe ? FLinearColor(1.f, 0.8f, 0.45f) : FLinearColor(0.8f, 0.8f, 0.8f), X + 18.f * S, Y + 26.f * S, SmallFont, S * 1.1f);
+		if (bDescribe)
 		{
 			// What they look like, cut to fit the panel (the scene panel and the toasts have it in full).
 			FString Look = Info.SuspectDescription.ToString();
@@ -530,6 +533,11 @@ void AFTOHUD::DrawOnSceneProgress(const AFTOGameState* GS)
 	{
 		Status = TEXT("They're getting away! Sprint (Shift) and tackle (F)");
 		StatusColor = FLinearColor(1.f, 0.6f, 0.2f);
+	}
+	else if (!Nearest->GetTwistHint().IsEmpty())
+	{
+		Status = Nearest->GetTwistHint();
+		StatusColor = FLinearColor(1.f, 0.85f, 0.3f);
 	}
 	else if (Nearest->IsSearching())
 	{

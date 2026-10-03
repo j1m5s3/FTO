@@ -1604,6 +1604,237 @@ void AFTOSmokeTest::BuildSteps()
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});
 
+		// Every crime its twist. A pickpocket hiding in a crowd of look-alikes, picked out by the description.
+		AddStep(TEXT("pickpocket"), 2.f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			TestPerp = StagePerp(TEXT("PettyTheft"), 900.f);
+			if (!Cop || !TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: pickpocket: NO PICKPOCKET."));
+				return;
+			}
+			const AFTOIncident* Incident = TestPerp->GetIncident();
+			int32 Crowd = 0;
+			int32 LookAlikes = 0;
+			int32 SameLook = 0;
+			const FString Wanted = TestPerp->DescribeLook();
+			for (TActorIterator<AFTOCrimeExtra> It(GetWorld()); It; ++It)
+			{
+				if (It->GetRole() == EFTOExtraRole::Bystander && FVector::Dist2D(It->GetActorLocation(), TestPerp->GetActorLocation()) < 900.f)
+				{
+					++Crowd;
+					const FString Look = It->DescribeLook();
+					SameLook += Look == Wanted ? 1 : 0;
+					LookAlikes += Look != Wanted && (Look.Left(Look.Find(TEXT(","))) == Wanted.Left(Wanted.Find(TEXT(","))) || Look.Mid(Look.Find(TEXT(","))) == Wanted.Mid(Wanted.Find(TEXT(",")))) ? 1 : 0;
+				}
+			}
+			// Standing right there talks nobody down.
+			Cop->TeleportTo(Incident->GetActorLocation() + FVector(-200.f, 0.f, 100.f), Cop->GetActorRotation());
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: pickpocket: %s with %d bystanders (%d look alike, %d identical), the pickpocket %s; looking for \"%s\"."),
+				Incident && Incident->IsCrowd() ? TEXT("in a crowd") : TEXT("NOT IN A CROWD"), Crowd, LookAlikes, SameLook,
+				TestPerp->IsHiding() ? TEXT("blending in") : TEXT("NOT HIDING"), *Incident->GetInfo().SuspectDescription.ToString());
+			const FVector At = Incident->GetActorLocation();
+			ViewFrom(At + FVector(-700.f, -500.f, 450.f), At + FVector(0.f, 0.f, 80.f));
+		});
+		AddShot(TEXT("21c_pickpocket_crowd"), 0.3f);
+		AddStep(TEXT("pick out the pickpocket"), 3.4f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop || !TestPerp.IsValid())
+			{
+				return;
+			}
+			const AFTOIncident* Incident = TestPerp->GetIncident();
+			const float Progress = Incident ? Incident->GetProgress() : -1.f;
+			// The wrong one first: a bystander's clean.
+			FString WrongFound = TEXT("(nobody)");
+			for (TActorIterator<AFTOCrimeExtra> It(GetWorld()); It; ++It)
+			{
+				if (It->GetRole() == EFTOExtraRole::Bystander && FVector::Dist2D(It->GetActorLocation(), TestPerp->GetActorLocation()) < 900.f)
+				{
+					Cop->TeleportTo(It->GetActorLocation() + It->GetActorForwardVector() * 140.f + FVector(0.f, 0.f, 6.f), (-It->GetActorForwardVector()).Rotation());
+					It->Interact(Cop);
+					It->TalkChoice(Cop, 2);
+					if (Cop->IsInSyncedAction())
+					{
+						Cop->EndSyncedAction();
+					}
+					WrongFound = It->GetFound().IsEmpty() ? TEXT("clean") : It->GetFound();
+					It->TalkChoice(Cop, 3);
+					break;
+				}
+			}
+			// Then the one who matches: searched, the wallets turn up, and they're arrested.
+			Cop->TeleportTo(TestPerp->GetActorLocation() + TestPerp->GetActorForwardVector() * 140.f + FVector(0.f, 0.f, 6.f), (-TestPerp->GetActorForwardVector()).Rotation());
+			const FString Title = TestPerp->GetTalkTitle().ToString();
+			TestPerp->Interact(Cop);
+			TestPerp->TalkChoice(Cop, 2);
+			if (Cop->IsInSyncedAction())
+			{
+				Cop->EndSyncedAction();
+			}
+			const FString Found = TestPerp->GetFound();
+			TestPerp->TalkChoice(Cop, 2);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: pickpocket: progress standing in the crowd %.2f, a bystander searched (%s), the one matching (\"%s\") had \"%s\": %s."),
+				Progress, *WrongFound, *Title, *Found, TestPerp->GetArrestState() == EFTOPerpArrest::Cuffing ? TEXT("cuffing them") : TEXT("NOT ARRESTED"));
+		});
+		AddStep(TEXT("pickpocket cuffed"), 0.2f, [this]()
+		{
+			int32 Cuffed = 0;
+			for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+			{
+				Cuffed += It->GetCrime().ToString().Contains(TEXT("Pickpocket")) ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the pickpocket %s."), Cuffed > 0 ? TEXT("is cuffed") : TEXT("WAS NOT ARRESTED"));
+		});
+
+		// A burglar hiding somewhere in the building, upstairs if there is one: found, and they give up.
+		AddStep(TEXT("burglar hides"), 0.5f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			TestPerp.Reset();
+			int32 Tries = 0;
+			for (; Tries < 8 && GM; ++Tries)
+			{
+				AFTOIncident* Incident = GM->GetCrimeDirector()->SpawnIncident(TEXT("Burglary"), true);
+				AFTOPerp* Perp = Incident ? Incident->GetPerp() : nullptr;
+				if (Perp && Perp->IsHidingInBuilding() && (Perp->IsHidingUpstairs() || Tries == 7))
+				{
+					TestPerp = Perp;
+					break;
+				}
+				if (Incident)
+				{
+					Incident->Destroy();
+				}
+			}
+			if (!TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: burglar: NO HIDDEN BURGLAR."));
+				return;
+			}
+			TestPerp->SetForcedResponse(EFTOArrestResponse::Comply);
+			const AFTOIncident* Incident = TestPerp->GetIncident();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: burglar: hiding %s, %.0f m from the call and %.0f m up (%d tries); the board says \"%s\"."),
+				TestPerp->IsHidingUpstairs() ? TEXT("upstairs") : TEXT("downstairs"), FVector::Dist2D(TestPerp->GetActorLocation(), Incident->GetActorLocation()) / 100.f,
+				(TestPerp->GetActorLocation().Z - Incident->GetActorLocation().Z) / 100.f, Tries + 1, *Incident->GetTwistHint());
+			const FVector At = TestPerp->GetActorLocation();
+			ViewFrom(ClearSpot(At, At + TestPerp->GetActorForwardVector() * 300.f + FVector(0.f, 0.f, 80.f)), At);
+		});
+		AddShot(TEXT("21d_burglar_hiding"), 0.3f);
+		AddStep(TEXT("search the building"), 0.f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop || !TestPerp.IsValid())
+			{
+				return;
+			}
+			// The officer comes up to the floor and gets a look at them.
+			const FVector At = TestPerp->GetActorLocation();
+			const FVector Spot = ClearSpot(At, At + TestPerp->GetActorForwardVector() * 320.f);
+			Cop->TeleportTo(Spot + FVector(0.f, 0.f, 6.f), (At - Spot).Rotation());
+		});
+		AddWait(TEXT("burglar found"), 4.f, [this]() { return !TestPerp.IsValid() || !TestPerp->IsHidingInBuilding(); });
+		AddStep(TEXT("cuff the burglar"), 3.2f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop || !TestPerp.IsValid())
+			{
+				return;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: burglar: %s (%s)."), TestPerp->IsHidingInBuilding() ? TEXT("NOT FOUND") : TEXT("found"),
+				TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered ? TEXT("they've given up") : TEXT("NOT GIVING UP"));
+			Cop->TeleportTo(TestPerp->GetActorLocation() - TestPerp->GetActorForwardVector() * 120.f + FVector(0.f, 0.f, 6.f), TestPerp->GetActorRotation());
+			TestPerp->Interact(Cop);
+		});
+		AddStep(TEXT("burglar cuffed"), 0.2f, [this]()
+		{
+			int32 Cuffed = 0;
+			for (TActorIterator<AFTOArrestee> It(GetWorld()); It; ++It)
+			{
+				Cuffed += It->GetCrime().ToString().Contains(TEXT("Burglary")) ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: the burglar %s."), Cuffed > 0 ? TEXT("is cuffed") : TEXT("WAS NOT ARRESTED"));
+		});
+
+		// A drunk, talked round: one answer that winds them up, then the friendly ones.
+		AddStep(TEXT("drunk"), 0.5f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			// (Back down to the street first.)
+			if (AFTOCityGenerator* City = GetCity(); Cop && City)
+			{
+				const FVector Corner = City->GetSidewalkCorner(1, 1, 0);
+				Cop->TeleportTo(Corner + FVector(0.f, 0.f, 100.f), Cop->GetActorRotation());
+			}
+			TestPerp = StagePerp(TEXT("Drunk"), 220.f);
+			if (!Cop || !TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: drunk: NO DRUNK."));
+				return;
+			}
+			TestPerp->Interact(Cop);
+			TArray<FText> Options;
+			TestPerp->GetTalkOptions(Cop, Options);
+			const FString Title = TestPerp->GetTalkTitle().ToString();
+			const int32 Wrong = (TestPerp->GetDrunkRightAnswer() + 1) % 3;
+			TestPerp->TalkChoice(Cop, Wrong);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: drunk: %s (\"%s\", %d options); a wrong answer: temper %d."), Cop->GetTalkingTo() == TestPerp.Get() ? TEXT("talking") : TEXT("NO CONVERSATION"),
+				*Title, Options.Num(), TestPerp->GetDrunkTemper());
+			const FVector At = TestPerp->GetActorLocation();
+			ViewFrom(At + TestPerp->GetActorRightVector() * 380.f + FVector(0.f, 0.f, 60.f), At);
+		});
+		AddShot(TEXT("21f_drunk"), 0.3f);
+		AddStep(TEXT("talk them round"), 1.f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (!Cop || !TestPerp.IsValid())
+			{
+				return;
+			}
+			AFTOIncident* Incident = TestPerp->GetIncident();
+			for (int32 i = 0; i < AFTOPerp::DrunkStages && TestPerp->GetDrunkStage() < AFTOPerp::DrunkStages; ++i)
+			{
+				TestPerp->TalkChoice(Cop, TestPerp->GetDrunkRightAnswer());
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: drunk: talked round (%d of %d): %s."), TestPerp->GetDrunkStage(), AFTOPerp::DrunkStages,
+				Incident && Incident->GetState() == EFTOIncidentState::Resolved ? TEXT("handled, off home") : TEXT("NOT HANDLED"));
+		});
+
+		// A brawl: one officer can't pull them apart (it takes two, or fists).
+		AddStep(TEXT("brawl needs two"), 2.5f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			TestPerp = StagePerp(TEXT("BarFight"), 300.f);
+			if (!Cop || !TestPerp.IsValid())
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: brawl needs two: NO BRAWL."));
+				return;
+			}
+		});
+		AddStep(TEXT("brawl with one officer"), 0.f, [this]()
+		{
+			if (!TestPerp.IsValid())
+			{
+				return;
+			}
+			const AFTOIncident* Incident = TestPerp->GetIncident();
+			int32 Brawling = 0;
+			for (TActorIterator<AFTOCrimeExtra> It(GetWorld()); It; ++It)
+			{
+				Brawling += It->GetRole() == EFTOExtraRole::Brawler && It->GetAnimAction() == EFTOAnimAction::FightIdle ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: brawl needs two: one officer on scene (%d), progress %.2f, %s (%d brawler(s) still at it)."), Incident->GetOfficersOnScene(), Incident->GetProgress(),
+				Incident->GetProgress() <= 0.f && Brawling > 0 ? TEXT("they keep fighting") : TEXT("ONE OFFICER BROKE IT UP"), Brawling);
+			if (AFTOIncident* Live = TestPerp->GetIncident())
+			{
+				Live->Destroy();
+			}
+			TestPerp.Reset();
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
 		// A word with a passer-by: the conversation panel.
 		AddStep(TEXT("stop a citizen"), 1.2f, [this]()
 		{
@@ -2076,7 +2307,21 @@ void AFTOSmokeTest::BuildSteps()
 		});
 		// (Aimed through the camera once it's caught up with the officer, and fired a moment later.)
 		AddStep(TEXT("window: aim"), 0.12f, [this]() { AimAt(TestTarget); });
-		AddStep(TEXT("window: aim again"), 0.12f, [this]() { AimAt(TestTarget); }); // (the camera swings with the aim: settle it)
+		AddStep(TEXT("window: aim again"), 0.12f, [this]()
+		{
+			// (Nobody strolling across the line of fire.)
+			if (const APawn* Cop = GetPawn())
+			{
+				for (TActorIterator<AFTOPedestrian> It(GetWorld()); It; ++It)
+				{
+					if (FMath::PointDistToSegment(It->GetActorLocation(), Cop->GetActorLocation(), TestTarget) < 250.f)
+					{
+						It->Destroy();
+					}
+				}
+			}
+			AimAt(TestTarget); // (the camera swings with the aim: settle it)
+		});
 		AddStep(TEXT("window: fire"), 0.08f, [this]()
 		{
 			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
@@ -3178,6 +3423,12 @@ void AFTOSmokeTest::BuildSteps()
 				}
 			});
 			AddShot(TEXT("11g_host_hears_backup"), 1.f);
+			// Stay up till the client's done its checks (it leaves when it's finished).
+			AddWait(TEXT("client finishes"), 30.f, [this]()
+			{
+				const AGameStateBase* GS = GetWorld()->GetGameState();
+				return !GS || GS->PlayerArray.Num() < 2;
+			});
 		}
 		else
 		{
@@ -3226,7 +3477,7 @@ void AFTOSmokeTest::BuildSteps()
 			AddShot(TEXT("11c_out"), 0.5f);
 			// The host puts a shoplifter beside us: turn to them and press E, the way a player would. The server steps
 			// us in behind them for the cuffs (the move replicates back here).
-			AddWait(TEXT("wait for a suspect"), 20.f, [this]()
+			AddWait(TEXT("wait for a suspect"), 150.f, [this]()
 			{
 				const AFTOPerp* Perp = FindNearestPerp(TEXT("Shoplifting"));
 				return Perp && GetPawn() && FVector::Dist2D(Perp->GetActorLocation(), GetPawn()->GetActorLocation()) < 500.f;

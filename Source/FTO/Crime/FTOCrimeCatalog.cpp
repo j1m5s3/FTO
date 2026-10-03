@@ -92,6 +92,7 @@ void UFTOCrimeCatalog::PopulateDefaults()
 	Add(Templates, "BarFight", TEXT("Bar Fight"), E::Minor)
 		.Flavor({ TEXT("Dispute over trivia night answers."), TEXT("Someone said pineapple belongs on pizza.") })
 		.Chaos(0.07f, 5.f, 4.f).Work(5.f, 2).Report(0.9f, 1.f, 4.f).Escalate(180.f, "Riot").Spawn(0.9f).Getaway(0.3f);
+	// (Brawls take two officers to pull apart: AFTOIncident::GetMinCrew.)
 
 	Add(Templates, "Vandalism", TEXT("Vandalism"), E::Minor)
 		.Flavor({ TEXT("Someone is kicking over every bin on the street."), TEXT("Suspect is 'redecorating' the street furniture.") })
@@ -107,7 +108,12 @@ void UFTOCrimeCatalog::PopulateDefaults()
 
 	Add(Templates, "PettyTheft", TEXT("Pickpocket"), E::Minor)
 		.Flavor({ TEXT("Suspect is going through a tourist's backpack. The tourist hasn't noticed."), TEXT("Someone's lifting wallets at the bus stop.") })
-		.Chaos(0.05f, 4.f, 3.f).Work(4.f, 1).Report(0.7f, 2.f, 6.f).Escalate(180.f).Spawn(0.9f).Getaway(0.7f, 60.f);
+		.Chaos(0.05f, 4.f, 3.f).Work(4.f, 1).Report(0.7f, 2.f, 6.f).Escalate(180.f).Spawn(0.9f).Getaway(0.f);
+
+	// Talked round in conversation (the friendly answers), or it ends in a scrap.
+	Add(Templates, "Drunk", TEXT("Drunk and Disorderly"), E::Minor)
+		.Flavor({ TEXT("Man serenading a bin. The bin is not interested."), TEXT("Someone's challenging the traffic lights to a fight."), TEXT("Wedding guest has lost the wedding.") })
+		.Chaos(0.05f, 4.f, 3.f).Work(4.f, 1).Report(0.8f, 2.f, 6.f).Escalate(180.f, "BarFight").Spawn(1.f);
 
 	// ---- Major: needs a team -----------------------------------------------------------
 	Add(Templates, "ArmedRobbery", TEXT("Armed Robbery"), E::Major)
@@ -124,11 +130,11 @@ void UFTOCrimeCatalog::PopulateDefaults()
 
 	Add(Templates, "Riot", TEXT("Street Brawl"), E::Major)
 		.Flavor({ TEXT("Two rival barbershop quartets. Harmonies have turned violent."), TEXT("A disagreement about the best sandwich has become a street fight.") })
-		.Chaos(0.2f, 12.f, 10.f).Work(8.f, 3).Report(1.f, 0.f, 1.f).Escalate(180.f).Spawn(0.3f, 30.f).Getaway(0.3f);
+		.Chaos(0.2f, 12.f, 10.f).Work(8.f, 2).Report(1.f, 0.f, 1.f).Escalate(180.f).Spawn(0.3f, 30.f).Getaway(0.3f);
 
 	Add(Templates, "Burglary", TEXT("Burglary"), E::Major)
 		.Flavor({ TEXT("Burglar is only stealing left shoes."), TEXT("Neighbour reports someone 'tiptoeing very loudly'.") })
-		.Chaos(0.12f, 8.f, 6.f).Work(6.f, 2).Report(0.6f, 5.f, 15.f).Escalate(210.f).Spawn(0.6f, 10.f).Crook().Getaway(0.5f, 100.f);
+		.Chaos(0.12f, 8.f, 6.f).Work(6.f, 2).Report(0.6f, 5.f, 15.f).Escalate(210.f).Spawn(0.6f, 10.f).Crook().Getaway(0.5f, 150.f);
 
 	// ---- Critical: whole-team set pieces -----------------------------------------------
 	Add(Templates, "BankHeist", TEXT("Bank Heist"), E::Critical)

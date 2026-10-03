@@ -39,7 +39,7 @@ Each item is one PR, reviewed before it's merged.
 Seven upgrades from the "what would make it more fun" review, one reviewed PR each, then play testing
 (scores in [Playtests](Playtests.md)).
 - [x] **Pacing**: 10-minute shifts (5 of overtime), crimes every 12 s down to 4.5 s, and most placed 25-60 m from an officer.
-- [ ] **A twist per crime**: pickpockets in a crowd picked out by description, burglars hiding upstairs, drunks
+- [x] **A twist per crime**: pickpockets in a crowd picked out by description, burglars hiding upstairs, drunks
   talked down, brawls that need two officers.
 - [ ] **Shift shape**: a set piece mid-shift (bank heist and getaway, bomb defusal, city-wide pursuit, in rotation)
   and a rush hour in the last two minutes.

@@ -149,12 +149,47 @@ void AFTOPedestrian::ApplyLook()
 
 FString AFTOPedestrian::DescribeLook() const
 {
+	return DescribeLookOf(LookSeed);
+}
+
+FString AFTOPedestrian::DescribeLookOf(int32 Seed) const
+{
 	// The same rolls as ApplyLook.
-	FRandomStream LookRng(LookSeed);
+	FRandomStream LookRng(Seed);
 	const int32 Variant = LookRng.RandRange(0, FMath::Max(0, Looks.Num() - 1));
 	const uint8 Hue = uint8(LookRng.RandRange(0, 255));
 	const TCHAR* Notes = Looks.Num() == UE_ARRAY_COUNT(LookNotes) ? LookNotes[Variant] : TEXT("");
 	return *Notes ? FString::Printf(TEXT("%s top, %s"), HueWord(Hue), Notes) : FString::Printf(TEXT("%s top"), HueWord(Hue));
+}
+
+int32 AFTOPedestrian::LookAlikeSeed(int32 Seed, int32 Salt) const
+{
+	auto Parts = [this](int32 S, int32& OutVariant, FString& OutHue)
+	{
+		FRandomStream LookRng(S);
+		OutVariant = LookRng.RandRange(0, FMath::Max(0, Looks.Num() - 1));
+		OutHue = HueWord(uint8(LookRng.RandRange(0, 255)));
+	};
+	int32 Variant = 0;
+	FString Hue;
+	Parts(Seed, Variant, Hue);
+	int32 Fallback = Seed + 7919 * (Salt + 1);
+	for (int32 Try = 0; Try < 400; ++Try)
+	{
+		const int32 Candidate = int32(HashCombine(uint32(Seed), uint32(Salt * 1009 + Try)));
+		int32 V = 0;
+		FString H;
+		Parts(Candidate, V, H);
+		if ((V == Variant) != (H == Hue))
+		{
+			return Candidate; // one thing in common, one thing not
+		}
+		if (V != Variant || H != Hue)
+		{
+			Fallback = Candidate;
+		}
+	}
+	return Fallback;
 }
 
 void AFTOPedestrian::PaintBody(const FLinearColor& Color)
