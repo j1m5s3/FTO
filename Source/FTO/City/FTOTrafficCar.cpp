@@ -132,6 +132,7 @@ void AFTOTrafficCar::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(AFTOTrafficCar, CarState);
 	DOREPLIFETIME(AFTOTrafficCar, Violation);
 	DOREPLIFETIME(AFTOTrafficCar, bDriverOut);
+	DOREPLIFETIME(AFTOTrafficCar, FlatTyres);
 }
 
 void AFTOTrafficCar::BeginPlay()
@@ -646,6 +647,11 @@ void AFTOTrafficCar::OnRep_Tyres()
 void AFTOTrafficCar::RoundHit(const FVector& At, AController* By)
 {
 	check(HasAuthority());
+	// Only a getaway's tyres count (no letting a car's tyres down at a traffic stop for later).
+	if (CarState != EFTOCarState::Fleeing || !ChaseIncident)
+	{
+		return;
+	}
 	for (int32 i = 0; i < Wheels.Num() && i < 8; ++i)
 	{
 		if ((FlatTyres & (1 << i)) || FVector::DistSquared(Wheels[i]->GetComponentLocation(), At) > FMath::Square(75.f))
@@ -659,10 +665,6 @@ void AFTOTrafficCar::RoundHit(const FVector& At, AController* By)
 			GS->MulticastPlaySound(AFTOGameState::Sounds().Ricochet, At, 1.f);
 		}
 		AFTOPlayerController* Shooter = Cast<AFTOPlayerController>(By);
-		if (CarState != EFTOCarState::Fleeing || !ChaseIncident)
-		{
-			break;
-		}
 		if (GetFlatTyres() < 2)
 		{
 			if (Shooter)
@@ -671,15 +673,14 @@ void AFTOTrafficCar::RoundHit(const FVector& At, AController* By)
 			}
 			break;
 		}
-		// Two flats: the getaway's over. Whoever shot them out, and whoever was driving them, did it together.
+		// Two flats: the getaway's over. Shot out from the passenger seat with a partner at the wheel, that's teamwork
+		// for both of them (on foot, or alone, it's just a good shot: the bust's the reward).
 		const AFTOCharacter* Gunner = Shooter ? Cast<AFTOCharacter>(Shooter->GetPawn()) : nullptr;
-		if (Gunner)
+		const AFTOCruiser* Cruiser = Gunner && Gunner->IsRidingShotgun() ? Cast<AFTOCruiser>(Gunner->GetCurrentVehicle()) : nullptr;
+		if (Cruiser && Cruiser->GetController() && Cruiser->GetController()->IsPlayerController())
 		{
 			FTOScoring::Award(Gunner, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 250.f));
-			if (const AFTOCruiser* Cruiser = Gunner->IsRidingShotgun() ? Cast<AFTOCruiser>(Gunner->GetCurrentVehicle()) : nullptr)
-			{
-				FTOScoring::Award(Cruiser, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 300.f));
-			}
+			FTOScoring::Award(Cruiser, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 300.f));
 		}
 		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 		{

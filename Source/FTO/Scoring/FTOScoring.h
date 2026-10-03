@@ -64,8 +64,13 @@ namespace FTOScoring
 	FTO_API bool IsPenalty(EFTOScore Event);
 	/** The squad's streak: every officer's good work in quick succession builds it, any penalty breaks it. */
 	constexpr float SquadComboWindow = 20.f;
-	/** x1.05 per step after the first, to x1.5; officers taking turns ("tag team") add another 0.15. */
-	FTO_API float SquadMultiplier(int32 Streak, bool bTagTeam);
+	/** Up to x1.5: 0.1 per step for one officer, less the bigger the squad (more of them make more steps), and another
+	 *  0.1 when officers take turns ("tag team"). */
+	FTO_API float SquadMultiplier(int32 Streak, bool bTagTeam, int32 Officers = 1);
+	/** Events that move the squad's streak on (the bonuses that ride with an arrest don't). */
+	FTO_API bool BuildsSquadCombo(EFTOScore Event);
+	/** Steps a penalty knocks off the squad's streak. */
+	constexpr int32 SquadPenaltySteps = 3;
 
 	/** 1, 1.5, 2, 2.5, 3. */
 	FTO_API float ComboMultiplier(int32 Combo);

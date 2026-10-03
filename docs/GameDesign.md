@@ -48,7 +48,7 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
 - Jobs built for two: shoot out a getaway's tyres from the passenger seat while your partner drives; guard a burgled
   building's door while your partner searches it. Both score TEAMWORK!.
 - The squad combo: the whole squad's good work in quick succession builds one streak that multiplies everyone's
-  points (to x1.5), more when officers take turns; any penalty breaks it.
+  points (to x1.5, the steps smaller in a bigger squad), more when officers take turns; a penalty knocks it back.
 
 ## Pacing
 - A new crime every 12 s or so in a calm city, down to every 4.5 s as chaos climbs (solo slower: x1.5; two officers

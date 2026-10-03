@@ -2187,7 +2187,7 @@ void AFTOSmokeTest::BuildSteps()
 			const int32 Streak = GS->GetSquadCombo();
 			const float Multiplier = GS->GetSquadMultiplier();
 			FTOScoring::Award(Cop, EFTOScore::Collateral, Cop->GetActorLocation());
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: squad combo: %d in a row, x%.1f (a ticket worth %d, then %d); after a penalty: %d."), Streak, Multiplier, First, Third, GS->GetSquadCombo());
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: squad combo: %d in a row, x%.2f (a ticket worth %d, then %d); after a penalty: %d."), Streak, Multiplier, First, Third, GS->GetSquadCombo());
 		});
 
 		// A word with a passer-by: the conversation panel.

@@ -115,8 +115,8 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 - **Teamwork**: some jobs want two. One drives while the other shoots out a getaway's tyres; one guards a burgled
   building's front door while the other searches it (a burglar who bolts or tries to slip out runs straight into the
   guard). Both score TEAMWORK! for everyone in on it. The whole squad shares a streak too: every bit of good work
-  within 20 s of the last adds to it, x1.05 a step up to x1.5 on everyone's points (another 0.15 if officers are taking
-  turns: TAG TEAM!), shown under the chaos meter; any penalty breaks it.
+  within 20 s of the last adds to it, up to x1.5 on everyone's points (0.1 a step solo, less in a bigger squad; another 0.1 if officers are taking
+  turns: TAG TEAM!), shown under the chaos meter; a penalty knocks it back three steps.
 - **Radio** (anywhere, on foot or in a car): hold V (d-pad down) to talk to the squad; teammates hear you through a
   walkie-talkie filter with a squelch at each end, and see who's on air. Hold T (d-pad up) for the callout wheel:
   point with the mouse / right stick and let go, or press 1-4: *Need backup!*, *Suspect fleeing!* (pings the nearest

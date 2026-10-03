@@ -177,9 +177,8 @@ void AFTOHUD::DrawChaosMeter(const AFTOGameState* GS)
 	const int32 Streak = GS->GetSquadCombo();
 	if (Streak >= 2)
 	{
-		const FString Line = FString::Printf(TEXT("SQUAD COMBO x%s  (%d in a row)%s"), *FString::SanitizeFloat(FMath::RoundToFloat(GS->GetSquadMultiplier() * 10.f) / 10.f),
-			Streak, GS->IsTagTeam() ? TEXT("  TAG TEAM!") : TEXT(""));
-		const float LY = Y + H + 30.f * S;
+		const FString Line = FString::Printf(TEXT("SQUAD COMBO x%.2f  (%d in a row)%s"), GS->GetSquadMultiplier(), Streak, GS->IsTagTeam() ? TEXT("  TAG TEAM!") : TEXT(""));
+		const float LY = Y + H + 44.f * S;
 		DrawPanel(X + W * 0.2f, LY - 4.f * S, W * 0.6f, 30.f * S, FLinearColor(0.05f, 0.1f, 0.3f, 0.75f));
 		DrawCenteredText(Line, X + W * 0.5f, LY, FLinearColor(0.5f, 0.9f, 1.f), GEngine->GetSmallFont(), S * 1.2f);
 		DrawRect(FLinearColor(0.4f, 0.85f, 1.f), X + W * 0.2f, LY + 22.f * S, W * 0.6f * GS->GetSquadComboFuse(), 3.f * S);
@@ -235,7 +234,7 @@ void AFTOHUD::DrawShiftBanner(const AFTOGameState* GS)
 	const float Pulse = 1.f + 0.06f * FMath::Sin(Now * 10.f);
 	float W = 0.f, H = 0.f;
 	GetTextSize(Line, W, H, Font, S * 1.3f * Pulse);
-	const float Y = 90.f * S;
+	const float Y = 150.f * S;
 	DrawPanel(Canvas->ClipX * 0.5f - W * 0.5f - 24.f * S, Y - 10.f * S, W + 48.f * S, H + 20.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
 	DrawCenteredText(Line, Canvas->ClipX * 0.5f, Y, Color, Font, S * 1.3f * Pulse);
 }

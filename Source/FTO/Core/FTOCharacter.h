@@ -398,8 +398,9 @@ protected:
 	/** The slot in hand, or INDEX_NONE with everything put away. */
 	UPROPERTY(ReplicatedUsing=OnRep_Loadout)
 	int32 DrawnSlot = INDEX_NONE;
-	/** Shooting from the passenger seat, rounds start this far out along the aim (clear of the car). */
-	static constexpr float SeatMuzzleReach = 230.f;
+	/** Shooting from the passenger seat, rounds start this far out along the aim from our head. */
+	static constexpr float SeatMuzzleReach = 30.f;
+	FVector SeatMuzzle(const FVector& Aim) const;
 
 	/** The last slot drawn (what the right mouse button brings back out). */
 	int32 LastDrawnSlot = 0;

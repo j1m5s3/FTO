@@ -56,13 +56,19 @@ bool FTOScoring::IsPenalty(EFTOScore Event)
 	return Event == EFTOScore::Collateral || Event == EFTOScore::FriendlyFire || Event == EFTOScore::WrongfulArrest;
 }
 
-float FTOScoring::SquadMultiplier(int32 Streak, bool bTagTeam)
+float FTOScoring::SquadMultiplier(int32 Streak, bool bTagTeam, int32 Officers)
 {
 	if (Streak < 2)
 	{
 		return 1.f;
 	}
-	return FMath::Min(1.5f, 1.f + 0.05f * (Streak - 1) + (bTagTeam ? 0.15f : 0.f));
+	return FMath::Min(1.5f, 1.f + 0.1f / FMath::Max(1, Officers) * (Streak - 1) + (bTagTeam ? 0.1f : 0.f));
+}
+
+bool FTOScoring::BuildsSquadCombo(EFTOScore Event)
+{
+	return Event == EFTOScore::Arrest || Event == EFTOScore::Bust || Event == EFTOScore::CallHandled || Event == EFTOScore::Ticket ||
+		Event == EFTOScore::Revive || Event == EFTOScore::Teamwork;
 }
 
 float FTOScoring::ComboMultiplier(int32 Combo)

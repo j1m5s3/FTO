@@ -809,7 +809,7 @@ void AFTOPerp::SlipOut()
 	GoIntoHiding(false);
 }
 
-AFTOCharacter* AFTOPerp::DoorGuard() const
+AFTOCharacter* AFTOPerp::DoorGuard(const AActor* Except) const
 {
 	const AFTOCityGenerator* TheCity = City ? City.Get() : nullptr;
 	if (!TheCity)
@@ -828,7 +828,7 @@ AFTOCharacter* AFTOPerp::DoorGuard() const
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		AFTOCharacter* Cop = It->IsValid() ? Cast<AFTOCharacter>((*It)->GetPawn()) : nullptr;
-		if (Cop && Cop->IsReadyForAction() && FVector::Dist2D(Cop->GetActorLocation(), Building->DoorOutside) < 400.f &&
+		if (Cop && Cop != Except && Cop->IsReadyForAction() && FVector::Dist2D(Cop->GetActorLocation(), Building->DoorOutside) < 400.f &&
 			FMath::Abs(Cop->GetActorLocation().Z - HalfHeight - Building->DoorOutside.Z) < 150.f)
 		{
 			return Cop;
@@ -851,8 +851,15 @@ void AFTOPerp::CaughtAtTheDoor(AFTOCharacter* Guard)
 	{
 		Incident->SuspectFound(GetActorLocation() - FVector(0.f, 0.f, HalfHeight), false);
 	}
-	FTOScoring::Award(Guard, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 200.f));
-	ToastOfficersNear(INVTEXT("Caught at the door! They ran straight into the officer guarding it. Teamwork!"), GoodNews, 4000.f);
+	// Teamwork, with someone else on the shift to have been searching (alone, it's just good policing).
+	const AGameStateBase* GS = GetWorld()->GetGameState();
+	const bool bTeam = GS && GS->PlayerArray.Num() >= 2;
+	if (bTeam)
+	{
+		FTOScoring::Award(Guard, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 200.f));
+	}
+	ToastOfficersNear(bTeam ? INVTEXT("Caught at the door! They ran straight into the officer guarding it. Teamwork!")
+		: INVTEXT("Caught at the door! They ran straight into you."), GoodNews, 4000.f);
 	GiveUp(Guard->GetController());
 }
 
@@ -1815,10 +1822,13 @@ void AFTOPerp::EndStruggle(bool bOfficersWon)
 
 void AFTOPerp::BeginFleeing(const AActor* From)
 {
-	// A burglar bolting for the front door runs into whoever's guarding it.
+	// A burglar bolting for the front door (still in the building) runs into whoever's guarding it.
 	if (Incident && Incident->GetInfo().TemplateId == TEXT("Burglary") && Incident->GetBuildingIndex() != INDEX_NONE)
 	{
-		if (AFTOCharacter* Guard = DoorGuard(); Guard && Guard != From)
+		const AFTOCityGenerator* TheCity = FindCity();
+		const FFTOBuilding* Building = TheCity ? TheCity->GetBuilding(Incident->GetBuildingIndex()) : nullptr;
+		AFTOCharacter* Guard = Building && Building->Contains(GetActorLocation() - FVector(0.f, 0.f, HalfHeight), 30.f) ? DoorGuard(From) : nullptr;
+		if (Guard)
 		{
 			CaughtAtTheDoor(Guard);
 			return;

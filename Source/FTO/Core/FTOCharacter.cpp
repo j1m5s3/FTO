@@ -1336,7 +1336,7 @@ void AFTOCharacter::CycleWeapon(int32 Step)
 void AFTOCharacter::FirePressed()
 {
 	// Riding shotgun, the window's open: rounds go out of it (nothing up yet: the last weapon comes out first).
-	const bool bFromSeat = IsRidingShotgun();
+	const bool bFromSeat = IsRidingShotgun() && !(Knockdown && Knockdown->IsDazed());
 	if (!IsReadyForAction() && !bFromSeat)
 	{
 		return;
@@ -1370,7 +1370,7 @@ void AFTOCharacter::FirePressed()
 	UpdateWeaponMesh();
 	const FVector Target = GetCrosshairTarget();
 	const FVector Eye = GetPawnViewLocation();
-	const FVector Muzzle = bFromSeat ? Eye + (Target - Eye).GetSafeNormal() * SeatMuzzleReach : WeaponMesh->GetSocketLocation(TEXT("Muzzle"));
+	const FVector Muzzle = bFromSeat ? SeatMuzzle((Target - Eye).GetSafeNormal()) : WeaponMesh->GetSocketLocation(TEXT("Muzzle"));
 	const FVector Aim = (Target - Muzzle).GetSafeNormal();
 	const int32 Seed = FMath::Rand();
 	if (!HasAuthority())
@@ -1383,6 +1383,12 @@ void AFTOCharacter::FirePressed()
 		--Clips[DrawnSlot];
 	}
 	ServerFire(Muzzle, Aim, Seed);
+}
+
+FVector AFTOCharacter::SeatMuzzle(const FVector& Aim) const
+{
+	// Just past our head along the aim (the rounds ignore our own car, so out of the window it goes).
+	return GetPawnViewLocation() + Aim.GetSafeNormal() * SeatMuzzleReach;
 }
 
 void AFTOCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed)
@@ -1400,9 +1406,13 @@ void AFTOCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVecto
 		return;
 	}
 	NextServerShotTime = Now + Spec.Interval * 0.8f;
-	// The shot has to leave from somewhere near our hands.
+	// The shot has to leave from somewhere near our hands (from a car, the window: worked out here, not taken on trust).
 	FVector Muzzle = Origin;
-	if (FVector::DistSquared(Muzzle, GetActorLocation()) > FMath::Square(IsRidingShotgun() ? SeatMuzzleReach + 150.f : 250.f))
+	if (IsRidingShotgun())
+	{
+		Muzzle = SeatMuzzle(FVector(Aim));
+	}
+	else if (FVector::DistSquared(Muzzle, GetActorLocation()) > FMath::Square(250.f))
 	{
 		Muzzle = GetPawnViewLocation();
 	}

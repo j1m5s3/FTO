@@ -226,9 +226,12 @@ float AFTOGameState::BumpSquadCombo(const APlayerState* Officer)
 void AFTOGameState::BreakSquadCombo()
 {
 	check(HasAuthority());
-	SquadCombo = 0;
-	bTagTeam = false;
-	SquadComboTime = -1000.f;
+	SquadCombo = FMath::Max(0, SquadCombo - FTOScoring::SquadPenaltySteps);
+	if (SquadCombo == 0)
+	{
+		bTagTeam = false;
+		SquadComboTime = -1000.f;
+	}
 }
 
 int32 AFTOGameState::GetSquadCombo() const
@@ -238,7 +241,7 @@ int32 AFTOGameState::GetSquadCombo() const
 
 float AFTOGameState::GetSquadMultiplier() const
 {
-	return FTOScoring::SquadMultiplier(GetSquadCombo(), bTagTeam);
+	return FTOScoring::SquadMultiplier(GetSquadCombo(), bTagTeam, FMath::Max(1, PlayerArray.Num()));
 }
 
 float AFTOGameState::GetSquadComboFuse() const

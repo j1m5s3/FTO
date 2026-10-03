@@ -205,7 +205,7 @@ protected:
 	/** Server: the officer said one of the answers on the panel (3: "You're under arrest"). */
 	bool DrunkAnswer(AFTOCharacter* Officer, int32 Index);
 	/** An officer on foot standing guard at our building's front door, if there is one (a burglar). */
-	AFTOCharacter* DoorGuard() const;
+	AFTOCharacter* DoorGuard(const AActor* Except = nullptr) const;
 	/** Server: heading out of the door, straight into Guard: caught, and that's teamwork. */
 	void CaughtAtTheDoor(AFTOCharacter* Guard);
 	/** Server: the burglar's done (or nobody found them): out of the door with the goods, unless someone's guarding it. */

@@ -155,7 +155,7 @@ public:
 	// ---- The squad's streak ----
 	/** Server: good work by Officer: the squad's streak goes on (or starts again). Returns the multiplier now. */
 	float BumpSquadCombo(const APlayerState* Officer);
-	/** Server: a penalty: the streak's over. */
+	/** Server: a penalty: the streak's knocked back a few steps. */
 	void BreakSquadCombo();
 	/** The streak, if it's still going (0 if it's lapsed), and its multiplier (every machine). */
 	int32 GetSquadCombo() const;

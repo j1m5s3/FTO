@@ -201,7 +201,7 @@ int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector
 	}
 
 	int32 Points = BasePoints;
-	AFTOGameState* Squad = GetWorld()->GetGameState<AFTOGameState>();
+	AFTOGameState* Squad = const_cast<AFTOGameState*>(GS);
 	if (FTOScoring::IsPenalty(Event))
 	{
 		Combo = 1; // that's the streak over
@@ -219,7 +219,7 @@ int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector
 			ComboTime = Now;
 		}
 		// The squad's streak rides on top: everyone's good work keeps it going.
-		const float SquadMultiplier = bFollowUp ? Squad->GetSquadMultiplier() : Squad->BumpSquadCombo(this);
+		const float SquadMultiplier = FTOScoring::BuildsSquadCombo(Event) ? Squad->BumpSquadCombo(this) : Squad->GetSquadMultiplier();
 		Points = FMath::RoundToInt(BasePoints * FTOScoring::ComboMultiplier(GetCombo()) * SquadMultiplier);
 		Stats.BestCombo = FMath::Max<int32>(Stats.BestCombo, GetCombo());
 	}
