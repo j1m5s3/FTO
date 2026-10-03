@@ -594,21 +594,22 @@ void AFTOTrafficCar::FinishTicket()
 	MoveTo(PendingTarget, CruiseSpeed);
 }
 
-void AFTOTrafficCar::MakeGetaway()
+void AFTOTrafficCar::MakeGetaway(FName ChaseCrime, float Seconds, float Toughness)
 {
 	check(HasAuthority());
 	// Floor it! The chase incident rides along with us.
 	CarState = EFTOCarState::Fleeing;
 	// A crook's getaway car now: running it off the road is fair game, not property damage.
 	Damage->bCitizensCar = false;
-	FleeUntil = GetWorld()->GetTimeSeconds() + 120.f;
+	FleeUntil = GetWorld()->GetTimeSeconds() + Seconds;
+	Damage->Toughness = Toughness;
 	Violation = EFTOCarViolation::None;
 	bWaitingForClearRoad = false;
 	RefreshIndicator();
 
 	if (AFTOGameMode* GM = GetWorld()->GetAuthGameMode<AFTOGameMode>())
 	{
-		ChaseIncident = GM->GetCrimeDirector()->SpawnIncidentAt(TEXT("CarChase"), GetActorLocation(), true);
+		ChaseIncident = GM->GetCrimeDirector()->SpawnIncidentAt(ChaseCrime.IsNone() ? FName(TEXT("CarChase")) : ChaseCrime, GetActorLocation(), true);
 		if (ChaseIncident)
 		{
 			ChaseIncident->FollowActor(this);

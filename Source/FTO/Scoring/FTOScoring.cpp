@@ -141,7 +141,8 @@ void FTOScoring::IncidentResolved(const AFTOIncident* Incident, const AActor* Ar
 	{
 		return;
 	}
-	const EFTOScore Credit = Info.TemplateId == TEXT("CarChase") ? EFTOScore::Bust : EFTOScore::Arrest;
+	const bool bChase = Info.TemplateId == TEXT("CarChase") || Info.TemplateId == TEXT("HeistGetaway") || Info.TemplateId == TEXT("Pursuit");
+	const EFTOScore Credit = bChase ? EFTOScore::Bust : EFTOScore::Arrest;
 	Arresting->AddScore(Credit, BasePoints(Credit, Info.Tier), Where);
 	if (Incident->WasWitnessed())
 	{

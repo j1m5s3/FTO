@@ -37,6 +37,13 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
 - Passive decay when the city is calm; the director spawns crimes faster as chaos rises (feedback loop players must break).
 - 100 = shift failed.
 
+## The shape of a shift
+- **Set piece**: 45% of the way into the shift, one whole-squad event, in turn shift by shift: a bank heist that
+  turns into a getaway chase if it isn't stopped within 75 s; a bomb to defuse by cutting the right three wires from
+  riddles on its label (150 s fuse, wrong wires cost 25 s; it goes off if the clock runs out); a city-wide pursuit of
+  a very tough car.
+- **Rush hour**: the last two minutes, crimes come about three times as often and up to three more at once.
+
 ## Pacing
 - A new crime every 12 s or so in a calm city, down to every 4.5 s as chaos climbs (solo slower: x1.5; two officers
   x1.1). The first one comes 2 s after the briefing. Up to 4 + 2 per officer at once.
@@ -186,6 +193,5 @@ Next: see [Phase 2 plan](Phase2Plan.md) (Steam invites),
 tracked in [TODO](TODO.md).
 
 Later ideas:
-- Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame
 - Day/night shifts and weather; night-time lights and headlights
 - Emotes, officer customisation

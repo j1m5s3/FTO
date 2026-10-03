@@ -961,6 +961,7 @@ void AFTOPerp::GoIntoHiding(bool bSeen)
 
 	ArrestState = EFTOPerpArrest::Hiding;
 	bInCrowd = false;
+	bCornered = false; // (out on the street now)
 	if (Incident->IsCrowd())
 	{
 		Incident->SetCrowd(false);

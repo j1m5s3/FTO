@@ -88,7 +88,7 @@ void UFTOVehicleDamage::ApplyDamage(float Amount, const FVector& At, AController
 		return;
 	}
 	const float Before = State.Health;
-	State.Health = FMath::Max(0.f, State.Health - Amount);
+	State.Health = FMath::Max(0.f, State.Health - Amount / FMath::Max(0.1f, Toughness));
 
 	// A dent where it landed, pushed towards the middle of the car (mostly sideways: cars get hit side-on and
 	// head-on, rarely from underneath), as deep as the knock was hard.

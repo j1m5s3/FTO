@@ -48,6 +48,9 @@ public:
 	UFUNCTION(Exec) void FTOShiftTimeLeft(float Seconds);
 	UFUNCTION(Exec) void FTOKnockdown(float Radius = 1500.f);
 	UFUNCTION(Exec) void FTOAnimGallery();
+	/** Start a set piece now (Heist, Bomb, Pursuit; nothing for this shift's own). */
+	UFUNCTION(Exec) void FTOSetPiece(FName Which = NAME_None);
+	AFTOIncident* FTOSetPieceNow(FName Which);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")

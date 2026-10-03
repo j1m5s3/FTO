@@ -61,6 +61,28 @@ public:
 	UPROPERTY(EditAnywhere, Category="Director|Shift")
 	float OvertimeSeconds = 5.f * 60.f;
 
+	// ---- The shape of a shift ----
+	/** The set piece starts this far into the shift (0-1). */
+	UPROPERTY(EditAnywhere, Category="Director|Shift")
+	float SetPieceAt = 0.45f;
+	/** The heist crew make a run for it this long after the heist starts, unless they're stopped first. */
+	UPROPERTY(EditAnywhere, Category="Director|Shift")
+	float HeistGetawaySeconds = 75.f;
+	/** In rush hour (the last GameState RushHourSeconds) crimes come this much quicker, and there can be more at once. */
+	UPROPERTY(EditAnywhere, Category="Director|Shift")
+	float RushHourPacing = 0.35f;
+	UPROPERTY(EditAnywhere, Category="Director|Shift")
+	int32 RushHourExtraIncidents = 3;
+	/** Shifts played this session (the set piece goes round in turn). */
+	int32 ShiftNumber = 0;
+
+	/** This shift's set piece: Heist, Bomb, Pursuit, in turn. */
+	static FName SetPieceFor(int32 Shift);
+	/** Server: start a set piece now (None: this shift's own). */
+	AFTOIncident* StartSetPiece(FName Which = NAME_None);
+	/** Server: the heist crew pile into a car and make a run for it. */
+	void TriggerHeistGetaway();
+
 	/** Server: count the votes now (everyone's voted, or time's up): overtime or clock off. */
 	void ResolveOvertimeVote();
 
@@ -140,6 +162,15 @@ protected:
 
 	void TickOnDuty(float DeltaTime);
 	void TickOvertimeVote();
+	/** Server: the set piece (when it's time, and the heist's getaway), and rush hour starting. */
+	void TickShiftShape();
+	/** A car going about its business to commandeer: nearest Near, or (MaxDistance > 0) one MinDistance-MaxDistance from Near. */
+	class AFTOTrafficCar* FindCarFor(const FVector& Near, float MinDistance, float MaxDistance) const;
+
+	bool bSetPieceDone = false;
+	bool bWasRushHour = false;
+	TWeakObjectPtr<AFTOIncident> HeistIncident;
+	float HeistGetawayTime = 0.f;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UFTOCrimeCatalog> Catalog;

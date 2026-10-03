@@ -122,6 +122,10 @@ public:
 	void SuspectFound(const FVector& Where, bool bLeaveRoom);
 	/** Server: progress made some other way than standing about (talking a drunk round). */
 	void SetTalkProgress(float Value);
+	/** Server: it's over, badly, right now (a bomb going off): the chaos hit, and it's gone. */
+	void FailNow();
+	/** Server: it's turned into something else (the heist crew have driven off: the getaway's the call now). */
+	void Supersede();
 	/** Server: handled without anyone cuffed (a drunk talked round and sent home): whoever's there gets the credit. */
 	void HandledPeacefully();
 	/** Is this one talked down just by officers being there (else it has a twist of its own)? */
@@ -159,6 +163,10 @@ public:
 	/** Officers inside this radius count as on scene. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
 	float SceneRadius = 450.f;
+
+	/** The bomb set piece: how long the squad has to defuse it. */
+	UPROPERTY(EditDefaultsOnly, Category="Incident")
+	float BombFuseSeconds = 150.f;
 
 	/** On-scene radius while following a fleeing car; cruisers count too. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")

@@ -26,6 +26,7 @@
 #include "Weapons/FTOArmoryRack.h"
 #include "Weapons/FTOBallistics.h"
 #include "Crime/FTOArrestee.h"
+#include "Crime/FTOBomb.h"
 #include "Crime/FTOCrimeDirector.h"
 #include "Crime/FTOCrimeExtra.h"
 #include "Crime/FTOGraffitiTag.h"
@@ -431,6 +432,41 @@ void AFTOSmokeTest::BuildSteps()
 		UE_LOG(LogFTO, Display, TEXT("SMOKE: pacing: a %.0f-minute shift (%.0f s left), %d of 4 new crimes a short way from the officer (farthest %.0f m)%s."),
 			Director->ShiftLengthSeconds / 60.f, GS->GetShiftTimeRemaining(), Near, Farthest / 100.f,
 			FMath::IsNearlyEqual(Director->ShiftLengthSeconds, 600.f) && Near == 4 ? TEXT("") : TEXT(": FAIL"));
+	});
+
+	// The shape of the shift: the set piece comes on schedule (this shift's is the heist), then the tour stages its own.
+	AddStep(TEXT("set piece on schedule"), 0.5f, [this]()
+	{
+		if (AFTOGameMode* GM = GetAuthGameMode())
+		{
+			GM->GetCrimeDirector()->SetPieceAt = 0.f;
+		}
+	});
+	AddStep(TEXT("set piece started"), 0.f, [this]()
+	{
+		AFTOGameMode* GM = GetAuthGameMode();
+		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+		if (!GM || !GS)
+		{
+			return;
+		}
+		UFTOCrimeDirector* Director = GM->GetCrimeDirector();
+		Director->SetPieceAt = 2.f; // (no more by themselves)
+		TArray<AFTOIncident*> Heists;
+		for (AFTOIncident* Incident : GS->GetIncidents())
+		{
+			if (Incident && Incident->IsActive() && Incident->GetInfo().TemplateId == TEXT("BankHeist"))
+			{
+				Heists.Add(Incident);
+			}
+		}
+		for (AFTOIncident* Heist : Heists)
+		{
+			Heist->Destroy(); // (out of the way: the tour stages its own)
+		}
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: set piece on schedule: %s (%d heist(s) at the bank); in turn: %s, %s, %s."),
+			GS->GetSetPiece() == TEXT("Heist") && Heists.Num() > 0 ? TEXT("the bank heist started") : TEXT("NO SET PIECE"), Heists.Num(),
+			*UFTOCrimeDirector::SetPieceFor(0).ToString(), *UFTOCrimeDirector::SetPieceFor(1).ToString(), *UFTOCrimeDirector::SetPieceFor(2).ToString());
 	});
 
 	// Arrest: across town, catch a shoplifter, cuff them, then bring them home.
@@ -1799,7 +1835,7 @@ void AFTOSmokeTest::BuildSteps()
 				TestPerp->TalkChoice(Cop, TestPerp->GetDrunkRightAnswer());
 			}
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: drunk: talked round (%d of %d): %s."), TestPerp->GetDrunkStage(), AFTOPerp::DrunkStages,
-				Incident && Incident->GetState() == EFTOIncidentState::Resolved ? TEXT("handled, off home") : TEXT("NOT HANDLED"));
+				Incident && Incident->GetState() == EFTOIncidentState::Resolved ? TEXT("handled, waving us off") : TEXT("NOT HANDLED"));
 		});
 
 		// A brawl: one officer can't pull them apart (it takes two, or fists).
@@ -1833,6 +1869,177 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			TestPerp.Reset();
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		// Set pieces. The bomb: a wrong wire costs time, the right three defuse it.
+		AddStep(TEXT("bomb"), 0.5f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOIncident* Incident = GM ? GM->FTOSetPieceNow(TEXT("Bomb")) : nullptr;
+			AFTOBomb* Bomb = nullptr;
+			for (TActorIterator<AFTOBomb> It(GetWorld()); It; ++It)
+			{
+				Bomb = *It;
+			}
+			if (!Cop || !Incident || !Bomb)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: bomb: NO BOMB."));
+				return;
+			}
+			const FVector Front = Bomb->GetActorLocation() + Bomb->GetActorForwardVector() * 150.f;
+			Cop->TeleportTo(Front + FVector(0.f, 0.f, 100.f), (Bomb->GetActorLocation() - Front).Rotation());
+			Bomb->Interact(Cop);
+			const float Before = Bomb->GetTimeLeft();
+			const FString Title = Bomb->GetTalkTitle().ToString();
+			const int32 Wrong = (Bomb->GetNextWire() + 1) % AFTOBomb::NumWires;
+			Bomb->TalkChoice(Cop, Wrong);
+			const float After = Bomb->GetTimeLeft();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: bomb: %s (\"%s\"); a wrong wire took %.0f s off."), Cop->GetTalkingTo() == Bomb ? TEXT("at the wires") : TEXT("NOT AT THE WIRES"), *Title, Before - After);
+			const FVector At = Bomb->GetActorLocation();
+			ViewFrom(At + Bomb->GetActorRightVector() * 260.f + Bomb->GetActorForwardVector() * 200.f + FVector(0.f, 0.f, 160.f), At);
+		});
+		AddShot(TEXT("21g_bomb"), 0.3f);
+		AddStep(TEXT("defuse"), 0.6f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			AFTOBomb* Bomb = nullptr;
+			for (TActorIterator<AFTOBomb> It(GetWorld()); It; ++It)
+			{
+				Bomb = *It;
+			}
+			if (!Cop || !Bomb)
+			{
+				return;
+			}
+			for (int32 i = 0; i < AFTOBomb::WiresToCut && !Bomb->IsDefused(); ++i)
+			{
+				Bomb->TalkChoice(Cop, Bomb->GetNextWire());
+			}
+			int32 Handled = 0;
+			for (const AFTOIncident* Incident : GetWorld()->GetGameState<AFTOGameState>()->GetIncidents())
+			{
+				Handled += Incident && Incident->GetInfo().TemplateId == TEXT("Bomb") && Incident->GetState() == EFTOIncidentState::Resolved ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: bomb: %s, %d s to spare (the call %s)."), Bomb->IsDefused() ? TEXT("defused") : TEXT("NOT DEFUSED"),
+				FMath::RoundToInt(Bomb->GetTimeLeft()), Handled > 0 ? TEXT("handled") : TEXT("NOT HANDLED"));
+		});
+		AddShot(TEXT("21h_bomb_defused"), 0.3f);
+		// A second one is left to tick down: it goes off.
+		AddStep(TEXT("bomb goes off"), 2.f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			TestCar.Reset();
+			for (TActorIterator<AFTOBomb> It(GetWorld()); It; ++It)
+			{
+				It->Destroy(); // (the defused one, out of the way)
+			}
+			AFTOIncident* Incident = GM ? GM->FTOSetPieceNow(TEXT("Bomb")) : nullptr;
+			for (TActorIterator<AFTOBomb> It(GetWorld()); It; ++It)
+			{
+				if (!It->IsActorBeingDestroyed())
+				{
+					It->SetTimeLeft(0.5f);
+					const FVector At = It->GetActorLocation();
+					ViewFrom(At + FVector(-1200.f, -900.f, 700.f), At);
+				}
+			}
+			ChaosBefore = GetWorld()->GetGameState<AFTOGameState>()->GetChaos();
+			if (!Incident)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: bomb goes off: NO BOMB."));
+			}
+		});
+		AddShot(TEXT("21i_bomb_boom"), 0.2f);
+		AddStep(TEXT("bomb result"), 0.f, [this]()
+		{
+			int32 Exploded = 0;
+			for (TActorIterator<AFTOBomb> It(GetWorld()); It; ++It)
+			{
+				Exploded += It->HasExploded() ? 1 : 0;
+			}
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: bomb left alone: %s (chaos +%.0f)."), Exploded > 0 ? TEXT("it went off") : TEXT("NOTHING HAPPENED"), GS->GetChaos() - ChaosBefore);
+			if (AFTOGameMode* GM = GetAuthGameMode()) { GM->FTOAddChaos(-100.f); }
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		// The heist: the crew make off in a car, a tough one; then the city-wide pursuit.
+		AddStep(TEXT("heist"), 0.5f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			AFTOIncident* Heist = GM ? GM->FTOSetPieceNow(TEXT("Heist")) : nullptr;
+			if (!Heist)
+			{
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: heist: NO HEIST."));
+				return;
+			}
+			GM->GetCrimeDirector()->TriggerHeistGetaway();
+			const AFTOIncident* Chase = nullptr;
+			for (const AFTOIncident* Incident : GetWorld()->GetGameState<AFTOGameState>()->GetIncidents())
+			{
+				Chase = Incident && Incident->IsActive() && Incident->GetInfo().TemplateId == TEXT("HeistGetaway") ? Incident : Chase;
+			}
+			const AFTOTrafficCar* Car = Chase ? Cast<AFTOTrafficCar>(Chase->GetAttachParentActor()) : nullptr;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: heist: the crew %s (the heist call %s), the getaway car %s, toughness x%.1f."),
+				Chase ? TEXT("made a run for it") : TEXT("NEVER LEFT"), Heist->IsActive() ? TEXT("STILL OPEN") : TEXT("over"),
+				Car && Car->GetCarState() == EFTOCarState::Fleeing ? TEXT("fleeing") : TEXT("NOT FLEEING"), Car && Car->GetDamage() ? Car->GetDamage()->Toughness : 0.f);
+			if (Car)
+			{
+				ViewFrom(Car->GetActorLocation() + FVector(-900.f, 0.f, 600.f), Car->GetActorLocation());
+			}
+		});
+		AddShot(TEXT("21j_heist_getaway"), 0.6f);
+		AddStep(TEXT("pursuit"), 0.5f, [this]()
+		{
+			AFTOGameMode* GM = GetAuthGameMode();
+			const AFTOIncident* Chase = GM ? GM->FTOSetPieceNow(TEXT("Pursuit")) : nullptr;
+			const AFTOTrafficCar* Car = Chase ? Cast<AFTOTrafficCar>(Chase->GetAttachParentActor()) : nullptr;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: pursuit: %s, the car %s, toughness x%.1f, %.0f m from the officer."),
+				Chase ? *Chase->GetInfo().Title.ToString() : TEXT("NO PURSUIT"), Car && Car->GetCarState() == EFTOCarState::Fleeing ? TEXT("fleeing") : TEXT("NOT FLEEING"),
+				Car && Car->GetDamage() ? Car->GetDamage()->Toughness : 0.f, Car && GetPawn() ? FVector::Dist2D(Car->GetActorLocation(), GetPawn()->GetActorLocation()) / 100.f : -1.f);
+			// (Tidy the chases away: the tour goes on.)
+			TArray<AFTOIncident*> Chases;
+			for (AFTOIncident* Incident : GetWorld()->GetGameState<AFTOGameState>()->GetIncidents())
+			{
+				if (Incident && (Incident->GetInfo().TemplateId == TEXT("Pursuit") || Incident->GetInfo().TemplateId == TEXT("HeistGetaway")))
+				{
+					Chases.Add(Incident);
+				}
+			}
+			for (AFTOIncident* Incident : Chases)
+			{
+				if (AActor* Getaway = Incident->GetAttachParentActor())
+				{
+					Getaway->Destroy();
+				}
+				Incident->Destroy();
+			}
+			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+		});
+
+		// Rush hour: the last two minutes.
+		AddStep(TEXT("rush hour"), 2.5f, [this]()
+		{
+			if (AFTOGameMode* GM = GetAuthGameMode())
+			{
+				GM->FTOShiftTimeLeft(100.f);
+			}
+		});
+		AddShot(TEXT("21k_rush_hour"), 0.2f);
+		AddStep(TEXT("rush hour result"), 0.f, [this]()
+		{
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			int32 Open = 0;
+			for (const AFTOIncident* Incident : GS->GetIncidents())
+			{
+				Open += Incident && Incident->IsActive() ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: rush hour: %s (%.0f s left, %d calls open)."), GS->IsRushHour() ? TEXT("on") : TEXT("NOT ON"), GS->GetShiftTimeRemaining(), Open);
+			if (AFTOGameMode* GM = GetAuthGameMode())
+			{
+				GM->FTOShiftTimeLeft(600.f);
+			}
 		});
 
 		// A word with a passer-by: the conversation panel.
@@ -3557,6 +3764,8 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: client sees %d broken things in the city."), Wreckage ? Wreckage->NumApplied() : -1);
+				const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: client sees this shift's set piece: %s."), GS && GS->GetSetPiece() != NAME_None ? *GS->GetSetPiece().ToString() : TEXT("NONE"));
 			});
 		}
 	}

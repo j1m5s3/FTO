@@ -40,6 +40,7 @@ free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invite
 | `FTOCallout Backup` | Make a radio callout (`Backup`, `Fleeing`, `OfficerDown`, `Copy`); works for any player |
 | `FTOShiftTimeLeft 0` | Set the shift clock (0 runs it out and starts the overtime vote) |
 | `FTOVote Overtime` | Vote at the end of the shift (`Overtime` or `ClockOff`); works for any player |
+| `FTOSetPiece Bomb` | Start a set piece now (`Heist`, `Bomb`, `Pursuit`; no argument for this shift's own) |
 
 Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
 
@@ -114,6 +115,13 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   point with the mouse / right stick and let go, or press 1-4: *Need backup!*, *Suspect fleeing!* (pings the nearest
   getaway), *Officer down!* (pings the nearest downed partner) and *10-4*. Pings show on everyone's HUD for 20 s.
   Going down calls *Officer down!* for you. Voice needs a microphone and uses the engine's VOIP (push-to-talk only).
+- **The shape of a shift**: a little under halfway through, the shift's set piece starts (a banner, a siren, every
+  officer told). They take turns, shift by shift: a *bank heist* (an armed crew in the vault; leave them 75 s and
+  they make off in a car, a tough one, and it's a chase), an *Evil Masterplan* (a bomb ticking downtown: E for the
+  wires, and the label says which to cut next, "the colour of a rubber duck"; a wrong wire takes 25 s off the clock,
+  three right ones defuse it, and if it goes off it takes the windows, walls and everyone near with it) and a
+  *city-wide pursuit* (the city's most wanted in a car three times tougher than most). The last two minutes on the
+  clock are *rush hour*: crimes come about three times as fast and there can be three more at once.
 - **End of shift**: when the 10-minute clock runs out the city holds still and everyone votes: Y (left bumper) for 5
   minutes of overtime (chaos carries over; the clock reads OVERTIME), N (view button) to clock off. Most votes win;
   the host's vote breaks a tie and decides for anyone who says nothing within 20 s. Clocking off (or the city falling)
@@ -138,7 +146,9 @@ cuffs them where they fell), has a downed officer helped up (the radio calls it 
 quietly: a brawler wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who
 gives up beside their car, watches a mugger walk off with the goods and tracks them down in the crowd (a word, a search, the cuffs), stops
 and searches citizens (arresting one caught carrying and, wrongly, one who was clean), rides a lift to the top of a
-tower and climbs a house's outside stairs, picks a pickpocket out of a crowd of look-alikes (searching a bystander first),
+tower and climbs a house's outside stairs, starts the shift's set piece on schedule (the heist, for a first shift), defuses a bomb (after a wrong wire) and
+lets another go off, watches the heist crew make off in a getaway car and starts a city-wide pursuit, runs the clock
+into rush hour, picks a pickpocket out of a crowd of look-alikes (searching a bystander first),
 finds a burglar hiding upstairs, talks a drunk round (after one answer that winds them up), checks one officer can't
 break up a bar fight, films a tagger
 and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
@@ -148,7 +158,7 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, gets out
 and arrests a shoplifter the host puts beside them. Then the client calls for backup and stays on air, and the host
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
-host). Finally the client checks it sees everything the host broke broken too.
+host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece.
 
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine

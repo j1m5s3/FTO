@@ -93,6 +93,9 @@ public:
 	/** Someone's at the wheel: a fire smoulders on rather than burning the car down (set by the car). */
 	bool bHoldFire = false;
 
+	/** How much of a beating it takes: knocks are divided by this (a set piece's getaway car is tougher). */
+	float Toughness = 1.f;
+
 	/** A citizen's car: the police writing it off costs the city chaos. */
 	UPROPERTY(EditAnywhere, Category="Damage") bool bCitizensCar = true;
 
