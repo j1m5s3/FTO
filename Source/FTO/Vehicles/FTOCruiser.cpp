@@ -492,10 +492,23 @@ void AFTOCruiser::ServerHorn_Implementation()
 void AFTOCruiser::ServerBounce_Implementation()
 {
 	++Hops;
-	OnRep_Hops();
+	PlayHop();
 }
 
 void AFTOCruiser::OnRep_Hops()
+{
+	// (A late joiner's first update isn't a bounce.)
+	const bool bFirst = !bHopsSeen;
+	bHopsSeen = true;
+	const bool bNew = Hops != SeenHops;
+	SeenHops = Hops;
+	if (!bFirst && bNew)
+	{
+		PlayHop();
+	}
+}
+
+void AFTOCruiser::PlayHop()
 {
 	if (GetWorld()->GetTimeSeconds() - HopStart < 0.4f)
 	{
@@ -733,7 +746,7 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 		Velocity = (Velocity - (bBouncy ? 2.f : 1.4f) * FVector::DotProduct(Velocity, Normal) * Normal) * (bBouncy ? 0.9f : 0.5f);
 		if (bBouncy && Into > 300.f && GetWorld()->GetTimeSeconds() - HopStart > 0.4f)
 		{
-			OnRep_Hops(); // here and now, and everyone else a moment later
+			PlayHop(); // here and now, and everyone else a moment later
 			if (HasAuthority())
 			{
 				++Hops;

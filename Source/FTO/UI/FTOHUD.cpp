@@ -213,7 +213,7 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 	{
 		FString Rule = FTOMutators::Describe(GS->GetMutator());
 		Rule = Rule.Left(Rule.Find(TEXT(".")));
-		DrawCenteredText(Rule, X + W * 0.5f, Y + H + (bRush ? 36.f : 12.f) * S, FLinearColor(1.f, 0.6f, 0.9f), GEngine->GetSmallFont(), S * 1.1f);
+		DrawCenteredText(Rule, X - 150.f * S, Y + 6.f * S, FLinearColor(1.f, 0.6f, 0.9f), GEngine->GetSmallFont(), S * 1.1f); // (left of the clock: clear of the score)
 	}
 }
 
@@ -259,7 +259,7 @@ void AFTOHUD::DrawNewspaper(const AFTOGameState* GS)
 	const float W = 420.f * S;
 	const float In = FMath::Clamp(Age / 0.4f, 0.f, 1.f) * FMath::Clamp((Showing - Age) / 0.4f, 0.f, 1.f);
 	const float X = Canvas->ClipX - (W + 24.f * S) * In;
-	const float Y = 110.f * S; // up under the clock and the score, out of the way
+	const float Y = 150.f * S; // up under the clock and the score, out of the way
 	UFont* Small = GEngine->GetSmallFont();
 	UFont* Medium = GEngine->GetMediumFont();
 	// Wrap the headline onto lines that fit (once per headline).

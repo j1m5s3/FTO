@@ -50,6 +50,11 @@ void AFTOCrimeExtra::SetupExtra(AFTOIncident* InIncident, EFTOExtraRole InRole, 
 	NextShuffle = GetWorld()->GetTimeSeconds() + Rng.FRandRange(3.f, 10.f);
 }
 
+bool AFTOCrimeExtra::ForcesHotDogSuit() const
+{
+	return ExtraRole == EFTOExtraRole::Bystander && Incident && Incident->GetInfo().Twist == TEXT("Costumed");
+}
+
 bool AFTOCrimeExtra::IsCrimeGoingOn() const
 {
 	const AFTOPerp* Perp = Incident ? Incident->GetPerp() : nullptr;

@@ -58,6 +58,8 @@ protected:
 
 	/** On hot dog day the pickpocket's crowd dresses up too (or they'd stand out). */
 	virtual bool WantsHotDogSuit() const override { return ExtraRole == EFTOExtraRole::Bystander; }
+	/** A Costumed pickpocket's crowd dresses up too (else they'd be the one hot dog). */
+	virtual bool ForcesHotDogSuit() const override;
 
 	/** Is the perp still at it, right here (not caught, not gone)? */
 	bool IsCrimeGoingOn() const;
