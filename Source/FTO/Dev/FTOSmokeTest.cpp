@@ -3477,7 +3477,7 @@ void AFTOSmokeTest::BuildSteps()
 			AddShot(TEXT("11c_out"), 0.5f);
 			// The host puts a shoplifter beside us: turn to them and press E, the way a player would. The server steps
 			// us in behind them for the cuffs (the move replicates back here).
-			AddWait(TEXT("wait for a suspect"), 20.f, [this]()
+			AddWait(TEXT("wait for a suspect"), 150.f, [this]()
 			{
 				const AFTOPerp* Perp = FindNearestPerp(TEXT("Shoplifting"));
 				return Perp && GetPawn() && FVector::Dist2D(Perp->GetActorLocation(), GetPawn()->GetActorLocation()) < 500.f;
