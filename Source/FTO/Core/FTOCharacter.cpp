@@ -1,4 +1,5 @@
 #include "Core/FTOCharacter.h"
+#include "Core/FTOMutators.h"
 #include "Interaction/FTOTalkable.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -599,7 +600,9 @@ void AFTOCharacter::ThrowGrabbed()
 void AFTOCharacter::LaunchTackle()
 {
 	// Low and fast, with a little hop so the dive clears the kerb.
-	LaunchCharacter(GetActorForwardVector() * 950.f + FVector(0.f, 0.f, 220.f), true, true);
+	// (In low gravity the hop's scaled down, so the dive lands when it always does.)
+	const float Hop = FTOMutators::Is(this, TEXT("LowGravity")) ? 220.f * FTOMutators::LowGravityScale : 220.f;
+	LaunchCharacter(GetActorForwardVector() * 950.f + FVector(0.f, 0.f, Hop), true, true);
 }
 
 void AFTOCharacter::ServerTackle_Implementation()

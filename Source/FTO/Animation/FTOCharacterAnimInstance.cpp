@@ -484,9 +484,11 @@ void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		Proxy.Aim = Animated->GetAimPose();
 		Proxy.AimPitch = Animated->GetAimPitch();
 		Proxy.HeadScale = FTOMutators::Is(Owner, TEXT("BigHeads")) ? 2.f : 1.f;
-		if (Proxy.HeadBone == INDEX_NONE && GetSkelMeshComponent())
+		const USkeletalMeshComponent* SkelMesh = GetSkelMeshComponent();
+		if (SkelMesh && Proxy.HeadBoneMesh.Get() != SkelMesh->GetSkeletalMeshAsset())
 		{
-			Proxy.HeadBone = GetSkelMeshComponent()->GetBoneIndex(TEXT("head"));
+			Proxy.HeadBoneMesh = SkelMesh->GetSkeletalMeshAsset();
+			Proxy.HeadBone = SkelMesh->GetBoneIndex(TEXT("head"));
 		}
 		// A blow thrown or taken (FTOFighting) shows over whatever else they're doing, the weapon put by for it.
 		if (!Knockdown.IsValid() && Owner)

@@ -150,7 +150,8 @@ void AFTOPedestrian::ApplyLook()
 
 void AFTOPedestrian::UpdateHotDogSuit()
 {
-	const bool bWant = WantsHotDogSuit() && FTOMutators::Is(this, TEXT("HotDogs"));
+	// (Not while they're a ragdoll: the suit's on the capsule, which stays upright.)
+	const bool bWant = WantsHotDogSuit() && (FTOMutators::Is(this, TEXT("HotDogs")) || ForcesHotDogSuit()) && !(Knockdown && Knockdown->IsDown());
 	if (bWant && HotDogSuit.IsEmpty() && Body && Body->GetSkeletalMeshAsset())
 	{
 		// A bun either side, the sausage up the middle and over the head, and a squiggle of mustard.

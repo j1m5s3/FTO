@@ -219,40 +219,46 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 void AFTOHUD::DrawNewspaper(const AFTOGameState* GS)
 {
 	const float Age = GS->GetHeadlineAge();
-	if (GS->GetLatestHeadline().IsEmpty() || Age > 7.f || Age < 0.f)
+	constexpr float Showing = 4.5f;
+	if (GS->GetLatestHeadline().IsEmpty() || Age > Showing || Age < 0.f)
 	{
 		return;
 	}
 	// Slides in from the right, sits a few seconds, slides back out.
 	const float S = UIScale();
-	const float W = 520.f * S;
-	const float In = FMath::Clamp(Age / 0.4f, 0.f, 1.f) * FMath::Clamp((7.f - Age) / 0.4f, 0.f, 1.f);
+	const float W = 420.f * S;
+	const float In = FMath::Clamp(Age / 0.4f, 0.f, 1.f) * FMath::Clamp((Showing - Age) / 0.4f, 0.f, 1.f);
 	const float X = Canvas->ClipX - (W + 24.f * S) * In;
-	const float Y = Canvas->ClipY * 0.42f;
+	const float Y = 110.f * S; // up under the clock and the score, out of the way
 	UFont* Small = GEngine->GetSmallFont();
 	UFont* Medium = GEngine->GetMediumFont();
-	// Wrap the headline onto lines that fit.
-	TArray<FString> Words;
-	GS->GetLatestHeadline().ParseIntoArray(Words, TEXT(" "));
-	TArray<FString> Lines;
-	FString Line;
-	for (const FString& Word : Words)
+	// Wrap the headline onto lines that fit (once per headline).
+	if (WrappedFor != GS->GetLatestHeadline())
 	{
-		const FString Try = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
-		float TW = 0.f, TH = 0.f;
-		GetTextSize(Try, TW, TH, Medium, S * 1.15f);
-		if (TW > W - 40.f * S && !Line.IsEmpty())
+		WrappedFor = GS->GetLatestHeadline();
+		WrappedLines.Reset();
+		TArray<FString> Words;
+		WrappedFor.ParseIntoArray(Words, TEXT(" "));
+		FString Line;
+		for (const FString& Word : Words)
 		{
-			Lines.Add(Line);
-			Line = Word;
+			const FString Try = Line.IsEmpty() ? Word : Line + TEXT(" ") + Word;
+			float TW = 0.f, TH = 0.f;
+			GetTextSize(Try, TW, TH, Medium, S);
+			if (TW > W - 40.f * S && !Line.IsEmpty())
+			{
+				WrappedLines.Add(Line);
+				Line = Word;
+			}
+			else
+			{
+				Line = Try;
+			}
 		}
-		else
-		{
-			Line = Try;
-		}
+		WrappedLines.Add(Line);
 	}
-	Lines.Add(Line);
-	const float H = (70.f + Lines.Num() * 26.f + 16.f) * S;
+	const TArray<FString>& Lines = WrappedLines;
+	const float H = (66.f + Lines.Num() * 22.f + 12.f) * S;
 	DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.35f), X + 6.f * S, Y + 6.f * S, W, H);
 	DrawRect(FLinearColor(0.96f, 0.93f, 0.84f), X, Y, W, H);
 	DrawCenteredText(TEXT("THE DAILY SIREN"), X + W * 0.5f, Y + 8.f * S, FLinearColor(0.1f, 0.1f, 0.1f), GEngine->GetLargeFont(), S * 0.9f);
@@ -260,7 +266,7 @@ void AFTOHUD::DrawNewspaper(const AFTOGameState* GS)
 	DrawText(TEXT("EXTRA! EXTRA!"), FLinearColor(0.6f, 0.1f, 0.1f), X + 18.f * S, Y + 54.f * S, Small, S);
 	for (int32 i = 0; i < Lines.Num(); ++i)
 	{
-		DrawCenteredText(Lines[i], X + W * 0.5f, Y + (72.f + i * 26.f) * S, FLinearColor(0.08f, 0.08f, 0.08f), Medium, S * 1.15f);
+		DrawCenteredText(Lines[i], X + W * 0.5f, Y + (70.f + i * 22.f) * S, FLinearColor(0.08f, 0.08f, 0.08f), Medium, S);
 	}
 }
 

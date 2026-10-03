@@ -68,6 +68,7 @@ void UFTOCrimeDirector::BeginShift(int32 Seed)
 
 	EnsureCatalog();
 	Rng.Initialize(Seed);
+	HeadlineRng.Initialize(Seed + 1); // (its own stream: the papers don't change which crimes a seed rolls)
 	GS->ShiftSeed = Seed;
 
 	const float Now = GetWorld()->GetTimeSeconds();
@@ -455,7 +456,7 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 	const float Relief = Info.ChaosRelief * (Incident->WasWitnessed() ? WitnessBonus : 1.f);
 	if (Info.Tier >= EFTOCrimeTier::Major)
 	{
-		GS->PrintHeadline(FTOHeadlines::For(Info, true, Rng));
+		GS->PrintHeadline(FTOHeadlines::For(Info, true, HeadlineRng), true);
 	}
 	GS->AddChaos(-Relief);
 	++GS->IncidentsResolved;
@@ -528,7 +529,7 @@ void UFTOCrimeDirector::HandleFailed(AFTOIncident* Incident)
 	GS->AddChaos(Info.FailPenalty);
 	if (Info.Tier >= EFTOCrimeTier::Major)
 	{
-		GS->PrintHeadline(FTOHeadlines::For(Info, false, Rng));
+		GS->PrintHeadline(FTOHeadlines::For(Info, false, HeadlineRng), false);
 	}
 	++GS->IncidentsFailed;
 

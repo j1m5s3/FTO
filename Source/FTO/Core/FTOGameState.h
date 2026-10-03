@@ -156,8 +156,10 @@ public:
 	FName GetMutator() const { return Mutator; }
 	/** Server: this shift's silly rule (FTOMutators). */
 	void SetMutator(FName Which);
-	/** Server: a headline for the front page (a big incident handled, or not). Everyone sees the paper. */
-	void PrintHeadline(const FString& Headline);
+	/** Server: a headline for the front page (a big incident handled, or not: bGood). Everyone sees the paper. */
+	void PrintHeadline(const FString& Headline, bool bGood);
+	/** The latest good news, and the latest bad (for the scoreboard, to suit how the shift went). */
+	const FString& GetLatestHeadline(bool bGood) const { return bGood ? LatestGood : LatestBad; }
 	/** The latest front page and how long since it came out (every machine), and every one this shift. */
 	const FString& GetLatestHeadline() const { return LatestHeadline; }
 	float GetHeadlineAge() const { return GetServerWorldTimeSeconds() - HeadlineTime; }
@@ -228,6 +230,8 @@ protected:
 	UPROPERTY(Replicated) FString LatestHeadline;
 	UPROPERTY(Replicated) float HeadlineTime = -1000.f;
 	UPROPERTY(Replicated) TArray<FString> FrontPages;
+	UPROPERTY(Replicated) FString LatestGood;
+	UPROPERTY(Replicated) FString LatestBad;
 	UPROPERTY(Replicated) int32 SquadCombo = 0;
 	UPROPERTY(Replicated) float SquadComboTime = -1000.f;
 	UPROPERTY(Replicated) bool bTagTeam = false;

@@ -419,7 +419,9 @@ void AFTOTrafficCar::Tick(float DeltaSeconds)
 	if (bBouncy || bWasBouncy)
 	{
 		bWasBouncy = bBouncy;
-		const float Hop = bBouncy ? 28.f * FMath::Abs(FMath::Sin(GetWorld()->GetTimeSeconds() * 5.f + (LookSeed % 100) * 0.37f)) : 0.f;
+		const AGameStateBase* GS = GetWorld()->GetGameState();
+		const float Clock = GS ? GS->GetServerWorldTimeSeconds() : GetWorld()->GetTimeSeconds();
+		const float Hop = bBouncy ? 28.f * FMath::Abs(FMath::Sin(Clock * 5.f + (LookSeed % 100) * 0.37f)) : 0.f;
 		Body->SetRelativeLocation(FVector(0.f, 0.f, -RideHeight + Hop));
 	}
 
@@ -664,7 +666,9 @@ void AFTOTrafficCar::RoundHit(const FVector& At, AController* By)
 	}
 	for (int32 i = 0; i < Wheels.Num() && i < 8; ++i)
 	{
-		if ((FlatTyres & (1 << i)) || FVector::DistSquared(Wheels[i]->GetComponentLocation(), At) > FMath::Square(75.f))
+		// (Where the wheel is on the car, not where the hydraulics have bounced it this frame.)
+		const FVector Wheel = Wheels[i]->GetComponentLocation() - GetActorUpVector() * (Body->GetRelativeLocation().Z + RideHeight);
+		if ((FlatTyres & (1 << i)) || FVector::DistSquared(Wheel, At) > FMath::Square(75.f))
 		{
 			continue;
 		}

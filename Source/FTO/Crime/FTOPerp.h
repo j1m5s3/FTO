@@ -188,7 +188,9 @@ public:
 
 protected:
 	virtual void ApplyLook() override;
-	virtual bool WantsHotDogSuit() const override { return bCriminal && ArrestState != EFTOPerpArrest::Cuffing; }
+	/** A crook in the suit (not one lying low: they've ditched it, unless they're hiding in a crowd of hot dogs). */
+	virtual bool WantsHotDogSuit() const override;
+	virtual bool ForcesHotDogSuit() const override;
 	virtual void OnArrived() override;
 	virtual void FaceOfficer(const AActor* Officer) override;
 	virtual FString GetSmallTalk() override;

@@ -590,6 +590,16 @@ void AFTOPerp::WearLookOf(int32 Seed)
 	ApplyLook();
 }
 
+bool AFTOPerp::WantsHotDogSuit() const
+{
+	return bCriminal && ArrestState != EFTOPerpArrest::Cuffing && (ArrestState != EFTOPerpArrest::Hiding || (Incident && Incident->IsCrowd()));
+}
+
+bool AFTOPerp::ForcesHotDogSuit() const
+{
+	return Incident && Incident->GetInfo().Twist == TEXT("Costumed");
+}
+
 bool AFTOPerp::IsHidingInBuilding() const
 {
 	return Incident && Incident->IsHiddenInside() && ArrestState == EFTOPerpArrest::None;

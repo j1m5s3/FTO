@@ -53,12 +53,6 @@ struct FFTOOfficerStats
  * "+250 ARREST! x2" popup where it happened. The end-of-shift scoreboard ranks the squad, hands out awards and
  * grades the shift.
  */
-/** The Daily Siren's front pages: a silly headline after a big incident, handled (bHandled) or not. */
-namespace FTOHeadlines
-{
-	FTO_API FString For(const FFTOIncidentInfo& Info, bool bHandled, FRandomStream& Rng);
-}
-
 namespace FTOScoring
 {
 	/** Seconds after one award that the next still builds the combo. */
@@ -104,4 +98,10 @@ namespace FTOScoring
 	FTO_API FString Grade(int32 TeamScore, int32 Officers, bool bSurvived, float PeakChaos, float MinutesOnDuty = 10.f);
 	/** Shift awards for the scoreboard, one line per officer who earned one ("Top Cop", "Traffic Warden"...). */
 	FTO_API TArray<FString> AwardsFor(const AFTOPlayerState* Officer, const TArray<const AFTOPlayerState*>& Squad);
+}
+
+/** The Daily Siren's front pages: a silly headline after a big incident, handled (bHandled) or not. */
+namespace FTOHeadlines
+{
+	FTO_API FString For(const FFTOIncidentInfo& Info, bool bHandled, FRandomStream& Rng);
 }

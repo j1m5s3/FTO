@@ -33,7 +33,7 @@ FString FTOHeadlines::For(const FFTOIncidentInfo& Info, bool bHandled, FRandomSt
 	}
 	static const TCHAR* Handled[] =
 	{
-		TEXT("LOCAL COPS NAB %s SUSPECT; SUSPECT 'NOT EVEN THAT SORRY'"),
+		TEXT("LOCAL COPS CRACK %s CASE; CULPRIT 'NOT EVEN THAT SORRY'"),
 		TEXT("%s OVER IN MINUTES. OFFICERS 'WERE PASSING ANYWAY'"),
 		TEXT("POLICE 1, CRIME 0: %s WRAPPED UP BEFORE LUNCH"),
 		TEXT("HEROES IN HI-VIS: %s SORTED, DONUTS AWARDED"),
@@ -43,7 +43,7 @@ FString FTOHeadlines::For(const FFTOIncidentInfo& Info, bool bHandled, FRandomSt
 	{
 		TEXT("%s: POLICE 'STUCK IN TRAFFIC, PROBABLY'"),
 		TEXT("CITY SHRUGS AS %s GOES UNSOLVED"),
-		TEXT("WHERE WERE THE COPS? %s SUSPECT STILL AT LARGE"),
+		TEXT("WHERE WERE THE COPS? %s CULPRIT STILL AT LARGE"),
 		TEXT("%s: PRECINCT 'LOOKING INTO IT', SAYS PRECINCT"),
 	};
 	const TCHAR* Format = bHandled ? Handled[Rng.RandRange(0, UE_ARRAY_COUNT(Handled) - 1)] : Failed[Rng.RandRange(0, UE_ARRAY_COUNT(Failed) - 1)];

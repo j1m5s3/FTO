@@ -1486,7 +1486,11 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				return;
 			}
-			// Back up, and after them (the sprint the test skips): right behind them, and dive.
+			// Back up (straight away: no lying about), and after them (the sprint the test skips): right behind them, and dive.
+			if (UFTOKnockdownComponent* Knocked = Cop->GetKnockdown(); Knocked && Knocked->IsDown())
+			{
+				Knocked->Recover();
+			}
 			const FVector Dir = TestPerp->GetMoveDirection().GetSafeNormal2D();
 			const FVector Runner = TestPerp->GetActorLocation();
 			Cop->TeleportTo(Runner - Dir * 140.f + FVector(0.f, 0.f, 96.f - AFTOPedestrian::HalfHeight + 2.f), Dir.Rotation());
@@ -2209,14 +2213,14 @@ void AFTOSmokeTest::BuildSteps()
 			if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
 			{
 				Cop->Jump();
-				ChaosBefore = Cop->GetActorLocation().Z;
+				JumpFromZ = Cop->GetActorLocation().Z;
 			}
 		});
 		AddStep(TEXT("low gravity result"), 0.f, [this]()
 		{
 			const APawn* Cop = GetPawn();
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: low gravity: world gravity %.0f, the officer %.0f cm up a second after jumping."), GetWorld()->GetGravityZ(),
-				Cop ? Cop->GetActorLocation().Z - ChaosBefore : -1.f);
+				Cop ? Cop->GetActorLocation().Z - JumpFromZ : -1.f);
 		});
 		AddStep(TEXT("bouncy cars"), 0.6f, [this]()
 		{

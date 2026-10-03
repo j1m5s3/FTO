@@ -191,7 +191,8 @@ void AFTOHUD::DrawScoreboard(const AFTOGameState* GS)
 	DrawCenteredText(bSurvived ? TEXT("SHIFT SURVIVED!") : TEXT("THE CITY FELL INTO CHAOS"), CX, Top + 10.f * S,
 		bSurvived ? FLinearColor(0.3f, 1.f, 0.4f) : FLinearColor(1.f, 0.25f, 0.25f), Large, S * 2.2f);
 	// The shift's last front page, if anything made the papers; else the usual.
-	const FString Headline = GS->GetFrontPages().Num() > 0 ? GS->GetFrontPages().Last() : FString(bSurvived ? WinHeadlines[Pick] : LoseHeadlines[Pick]);
+	const FString& Latest = GS->GetLatestHeadline(bSurvived);
+	const FString Headline = !Latest.IsEmpty() ? Latest : FString(bSurvived ? WinHeadlines[Pick] : LoseHeadlines[Pick]);
 	DrawCenteredText(FString::Printf(TEXT("\"%s\""), *Headline), CX, Top + 70.f * S,
 		FLinearColor(1.f, 0.9f, 0.6f), Medium, S * 1.3f);
 

@@ -2,6 +2,7 @@
 #include "Scoring/FTOScoring.h"
 #include "Core/FTOMutators.h"
 #include "GameFramework/WorldSettings.h"
+#include "PhysicsEngine/PhysicsSettings.h"
 #include "GameFramework/PlayerState.h"
 #include "Audio/FTOAudio.h"
 #include "Crime/FTOIncident.h"
@@ -123,6 +124,8 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, LatestHeadline);
 	DOREPLIFETIME(AFTOGameState, HeadlineTime);
 	DOREPLIFETIME(AFTOGameState, FrontPages);
+	DOREPLIFETIME(AFTOGameState, LatestGood);
+	DOREPLIFETIME(AFTOGameState, LatestBad);
 	DOREPLIFETIME(AFTOGameState, SquadCombo);
 	DOREPLIFETIME(AFTOGameState, SquadComboTime);
 	DOREPLIFETIME(AFTOGameState, bTagTeam);
@@ -226,18 +229,23 @@ void AFTOGameState::ApplyMutator()
 	// Low gravity: the world's gravity, for walking, jumping, ragdolls and debris alike.
 	if (AWorldSettings* Settings = GetWorldSettings())
 	{
-		const float Normal = Settings->bGlobalGravitySet ? Settings->GlobalGravityZ : -980.f;
+		const float Normal = Settings->bGlobalGravitySet ? Settings->GlobalGravityZ : UPhysicsSettings::Get()->DefaultGravityZ;
 		Settings->WorldGravityZ = Mutator == TEXT("LowGravity") ? Normal * FTOMutators::LowGravityScale : Normal;
 		Settings->bWorldGravitySet = true;
 	}
 }
 
-void AFTOGameState::PrintHeadline(const FString& Headline)
+void AFTOGameState::PrintHeadline(const FString& Headline, bool bGood)
 {
 	check(HasAuthority());
 	LatestHeadline = Headline;
 	HeadlineTime = GetServerWorldTimeSeconds();
+	(bGood ? LatestGood : LatestBad) = Headline;
 	FrontPages.Add(Headline);
+	if (FrontPages.Num() > 20)
+	{
+		FrontPages.RemoveAt(0);
+	}
 }
 
 float AFTOGameState::BumpSquadCombo(const APlayerState* Officer)
