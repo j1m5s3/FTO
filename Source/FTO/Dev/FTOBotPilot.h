@@ -61,6 +61,24 @@ protected:
 	bool TakeThemIn();
 
 	void GoTo(const FVector& Where, bool bRun, bool bAllowDrive = true);
+	/** The next place to walk for Where: a building's front door first, if one of us is inside it and the other isn't. */
+	FVector Waypoint(const FVector& Where) const;
+	/** Something solid a stride ahead that way (a wall, a fence)? */
+	bool Blocked(const FVector& Dir) const;
+	/** Once the city's built here: a navmesh over it (the bot finds its way by it; nobody else uses one). */
+	void EnsureNavMesh();
+	/** Walking: the next corner of the navmesh's path to Where (Where itself if there's no path, or no navmesh yet). */
+	FVector NextStep(const FVector& Where);
+	bool bNavRequested = false;
+	bool bPathsWork = false;
+	TArray<FVector> Path;
+	int32 PathIndex = 1;
+	FVector PathGoal = FVector::ZeroVector;
+	float NextPathTime = 0.f;
+	/** Driving: the junctions to go through on the way to the goal (planned from where the car is). */
+	void PlanRoute(const FVector& From);
+	TArray<FVector> Route;
+	FVector RouteGoal = FVector::ZeroVector;
 	void Face(const FVector& Where);
 	bool Close(const FVector& Where, float Distance) const;
 	void Press();
@@ -80,12 +98,17 @@ protected:
 	bool bMayDrive = true;
 	TWeakObjectPtr<AFTOIncident> Target;
 	float TargetSince = 0.f;
+	/** Calls we've given up on for now (no progress in two minutes), and till when. */
+	TMap<TWeakObjectPtr<AFTOIncident>, float> GivenUp;
 
 	// Getting unstuck.
 	FVector LastSpot = FVector::ZeroVector;
 	float StuckFor = 0.f;
 	float EscapeUntil = 0.f;
 	FVector EscapeDir = FVector::ZeroVector;
+	/** Following a wall round: which way we turn (+1/-1; 0: not following), and till when we keep to it. */
+	float FollowSide = 0.f;
+	float FollowUntil = 0.f;
 	/** Driving: the closest we've got to the goal, and when; no cruisers until this (after one got us nowhere). */
 	float BestDriveDistance = TNumericLimits<float>::Max();
 	float DriveProgressAt = 0.f;

@@ -202,6 +202,26 @@ and arrests a shoplifter the host puts beside them. Then the client calls for ba
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
 host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece, the front pages and the mutator, changes its own outfit at the locker board (the host checks it sees it), and that its own dispatcher spoke and its highlight photo was taken.
 
+## Bot play
+For play testing without a human at the keyboard (development builds), the local officer can play whole shifts by
+itself through the same inputs a player has: walking and sprinting, E and the conversation options, punches, the
+tackle, the weapons, and driving a cruiser by its throttle and wheel. It reads what a player would (the dispatch
+board, suspect descriptions, the bomb's riddles, what the drunk says), books its suspects at the cells, and walks in
+and out of buildings by their front doors (there's no navmesh in the generated city).
+
+`UnrealEditor.exe FTO.uproject -game -windowed -FTOBotPlay -FTOBotStyle=Careful -FTOBotShifts=1 -FTOBotShots=30 -FTOBotTag=run1`
+
+- `-FTOBotStyle=`: `Careful` (by the book), `Reckless` (arrests first, drives fast, always votes for overtime) or
+  `Explorer` (wanders on foot, picks up kit at the armory, takes every call it passes).
+- `-FTOBotShifts=N` shifts in a row (the host starts each one, and New shift in between), then it quits.
+- `-FTOBotShots=S`: a screenshot every S seconds (and at the end and on the scoreboard) into `Saved/Screenshots/Bot`.
+- `-FTOBotWaitFor=2`: the host waits (up to a minute) for that many officers before starting.
+- `-FTOCareerSlot=Name` keeps the bot's career apart from yours.
+
+It logs what it's doing and how the shift's going on `BOT:` lines (a status every 15 s, each call it takes, each
+conversation choice, the results and the scoreboard). With a listen-server host and a client both bot-playing, it's a
+two-player session. It plays like a fair but plain player: it can get stuck on scenery, and it doesn't plan routes.
+
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine
   animations (walking, jogging, jumping, holding a pistol or rifle) and ragdoll (`PA_Mannequin`). That content ships with

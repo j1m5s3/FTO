@@ -711,6 +711,23 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 	{
 		ApplySprint();
 	}
+	// An arrest that's over without us (they got away, or they're gone): out of the cuffing or the wrestling, free to move.
+	if (HasAuthority() && (SyncedAction.Action == EFTOAnimAction::Cuffing || SyncedAction.Action == EFTOAnimAction::Struggle))
+	{
+		const AFTOPerp* Perp = Cast<AFTOPerp>(SyncedAction.Partner);
+		const bool bStillOn = IsValid(Perp) && Perp->GetArrester() == this
+			&& (Perp->GetArrestState() == EFTOPerpArrest::Cuffing || Perp->GetArrestState() == EFTOPerpArrest::Struggling);
+		// (And never longer than any arrest takes: a wrestle's 7 s at most, the cuffs 2.6 s.)
+		const bool bOverdue = GetWorld()->GetTimeSeconds() - SyncedActionSince > 20.f;
+		if (!bStillOn || bOverdue)
+		{
+			UE_LOG(LogFTO, Warning, TEXT("%s: the arrest of %s ended without us (%s: state %d, arrester %s, %.0f cm away, hidden %d, ticking %d): free to move."),
+				*GetName(), *GetNameSafe(SyncedAction.Partner), bOverdue ? TEXT("overdue") : TEXT("over"), Perp ? int32(Perp->GetArrestState()) : -1,
+				Perp ? *GetNameSafe(Perp->GetArrester()) : TEXT("-"), Perp ? FVector::Dist(Perp->GetActorLocation(), GetActorLocation()) : -1.f,
+				Perp ? int32(Perp->IsHidden()) : -1, Perp ? int32(Perp->IsActorTickEnabled()) : -1);
+			EndSyncedAction();
+		}
+	}
 	// (The hot dog suit off while we're a ragdoll, back on when we're up.)
 	const AFTOPlayerState* Badge = GetPlayerState<AFTOPlayerState>();
 	const bool bWantSuit = Badge && Badge->GetOutfit() == TEXT("HotDog") && !(Knockdown && Knockdown->IsDown());
@@ -1588,6 +1605,7 @@ void AFTOCharacter::BeginSyncedAction(EFTOAnimAction Action, const FVector& Feet
 		GetWorldTimerManager().ClearTimer(ReloadTimer);
 		OnRep_Loadout();
 	}
+	SyncedActionSince = GetWorld()->GetTimeSeconds();
 	SyncedAction.Action = Action;
 	SyncedAction.Location = Feet + FVector(0.f, 0.f, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 	SyncedAction.Yaw = Yaw;

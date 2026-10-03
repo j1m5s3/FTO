@@ -382,6 +382,8 @@ protected:
 	FVector SyncFrom = FVector::ZeroVector;
 	FQuat SyncFromRotation = FQuat::Identity;
 	float SyncStartTime = -1.f;
+	/** When the synced action began (server). */
+	float SyncedActionSince = 0.f;
 	static constexpr float SyncEaseSeconds = 0.3f;
 
 	// ---- Weapons ----
