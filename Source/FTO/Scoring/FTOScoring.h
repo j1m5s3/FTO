@@ -83,7 +83,7 @@ namespace FTOScoring
 	 */
 	FTO_API bool DebriefSpots(const UWorld* World, int32 Count, TArray<FTransform>& OutFeet, FTransform& OutCamera);
 	/** A letter grade for the shift: S, A, B, C, D or F. */
-	FTO_API FString Grade(int32 TeamScore, int32 Officers, bool bSurvived, float PeakChaos);
+	FTO_API FString Grade(int32 TeamScore, int32 Officers, bool bSurvived, float PeakChaos, float MinutesOnDuty = 10.f);
 	/** Shift awards for the scoreboard, one line per officer who earned one ("Top Cop", "Traffic Warden"...). */
 	FTO_API TArray<FString> AwardsFor(const AFTOPlayerState* Officer, const TArray<const AFTOPlayerState*>& Squad);
 }

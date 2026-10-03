@@ -185,7 +185,7 @@ protected:
 	UPROPERTY(Replicated) float ShiftEndTime = 0.f;
 	UPROPERTY(Replicated) float VoteEndTime = 0.f;
 	UPROPERTY(Replicated) float VoteDuration = 20.f;
-	UPROPERTY(Replicated) float OvertimeOffer = 600.f;
+	UPROPERTY(Replicated) float OvertimeOffer = 300.f;
 	UPROPERTY(Replicated) int32 Overtimes = 0;
 
 	UPROPERTY(Replicated) TArray<TObjectPtr<AFTOIncident>> Incidents;

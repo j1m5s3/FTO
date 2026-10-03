@@ -68,7 +68,7 @@ void UFTOCrimeDirector::BeginShift(int32 Seed)
 	const float Now = GetWorld()->GetTimeSeconds();
 	GS->SetShiftTimes(Now + BriefingSeconds, Now + BriefingSeconds + ShiftLengthSeconds);
 	GS->SetShiftPhase(EFTOShiftPhase::Briefing);
-	NextSpawnTime = Now + BriefingSeconds + 3.f;
+	NextSpawnTime = Now + BriefingSeconds + FirstCrimeDelay;
 	bShiftStarted = true;
 
 	RefreshSpawnPoints();
@@ -266,6 +266,21 @@ bool UFTOCrimeDirector::IsTooCloseToActiveIncident(const FVector& Location) cons
 	return false;
 }
 
+TArray<FVector> UFTOCrimeDirector::GetOfficerLocations() const
+{
+	TArray<FVector> Out;
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APawn* Pawn = It->Get() ? It->Get()->GetPawn() : nullptr;
+		const AFTOCharacter* OnFoot = Cast<AFTOCharacter>(Pawn);
+		if (Pawn && !(OnFoot && OnFoot->IsDowned()))
+		{
+			Out.Add(Pawn->GetActorLocation());
+		}
+	}
+	return Out;
+}
+
 bool UFTOCrimeDirector::PickLocation(FName TemplateId, FTransform& OutWhere, int32& OutBuilding)
 {
 	OutBuilding = INDEX_NONE;
@@ -280,6 +295,26 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FTransform& OutWhere, int
 			!(Wreckage && Wreckage->IsBuildingDown(Point->BuildingIndex)))
 		{
 			Candidates.Add(Point);
+		}
+	}
+	// Usually somewhere near one of the officers (each in turn), so nobody spends the shift driving between calls: a
+	// short run away first, a bit further if there's nothing that close (never closer: they still have to go and look).
+	const TArray<FVector> Officers = GetOfficerLocations();
+	if (Candidates.Num() > 0 && Officers.Num() > 0 && Rng.FRand() < NearOfficerChance)
+	{
+		const FVector Focus = Officers[NextOfficerFocus++ % Officers.Num()];
+		for (const float Stretch : { 1.f, 2.f })
+		{
+			TArray<AFTOCrimeSpawnPoint*> Near = Candidates.FilterByPredicate([&](const AFTOCrimeSpawnPoint* Point)
+			{
+				const float Dist = FVector::Dist2D(Point->GetActorLocation(), Focus);
+				return Dist >= NearOfficerRange.X && Dist <= NearOfficerRange.Y * Stretch;
+			});
+			if (Near.Num() > 0)
+			{
+				Candidates = MoveTemp(Near);
+				break;
+			}
 		}
 	}
 	if (Candidates.Num() > 0)
@@ -566,7 +601,7 @@ void UFTOCrimeDirector::ResolveOvertimeVote()
 	if (bOvertime)
 	{
 		GS->StartOvertime(OvertimeSeconds);
-		NextSpawnTime = GetWorld()->GetTimeSeconds() + 3.f;
+		NextSpawnTime = GetWorld()->GetTimeSeconds() + FirstCrimeDelay;
 		Message = FText::Format(INVTEXT("OVERTIME! Another {0} minutes on the clock."), FText::AsNumber(FMath::RoundToInt(OvertimeSeconds / 60.f)));
 	}
 	else

@@ -6,7 +6,7 @@
 - **Title**: FTO.
 - **Camera**: third person (over the shoulder when a weapon is up; chase or seat view in a cruiser).
 - **Hosting**: listen server, the host plays (the code stays dedicated-server ready).
-- **Shift length**: 20 minutes. When the clock runs out the squad gets an end-of-shift prompt to **extend the shift**
+- **Shift length**: 10 minutes (overtime adds 5). When the clock runs out the squad gets an end-of-shift prompt to **extend the shift**
   (another round of time with the chaos carried over) or clock off to the scoreboard. Everyone votes; the host's
   choice settles a tie or a vote nobody answers.
 
@@ -22,7 +22,7 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
 4. **Never the same shift twice.** Crimes are procedurally generated from templates, modifiers and escalation chains.
 5. **Light-hearted.** No gore. Suspects are "bonked" and "cuffed", not killed. Crime flavour text is jokey.
 
-## Core loop (one shift = 20 min, extendable)
+## Core loop (one shift = 10 min, extendable)
 1. Shift starts at the precinct. Dispatch board shows incoming calls.
 2. Players split up: take calls, patrol, run traffic stops.
 3. Unattended incidents tick the Chaos Meter up; resolving them pulls it down.
@@ -36,6 +36,13 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
 - Resolving an incident subtracts `ChaosRelief`. Witnessed-in-progress catches give a bonus.
 - Passive decay when the city is calm; the director spawns crimes faster as chaos rises (feedback loop players must break).
 - 100 = shift failed.
+
+## Pacing
+- A new crime every 12 s or so in a calm city, down to every 4.5 s as chaos climbs (solo slower: x1.5; two officers
+  x1.1). The first one comes 2 s after the briefing. Up to 4 + 2 per officer at once.
+- Three in four new crimes land a short run or drive from an officer (25-60 m, just out of sight, else up to 120 m),
+  the squad taking turns (skipping anyone who's down), so there's always something close; the rest land anywhere.
+- Grades are per officer and per ten minutes on the clock (overtime doesn't make an S easier).
 
 ## Incidents (procedural)
 Every incident is built at runtime from a **template** + **modifiers**:
@@ -145,7 +152,7 @@ Done:
   shift the squad lines up outside the precinct, dancing (or slumping), while a scoreboard counts up, ranks them,
   hands out awards (Top Cop, Traffic Warden, Bull in a China Shop...) and grades the shift S to F.
 
-- Shift extension. When the 20-minute clock runs out the city holds still while the squad votes: ten minutes of
+- Shift extension. When the clock runs out the city holds still while the squad votes: five minutes of
   overtime (chaos and all), or clock off to the scoreboard. Most votes win; the host breaks ties and speaks for anyone
   who stays quiet.
 

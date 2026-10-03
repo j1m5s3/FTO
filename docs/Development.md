@@ -105,7 +105,7 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   point with the mouse / right stick and let go, or press 1-4: *Need backup!*, *Suspect fleeing!* (pings the nearest
   getaway), *Officer down!* (pings the nearest downed partner) and *10-4*. Pings show on everyone's HUD for 20 s.
   Going down calls *Officer down!* for you. Voice needs a microphone and uses the engine's VOIP (push-to-talk only).
-- **End of shift**: when the 20-minute clock runs out the city holds still and everyone votes: Y (left bumper) for 10
+- **End of shift**: when the 10-minute clock runs out the city holds still and everyone votes: Y (left bumper) for 5
   minutes of overtime (chaos carries over; the clock reads OVERTIME), N (view button) to clock off. Most votes win;
   the host's vote breaks a tie and decides for anyone who says nothing within 20 s. Clocking off (or the city falling)
   lines the squad up outside the precinct for the scoreboard.
@@ -119,7 +119,8 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 ## Smoke test
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
-Along the way it books a suspect into the cells (and checks they scored), runs the shift clock out and votes for
+Along the way it books a suspect into the cells (and checks they scored), checks the shift is ten minutes and that
+the director puts new crimes a short run from the officer, runs the shift clock out and votes for
 overtime, runs it out again and clocks off to the scoreboard with the squad lined up dancing outside the precinct,
 looks inside every kind of building (with their people), stages a
 hold-up and a bar brawl, questions a crook, walks through front doors, checks that shop windows let sight through,
