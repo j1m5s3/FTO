@@ -2965,7 +2965,7 @@ void AFTOSmokeTest::BuildSteps()
 			// (Nobody else's car wandering into the run-up.)
 			for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It; ++It)
 			{
-				if (FMath::PointDistToSegment(It->GetActorLocation(), Start, TestTarget) < 600.f)
+				if (FMath::PointDistToSegment(It->GetActorLocation(), Start, TestTarget) < 2000.f)
 				{
 					It->Destroy();
 				}
