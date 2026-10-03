@@ -86,6 +86,10 @@ protected:
 	float StuckFor = 0.f;
 	float EscapeUntil = 0.f;
 	FVector EscapeDir = FVector::ZeroVector;
+	/** Driving: the closest we've got to the goal, and when; no cruisers until this (after one got us nowhere). */
+	float BestDriveDistance = TNumericLimits<float>::Max();
+	float DriveProgressAt = 0.f;
+	float NoDriveUntil = 0.f;
 
 	// Pacing ourselves.
 	float NextThink = 0.f;

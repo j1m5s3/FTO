@@ -23,6 +23,7 @@
 #include "Scoring/FTOScoring.h"
 #include "UnrealClient.h"
 #include "Vehicles/FTOCruiser.h"
+#include "Physics/FTOVehicleDamage.h"
 #include "Weapons/FTOArmoryRack.h"
 #include "FTO.h"
 
@@ -176,6 +177,12 @@ void AFTOBotPilot::Press()
 
 void AFTOBotPilot::GoTo(const FVector& Where, bool bInRun, bool bAllowDrive)
 {
+	// (A new destination: the drive's progress counts from here.)
+	if (!bGoal || FVector::Dist2D(Where, Goal) > 2000.f)
+	{
+		BestDriveDistance = TNumericLimits<float>::Max();
+		DriveProgressAt = GetWorld()->GetRealTimeSeconds();
+	}
 	Goal = Where;
 	bGoal = true;
 	bRun = bInRun;
@@ -759,14 +766,29 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 		// Driving: steer for the goal; out once we're there (unless it's a chase).
 		const AFTOIncident* Incident = Target.Get();
 		const bool bChase = Incident && Incident->IsMobile() && !Incident->GetPerp();
-		if (!bGoal || (!bChase && Close(Goal, 900.f)))
+		// (The car moves itself, kinematically: its speed is its own, not the root's velocity.)
+		const float Speed = FMath::Abs(Car->GetSpeed());
+		const float ToGoal = FVector::Dist2D(Goal, Car->GetActorLocation());
+		// Not getting any closer (wedged, wrecked, going round in circles): out, and on foot for a while.
+		if (bGoal && ToGoal < BestDriveDistance - 500.f)
 		{
-			Car->SetAutopilot(true, -1.f, 0.f);
-			if (Car->GetVelocity().Size() < 150.f && Now >= NextPress)
+			BestDriveDistance = ToGoal;
+			DriveProgressAt = Now;
+		}
+		const bool bWrecked = Car->GetDamage() && Car->GetDamage()->IsWrecked();
+		const bool bNoProgress = bGoal && Now - DriveProgressAt > 10.f;
+		if (bNoProgress || bWrecked)
+		{
+			NoDriveUntil = Now + 60.f;
+		}
+		if (!bGoal || bNoProgress || bWrecked || (!bChase && ToGoal < 1500.f))
+		{
+			Car->SetAutopilot(true, Speed > 100.f ? -1.f : 0.f, 0.f);
+			if (Speed < 150.f && Now >= NextPress)
 			{
 				NextPress = Now + 1.5f;
 				Car->RequestExit();
-				Say(TEXT("out of the car."));
+				Say(bWrecked ? TEXT("the car's a write-off: out, on foot.") : bNoProgress ? TEXT("getting nowhere in the car: out, on foot.") : TEXT("out of the car."));
 			}
 			return;
 		}
@@ -775,7 +797,7 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 		float Throttle = FMath::Clamp(To.Size2D() / 2500.f, 0.35f, 1.f) * (FMath::Abs(Angle) > 100.f ? 0.45f : 1.f);
 		float Wheel = FMath::Clamp(Angle / 35.f, -1.f, 1.f);
 		// Stuck against something: back off with the wheel the other way.
-		StuckFor = Car->GetVelocity().Size() < 80.f ? StuckFor + DeltaSeconds : 0.f;
+		StuckFor = Speed < 80.f && Now >= EscapeUntil ? StuckFor + DeltaSeconds : 0.f;
 		if (StuckFor > 1.5f)
 		{
 			EscapeUntil = Now + 1.4f;
@@ -799,7 +821,7 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 	}
 	const float Distance = FVector::Dist2D(Goal, Here());
 	// Far: a cruiser's quicker, if there's a free one near.
-	if (bMayDrive && Distance > 5000.f && Style != TEXT("Explorer"))
+	if (bMayDrive && Distance > 5000.f && Style != TEXT("Explorer") && Now >= NoDriveUntil)
 	{
 		for (TActorIterator<AFTOCruiser> It(GetWorld()); It; ++It)
 		{
@@ -811,6 +833,8 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 					{
 						NextPress = Now + 1.5f;
 						FTOPC->FTODrive();
+						BestDriveDistance = TNumericLimits<float>::Max();
+						DriveProgressAt = Now;
 						Say(TEXT("into a cruiser."));
 					}
 					return;
