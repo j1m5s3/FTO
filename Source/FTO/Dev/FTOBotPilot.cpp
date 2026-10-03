@@ -2,6 +2,8 @@
 #include "City/FTOCityGenerator.h"
 #include "City/FTOLift.h"
 #include "City/FTOPedestrian.h"
+#include "City/FTOTrafficCar.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOGameMode.h"
 #include "Core/FTOGameState.h"
@@ -163,6 +165,35 @@ void AFTOBotPilot::Face(const FVector& Where)
 	{
 		Officer->SetActorRotation(FRotator(0.f, To.Rotation().Yaw, 0.f));
 	}
+}
+
+void AFTOBotPilot::Aim(const FVector& Where)
+{
+	// The crosshair onto Where: from the camera, which is where a round's aimed from.
+	APlayerController* Controller = PC();
+	if (!Controller || !Controller->PlayerCameraManager)
+	{
+		return;
+	}
+	const FRotator Look = (Where - Controller->PlayerCameraManager->GetCameraLocation()).Rotation();
+	Controller->SetControlRotation(FRotator(Look.Pitch, Look.Yaw, 0.f));
+	if (AFTOCharacter* Officer = Me(); Officer && !MyCar())
+	{
+		Officer->SetActorRotation(FRotator(0.f, Look.Yaw, 0.f));
+	}
+}
+
+bool AFTOBotPilot::InSight(const AActor* Who) const
+{
+	const APawn* Pawn = PC() ? PC()->GetPawn() : nullptr;
+	if (!Pawn || !Who)
+	{
+		return false;
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOBotSight), false, Pawn);
+	Params.AddIgnoredActor(Who);
+	FHitResult Hit;
+	return !GetWorld()->LineTraceSingleByChannel(Hit, Pawn->GetPawnViewLocation(), Who->GetActorLocation() + FVector(0.f, 0.f, 30.f), ECC_Visibility, Params);
 }
 
 void AFTOBotPilot::Press()
@@ -337,6 +368,8 @@ AFTOIncident* AFTOBotPilot::PickTarget() const
 		{
 			Score -= 1500.f * int32(Incident->GetInfo().Tier); // the big ones first
 		}
+		// One about to escalate or go cold, before it does.
+		Score -= 3000.f * Incident->GetUrgency();
 		if (Incident->IsMobile() && !Perp)
 		{
 			Score += Style == TEXT("Reckless") ? -1500.f : 2000.f; // a car chase: Reckless loves one
@@ -359,17 +392,32 @@ bool AFTOBotPilot::TakeThemIn()
 	{
 		Following += It->GetEscort() == Officer && It->GetArrestState() == EFTOArresteeState::Escorted ? 1 : 0;
 	}
+	// (Straight to the cells, as a player would: a suspect left trailing about the city is a suspect who slips off. Only
+	// a suspect already down on the ground right here comes first.)
 	const AFTOIncident* Next = PickTarget();
-	const bool bTime = Following >= 3 || (Following > 0 && (!Next || FVector::Dist2D(Next->GetActorLocation(), Here()) > 5000.f));
-	if (!bTime)
+	const bool bTime = Following > 0 && !(Next && (Next->IsSubdued() || Next->IsFootChase()) && FVector::Dist2D(Next->GetActorLocation(), Here()) < 2500.f);
+	const float Now = GetWorld()->GetRealTimeSeconds();
+	if (bTime && bBooking && Now - LeftProgressAt > 60.f && Now >= NoBookingUntil)
 	{
+		Say(TEXT("can't find a way to the cells: on with the calls for a minute (they'll tag along)."));
+		NoBookingUntil = Now + 60.f;
+	}
+	if (!bTime || Now < NoBookingUntil)
+	{
+		bBooking = false;
 		return false;
 	}
 	for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
 	{
+		if (!bBooking)
+		{
+			bBooking = true;
+			Say(FString::Printf(TEXT("taking %d suspect(s) to the cells (%.0f m)."), Following, FVector::Dist2D(It->GetHoldingCellsLocation(), Here()) / 100.f));
+		}
 		GoTo(It->GetHoldingCellsLocation(), false, true);
 		break;
 	}
+	TargetProgressAt = GetWorld()->GetRealTimeSeconds(); // (the call waits)
 	return true;
 }
 
@@ -386,9 +434,14 @@ void AFTOBotPilot::Think()
 		{
 			Open += Incident && Incident->IsActive() && Incident->IsKnownToDispatch() ? 1 : 0;
 		}
-		Say(FString::Printf(TEXT("status: %.0f s left, chaos %.0f%%, %d calls open, score %d, squad combo %d, target %s%s."), GS()->GetShiftTimeRemaining(),
-			GS()->GetChaos(), Open, PS ? PS->GetShiftScore() : -1, GS()->GetSquadCombo(), Target.IsValid() ? *Target->GetInfo().Title.ToString() : TEXT("none"),
-			MyCar() ? TEXT(" (driving)") : TEXT("")));
+		UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+		const FVector At = Here();
+		Say(FString::Printf(TEXT("status: %.0f s left, chaos %.0f%%, %d calls open, score %d, squad combo %d, target %s%s; at %.0f,%.0f,%.0f%s, goal %.0f m; paths %d full, %d partial, %d none; navmesh %s."),
+			GS()->GetShiftTimeRemaining(), GS()->GetChaos(), Open, PS ? PS->GetShiftScore() : -1, GS()->GetSquadCombo(), Target.IsValid() ? *Target->GetInfo().Title.ToString() : TEXT("none"),
+			MyCar() ? TEXT(" (driving)") : bBooking ? TEXT(" (booking)") : !Officer ? TEXT(" (no officer)") : Officer->IsInSyncedAction() ? *FString::Printf(TEXT(" (in a synced %s with %s)"), *StaticEnum<EFTOAnimAction>()->GetNameStringByValue(int64(Officer->GetSyncedAction())), *GetNameSafe(Officer->GetSyncedPartner())) : Officer->GetTalkingTo() ? *FString::Printf(TEXT(" (talking to %s)"), *GetNameSafe(Officer->GetTalkingTo())) : Officer->IsDowned() ? TEXT(" (downed)") : TEXT(""), At.X / 100.f, At.Y / 100.f, At.Z / 100.f,
+			MyCar() ? *FString::Printf(TEXT(" at %.0f km/h"), FMath::Abs(MyCar()->GetSpeed()) * 0.036f) : TEXT(""), bGoal ? FVector::Dist2D(Goal, At) / 100.f : 0.f,
+			PathsFull, PathsPartial, PathsNone, !Nav ? TEXT("none") : Nav->IsNavigationBuildInProgress() ? *FString::Printf(TEXT("building (%d tiles to go)"), Nav->GetNumRemainingBuildTasks()) : TEXT("built")));
+		PathsFull = PathsPartial = PathsNone = 0;
 	}
 	if (!Officer || Officer->IsDowned() || (Officer->GetKnockdown() && Officer->GetKnockdown()->IsDown()))
 	{
@@ -440,18 +493,41 @@ void AFTOBotPilot::Think()
 	{
 		return;
 	}
-	// A minute and a half on one call and still nowhere: let it go for a minute (as a player would), and take another.
-	if (Target.IsValid() && Now - TargetSince > 90.f)
+	// A call that's getting nowhere (no closer, no further on, the suspect doing nothing new) for a minute and a
+	// quarter: let it go for a minute (as a player would), and take another.
+	if (AFTOIncident* Current = Target.Get())
 	{
-		Say(FString::Printf(TEXT("giving up on %s for now."), *Target->GetInfo().Title.ToString()));
-		GivenUp.Add(Target, Now + 60.f);
-		Target = nullptr;
+		const float Distance = FVector::Dist2D(Current->GetActorLocation(), Here());
+		const uint8 PerpState = Current->GetPerp() ? uint8(Current->GetPerp()->GetArrestState()) : 254;
+		if (Distance < TargetBestDistance - 300.f || Current->GetProgress() > TargetBestProgress + 0.02f || PerpState != TargetPerpState)
+		{
+			TargetBestDistance = FMath::Min(Distance, TargetBestDistance);
+			TargetBestProgress = FMath::Max(Current->GetProgress(), TargetBestProgress);
+			TargetPerpState = PerpState;
+			TargetProgressAt = Now;
+		}
+		if (Now - TargetProgressAt > 75.f)
+		{
+			Say(FString::Printf(TEXT("giving up on %s for now (%.0f s on it, nothing doing for %.0f s; %.0f m away, progress %.0f%%)."), *Current->GetInfo().Title.ToString(),
+				Now - TargetSince, Now - TargetProgressAt, Distance / 100.f, 100.f * Current->GetProgress()));
+			Shot(TEXT("giveup"));
+			GivenUp.Add(Target, Now + 60.f);
+			Target = nullptr;
+		}
 	}
 	AFTOIncident* Incident = PickTarget();
 	if (Incident != Target.Get())
 	{
+		if (AFTOIncident* Old = Target.Get(); Old && Old->IsActive())
+		{
+			Say(FString::Printf(TEXT("leaving %s for now."), *Old->GetInfo().Title.ToString()));
+		}
 		Target = Incident;
 		TargetSince = Now;
+		TargetProgressAt = Now;
+		TargetBestDistance = TNumericLimits<float>::Max();
+		TargetBestProgress = 0.f;
+		TargetPerpState = 255;
 		Questioned.Reset();
 		if (Incident)
 		{
@@ -651,22 +727,34 @@ void AFTOBotPilot::Work(AFTOIncident* Incident)
 		}
 		return;
 	}
-	// A gun out: the taser (from a little way off).
-	if (Perp->GetAimPose() != EFTOAimPose::None && State == EFTOPerpArrest::None)
+	// Armed (or a gun out): in quickly with the taser up, and zap them from inside its nine metres before they get a
+	// bead on us. Tasered, they're on the floor and as good as caught.
+	if ((Info.bArmed || Perp->GetAimPose() != EFTOAimPose::None) && Perp->IsCriminal() && State == EFTOPerpArrest::None && !Incident->IsSubdued())
 	{
-		GoTo(At, false, true);
-		if (Close(At, 1300.f))
+		const float Distance = FVector::Dist2D(At, Here());
+		GoTo(At, true, true);
+		if (Distance < 2500.f && FMath::Abs(At.Z - Here().Z) < 250.f)
 		{
-			bGoal = !Close(At, 900.f);
-			Face(At + FVector(0.f, 0.f, 40.f));
-			if (Officer->GetDrawnWeapon() == EFTOWeapon::None)
+			if (Officer->GetDrawnWeapon() != EFTOWeapon::Taser && Now >= NextSwing)
 			{
+				NextSwing = Now + 0.5f;
 				Officer->SelectSlot(0);
 			}
-			else if (Now >= NextSwing)
+			const bool bSeen = InSight(Perp);
+			if (Distance < 550.f && bSeen)
 			{
-				NextSwing = Now + 0.9f;
+				bGoal = false; // (close enough: stand and shoot)
+			}
+			if (Distance < 800.f && bSeen && Officer->GetDrawnWeapon() == EFTOWeapon::Taser && Now >= NextSwing)
+			{
+				Aim(At + FVector(0.f, 0.f, 20.f));
+				NextSwing = Now + 0.8f;
 				Officer->FirePressed();
+				if (Now >= NextZapLog)
+				{
+					NextZapLog = Now + 5.f;
+					Say(FString::Printf(TEXT("tasering the armed suspect (%.0f m)."), Distance / 100.f));
+				}
 			}
 		}
 		return;
@@ -813,6 +901,16 @@ void AFTOBotPilot::PlanRoute(const FVector& From)
 	{
 		Route.Add(City->GetIntersection(I1, J + StepJ));
 	}
+	// And along the street to the kerb nearest the goal (pulling up there: never across the pavement).
+	const FVector Last = City->GetIntersection(I1, J1);
+	const FVector AlongX(Goal.X, Last.Y, Last.Z);
+	const FVector AlongY(Last.X, Goal.Y, Last.Z);
+	const FVector Kerb = FVector::DistSquared2D(AlongX, Goal) < FVector::DistSquared2D(AlongY, Goal) ? AlongX : AlongY;
+	if (FVector::Dist2D(Kerb, Last) > 900.f)
+	{
+		Route.Add(Kerb);
+	}
+	LaneOffset = City->GetRoadWidth() * 0.25f;
 }
 
 void AFTOBotPilot::EnsureNavMesh()
@@ -823,13 +921,31 @@ void AFTOBotPilot::EnsureNavMesh()
 	{
 		return;
 	}
-	const AFTOCityGenerator* City = TActorIterator<AFTOCityGenerator>(GetWorld()) ? *TActorIterator<AFTOCityGenerator>(GetWorld()) : nullptr;
+	AFTOCityGenerator* City = TActorIterator<AFTOCityGenerator>(GetWorld()) ? *TActorIterator<AFTOCityGenerator>(GetWorld()) : nullptr;
 	UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
 	if (!City || !City->IsGeometryBuilt() || !Nav)
 	{
 		return;
 	}
 	bNavRequested = true;
+	// The city's walls, floors, stairs and furniture are what the navmesh is built from (they're kept out of navigation
+	// in normal play, there being no navmesh); everything that moves stays out of it.
+	int32 Solid = 0;
+	TInlineComponentArray<UInstancedStaticMeshComponent*> Pieces(City);
+	for (UInstancedStaticMeshComponent* Piece : Pieces)
+	{
+		if (Piece->GetCollisionEnabled() != ECollisionEnabled::NoCollision)
+		{
+			Piece->SetCanEverAffectNavigation(true);
+			++Solid;
+		}
+	}
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		QuietNav(*It);
+	}
+	SpawnedHandle = GetWorld()->AddOnActorSpawnedHandler(FOnActorSpawned::FDelegate::CreateUObject(this, &AFTOBotPilot::OnSpawned));
+	Say(FString::Printf(TEXT("the navmesh is built from %d pieces of the city."), Solid));
 	const FVector Extent = City->GetCityExtent();
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -849,35 +965,153 @@ void AFTOBotPilot::EnsureNavMesh()
 	Say(FString::Printf(TEXT("building a navmesh over the city (%.0f x %.0f m)."), Box->GetScaledBoxExtent().X / 50.f, Box->GetScaledBoxExtent().Y / 50.f));
 }
 
+void AFTOBotPilot::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (SpawnedHandle.IsValid())
+	{
+		GetWorld()->RemoveOnActorSpawnedHandler(SpawnedHandle);
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void AFTOBotPilot::QuietNav(AActor* Actor)
+{
+	if (!Actor || Actor->IsA<AFTOCityGenerator>())
+	{
+		return;
+	}
+	TInlineComponentArray<UPrimitiveComponent*> Parts(Actor);
+	for (UPrimitiveComponent* Part : Parts)
+	{
+		if (Part->Mobility != EComponentMobility::Static && Part->CanEverAffectNavigation())
+		{
+			Part->SetCanEverAffectNavigation(false);
+		}
+	}
+}
+
+void AFTOBotPilot::OnSpawned(AActor* Actor)
+{
+	QuietNav(Actor);
+}
+
 FVector AFTOBotPilot::NextStep(const FVector& Where)
 {
-	// The navmesh's path to Where (asked again every couple of seconds, or when Where moves), a corner at a time.
+	// The navmesh's path to Where (asked again every couple of seconds, or when Where moves), a corner at a time. No
+	// path all the way (it's upstairs, or the navmesh isn't built there yet): by the building's door or the outside
+	// stairs, as far as that gets us.
 	const float Now = GetWorld()->GetRealTimeSeconds();
 	const FVector From = Here();
 	if (Now >= NextPathTime || FVector::Dist(PathGoal, Where) > 300.f)
 	{
-		NextPathTime = Now + 2.f;
+		NextPathTime = Now + 1.5f;
 		PathGoal = Where;
 		Path.Reset();
 		PathIndex = 1;
-		if (UNavigationPath* Found = UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(), From, Where, PC() ? PC()->GetPawn() : nullptr))
+		bPathFull = false;
+		APawn* Pawn = PC() ? PC()->GetPawn() : nullptr;
+		auto Find = [&](const FVector& To, bool& bOutFull) -> bool
 		{
-			if (Found->IsValid() && Found->PathPoints.Num() > 1)
+			UNavigationPath* Found = UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(), From, To, Pawn);
+			if (!Found || !Found->IsValid() || Found->PathPoints.Num() < 2)
 			{
-				Path = Found->PathPoints;
-				if (!bPathsWork)
-				{
-					bPathsWork = true;
-					Say(TEXT("the navmesh is up: finding my way by it."));
-				}
+				return false;
+			}
+			Path = Found->PathPoints;
+			bOutFull = !Found->IsPartial();
+			return true;
+		};
+		bool bFull = false;
+		const bool bAny = Find(Where, bFull);
+		if (!bFull)
+		{
+			const FVector Via = Waypoint(Where);
+			bool bViaFull = false;
+			const TArray<FVector> Partial = Path;
+			if (FVector::Dist(Via, Where) > 10.f && Find(Via, bViaFull))
+			{
+				bFull = false; // (the way in, not all the way)
+			}
+			else
+			{
+				Path = Partial;
 			}
 		}
+		bPathFull = bFull;
+		(bFull ? PathsFull : (Path.Num() > 1 ? PathsPartial : PathsNone))++;
+		if (bAny && bFull && !bPathsWork)
+		{
+			bPathsWork = true;
+			Say(FString::Printf(TEXT("the navmesh is up: finding my way by it (a path of %d corners, %.0f m)."), Path.Num(), PathLeft() / 100.f));
+		}
 	}
-	while (Path.IsValidIndex(PathIndex) && FVector::Dist2D(Path[PathIndex], From) < 90.f)
+	while (Path.IsValidIndex(PathIndex) && FVector::Dist2D(Path[PathIndex], From) < 80.f && FMath::Abs(Path[PathIndex].Z - (From.Z - 96.f)) < 150.f)
 	{
 		++PathIndex;
 	}
 	return Path.IsValidIndex(PathIndex) ? Path[PathIndex] : Where;
+}
+
+void AFTOBotPilot::Watch(float Left)
+{
+	const float Now = GetWorld()->GetRealTimeSeconds();
+	if (FVector::Dist2D(Goal, WatchGoal) > 400.f)
+	{
+		WatchGoal = Goal;
+		BestLeft = Left;
+		LeftProgressAt = Now;
+		return;
+	}
+	if (Left < BestLeft - 150.f)
+	{
+		BestLeft = Left;
+		LeftProgressAt = Now;
+	}
+	if (Now - LeftProgressAt > 15.f && Now >= NextStuckReport)
+	{
+		NextStuckReport = Now + 30.f;
+		const FVector At = Here();
+		Say(FString::Printf(TEXT("stuck: %.0f s without getting closer (%.0f m to go, %s; at %.0f,%.0f,%.0f, going to %.0f,%.0f,%.0f)."), Now - LeftProgressAt, Left / 100.f,
+			MyCar() ? TEXT("driving") : bPathFull ? TEXT("on a path") : Path.Num() > 1 ? TEXT("a partial path") : TEXT("no path"),
+			At.X / 100.f, At.Y / 100.f, At.Z / 100.f, Goal.X / 100.f, Goal.Y / 100.f, Goal.Z / 100.f));
+		if (!MyCar() && !bPathFull)
+		{
+			// (Why there's no way there: the path's end, and whether the goal's building can be got into from its door.)
+			const AFTOCityGenerator* City = TActorIterator<AFTOCityGenerator>(GetWorld()) ? *TActorIterator<AFTOCityGenerator>(GetWorld()) : nullptr;
+			FString Why = Path.Num() > 1 ? FString::Printf(TEXT("the path ends at %.0f,%.0f,%.0f"), Path.Last().X / 100.f, Path.Last().Y / 100.f, Path.Last().Z / 100.f) : TEXT("no path");
+			for (int32 i = 0; City && i < City->GetBuildings().Num(); ++i)
+			{
+				const FFTOBuilding& B = City->GetBuildings()[i];
+				if (B.Contains(Goal, 30.f))
+				{
+					const UNavigationPath* In = UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(), B.DoorOutside + FVector(0.f, 0.f, 96.f), Goal, PC() ? PC()->GetPawn() : nullptr);
+					const UNavigationPath* Centre = UNavigationSystemV1::FindPathToLocationSynchronously(GetWorld(), B.DoorOutside + FVector(0.f, 0.f, 96.f), B.GetCenter() + FVector(0.f, 0.f, 50.f), PC() ? PC()->GetPawn() : nullptr);
+					Why += FString::Printf(TEXT("; the goal's in building %d (%s, type %d): door to goal %s, door to the middle %s"), i, *B.Name, int32(B.Type),
+						!In || !In->IsValid() ? TEXT("none") : In->IsPartial() ? *FString::Printf(TEXT("partial to %.0f,%.0f,%.0f"), In->PathPoints.Last().X / 100.f, In->PathPoints.Last().Y / 100.f, In->PathPoints.Last().Z / 100.f) : TEXT("ok"),
+						!Centre || !Centre->IsValid() ? TEXT("none") : Centre->IsPartial() ? TEXT("partial") : TEXT("ok"));
+					break;
+				}
+			}
+			Say(Why + TEXT("."));
+		}
+		Shot(TEXT("stuck"));
+		NextPathTime = 0.f; // (a fresh path)
+	}
+}
+
+float AFTOBotPilot::PathLeft() const
+{
+	if (!Path.IsValidIndex(PathIndex))
+	{
+		return FVector::Dist2D(Here(), Goal);
+	}
+	float Left = FVector::Dist2D(Here(), Path[PathIndex]);
+	for (int32 i = PathIndex; i + 1 < Path.Num(); ++i)
+	{
+		Left += FVector::Dist2D(Path[i], Path[i + 1]);
+	}
+	// (A partial path: the rest of the way, as the crow flies.)
+	return Left + (bPathFull ? 0.f : FVector::Dist2D(Path.Last(), Goal));
 }
 
 bool AFTOBotPilot::Blocked(const FVector& Dir) const
@@ -954,19 +1188,44 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 		// (The car moves itself, kinematically: its speed is its own, not the root's velocity.)
 		const float Speed = FMath::Abs(Car->GetSpeed());
 		const float ToGoal = FVector::Dist2D(Goal, Car->GetActorLocation());
-		// Not getting any closer (wedged, wrecked, going round in circles): out, and on foot for a while.
-		if (bGoal && ToGoal < BestDriveDistance - 500.f)
+		// By the streets, a junction at a time (never across the pavement and through a shop).
+		if (RouteGoal.IsZero() || FVector::Dist2D(RouteGoal, Goal) > 2000.f)
 		{
-			BestDriveDistance = ToGoal;
+			PlanRoute(Car->GetActorLocation());
+		}
+		while (Route.Num() > 0 && FVector::Dist2D(Route[0], Car->GetActorLocation()) < 700.f)
+		{
+			Route.RemoveAt(0);
+		}
+		// A chase, close: straight at them (and into them: a getaway car that's been rammed enough is going nowhere).
+		const bool bRam = bChase && ToGoal < 3500.f;
+		if (bRam)
+		{
+			Route.Reset();
+			RouteGoal = FVector::ZeroVector;
+		}
+		// The way still to go: along the route, then on to the goal.
+		float Left = 0.f;
+		FVector From = Car->GetActorLocation();
+		for (const FVector& Point : Route)
+		{
+			Left += FVector::Dist2D(From, Point);
+			From = Point;
+		}
+		Left += FVector::Dist2D(From, Goal);
+		// Not getting any closer (wedged, wrecked, going round in circles): out, and on foot for a while.
+		if (bGoal && (Left < BestDriveDistance - 500.f || (bChase && Speed > 400.f)))
+		{
+			BestDriveDistance = FMath::Min(Left, BestDriveDistance);
 			DriveProgressAt = Now;
 		}
 		const bool bWrecked = Car->GetDamage() && Car->GetDamage()->IsWrecked();
-		const bool bNoProgress = bGoal && Now - DriveProgressAt > 10.f;
+		const bool bNoProgress = bGoal && Now - DriveProgressAt > (bChase ? 20.f : 12.f);
 		if (bNoProgress || bWrecked)
 		{
 			NoDriveUntil = Now + 60.f;
 		}
-		if (!bGoal || bNoProgress || bWrecked || (!bChase && ToGoal < 1500.f))
+		if (!bGoal || bNoProgress || bWrecked || (!bChase && (ToGoal < 1500.f || Route.IsEmpty())))
 		{
 			Car->SetAutopilot(true, Speed > 100.f ? -1.f : 0.f, 0.f);
 			if (Speed < 150.f && Now >= NextPress)
@@ -977,24 +1236,46 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 			}
 			return;
 		}
-		// By the streets, a junction at a time (never across the pavement and through a shop).
-		if (RouteGoal.IsZero() || FVector::Dist2D(RouteGoal, Goal) > 2000.f)
+		// Keep to the right of the road (the oncoming lane's for overtaking), and slow down for the corners.
+		const FVector CarAt = Car->GetActorLocation();
+		FVector Next = Route.Num() > 0 ? Route[0] : Goal;
+		const FVector Leg = (Next - CarAt).GetSafeNormal2D();
+		if (Route.Num() > 0 && !bRam)
 		{
-			PlanRoute(Car->GetActorLocation());
+			Next += FVector(-Leg.Y, Leg.X, 0.f) * LaneOffset;
 		}
-		while (Route.Num() > 0 && FVector::Dist2D(Route[0], Car->GetActorLocation()) < 700.f)
+		if (bRam)
 		{
-			Route.RemoveAt(0);
-			DriveProgressAt = Now; // (a junction made is progress, whichever way the street runs)
+			// (Where they'll be in a moment.)
+			if (const AFTOTrafficCar* Quarry = Incident ? Cast<AFTOTrafficCar>(Incident->GetAttachParentActor()) : nullptr)
+			{
+				Next += Quarry->GetMoveDirection() * Quarry->GetCurrentSpeed() * 0.4f;
+			}
 		}
-		const FVector Next = Route.Num() > 0 ? Route[0] : Goal;
-		const FVector To = Next - Car->GetActorLocation();
+		const FVector To = Next - CarAt;
 		const float Angle = FMath::FindDeltaAngleDegrees(Car->GetActorRotation().Yaw, To.Rotation().Yaw);
-		float Throttle = FMath::Clamp(To.Size2D() / 2500.f, 0.35f, 1.f) * (FMath::Abs(Angle) > 100.f ? 0.45f : 1.f);
-		float Wheel = FMath::Clamp(Angle / 35.f, -1.f, 1.f);
+		float Want = bRam ? 2600.f : 2000.f;
+		if (Route.Num() >= 2)
+		{
+			const FVector After = (Route[1] - Route[0]).GetSafeNormal2D();
+			if (FVector::DotProduct(After, Leg) < 0.7f)
+			{
+				Want = FMath::Min(Want, FMath::GetMappedRangeValueClamped(FVector2D(800.f, 3500.f), FVector2D(800.f, 2000.f), To.Size2D()));
+			}
+		}
+		else if (!bRam)
+		{
+			Want = FMath::Min(Want, FMath::Max(500.f, ToGoal - 1200.f)); // (pulling up)
+		}
+		if (FMath::Abs(Angle) > 25.f)
+		{
+			Want = FMath::Min(Want, FMath::GetMappedRangeValueClamped(FVector2D(25.f, 90.f), FVector2D(1200.f, 500.f), FMath::Abs(Angle)));
+		}
+		float Throttle = FMath::Clamp((Want - Car->GetSpeed()) / 400.f, -1.f, 1.f);
+		float Wheel = FMath::Clamp(Angle / 30.f, -1.f, 1.f);
 		// Stuck against something: back off with the wheel the other way.
 		StuckFor = Speed < 80.f && Now >= EscapeUntil ? StuckFor + DeltaSeconds : 0.f;
-		if (StuckFor > 1.5f)
+		if (StuckFor > 1.2f)
 		{
 			EscapeUntil = Now + 1.4f;
 			StuckFor = 0.f;
@@ -1017,7 +1298,7 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 	}
 	const float Distance = FVector::Dist2D(Goal, Here());
 	// Far: a cruiser's quicker, if there's a free one near.
-	if (bMayDrive && Distance > 5000.f && Style != TEXT("Explorer") && Now >= NoDriveUntil)
+	if (bMayDrive && Distance > 8000.f && Style != TEXT("Explorer") && Now >= NoDriveUntil)
 	{
 		for (TActorIterator<AFTOCruiser> It(GetWorld()); It; ++It)
 		{
@@ -1037,7 +1318,7 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 					}
 					return;
 				}
-				const FVector ToCar = (It->GetActorLocation() - Here()).GetSafeNormal2D();
+				const FVector ToCar = (NextStep(It->GetActorLocation()) - Here()).GetSafeNormal2D();
 				Officer->AddMovementInput(ToCar, 1.f);
 				Controller->SetControlRotation(FRotator(-10.f, ToCar.Rotation().Yaw, 0.f));
 				return;
@@ -1048,10 +1329,21 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 	{
 		return;
 	}
-	FVector Dir = (NextStep(Waypoint(Goal)) - Here()).GetSafeNormal2D();
-	// A wall ahead (a house between us and a back garden): follow it round, always keeping it on the same side, till
-	// the way to the goal is clear again.
-	if (Blocked(Dir))
+	FVector Dir = (NextStep(Goal) - Here()).GetSafeNormal2D();
+	Watch(Distance > 250.f ? PathLeft() : 0.f);
+	// Getting nowhere with no path all the way: a few seconds feeling our way along the walls toward the door (or the
+	// goal) instead, as someone lost would.
+	if (!bPathFull && Now - LeftProgressAt > 10.f && Now > FeelUntil + 8.f)
+	{
+		FeelUntil = Now + 5.f;
+	}
+	if (Now < FeelUntil)
+	{
+		Dir = (Waypoint(Goal) - Here()).GetSafeNormal2D();
+	}
+	// No path all the way, and a wall ahead (a house between us and a back garden): follow it round, always keeping it
+	// on the same side, till the way to the goal is clear again.
+	if (!bPathFull && Blocked(Dir))
 	{
 		if (FollowSide == 0.f || Now > FollowUntil)
 		{

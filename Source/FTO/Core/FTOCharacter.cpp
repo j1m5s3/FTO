@@ -728,6 +728,12 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 			EndSyncedAction();
 		}
 	}
+	// A pat-down's a couple of seconds: never longer, whatever happened to the one being searched.
+	if (HasAuthority() && SyncedAction.Action == EFTOAnimAction::Search && GetWorld()->GetTimeSeconds() - SyncedActionSince > 4.f)
+	{
+		UE_LOG(LogFTO, Warning, TEXT("%s: the search of %s ended without us: free to move."), *GetName(), *GetNameSafe(SyncedAction.Partner));
+		EndSyncedAction();
+	}
 	// (The hot dog suit off while we're a ragdoll, back on when we're up.)
 	const AFTOPlayerState* Badge = GetPlayerState<AFTOPlayerState>();
 	const bool bWantSuit = Badge && Badge->GetOutfit() == TEXT("HotDog") && !(Knockdown && Knockdown->IsDown());
@@ -740,7 +746,9 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority() && TalkingTo)
 	{
 		const bool bGone = !IsValid(TalkingTo) || FVector::Dist(TalkingTo->GetActorLocation(), GetActorLocation()) > TalkRange + 150.f;
-		if (bGone || CurrentVehicle || bDowned || IsInSyncedAction() || GetWorld()->GetTimeSeconds() - TalkIdleSince > 30.f)
+		// (Patting down the one we're talking to is part of the conversation: their search pose ends it, and the talk goes on.)
+		const bool bSearching = SyncedAction.Action == EFTOAnimAction::Search && SyncedAction.Partner == TalkingTo;
+		if (bGone || CurrentVehicle || bDowned || (IsInSyncedAction() && !bSearching) || GetWorld()->GetTimeSeconds() - TalkIdleSince > 30.f)
 		{
 			EndTalk();
 		}
