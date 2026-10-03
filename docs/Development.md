@@ -228,6 +228,8 @@ booking, talking, in a synced move) and how its paths are going; `stuck:` lines 
 15 s without getting closer, and why there's no path; a call that gets nowhere for 75 s is left for a minute. With a
 listen-server host and a client both bot-playing, it's a two-player session. It plays like a fair but plain player:
 it can still be shot going in through a door, and it walks long distances when there's no cruiser near.
+One difference from normal play: with a navmesh on the host, the crime director's fallback for placing a crime
+(projecting a spot onto the navmesh) finds one, so crimes may turn up in slightly different spots than without the bot.
 
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine

@@ -52,6 +52,8 @@
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
 #include "FTO.h"
+#include "NavigationData.h"
+#include "NavigationSystem.h"
 #if WITH_EDITOR
 #include "ShaderCompiler.h"
 #endif
@@ -392,6 +394,18 @@ void AFTOSmokeTest::BuildSteps()
 
 	// Progression, in the lobby: a fresh (smoke-test) career with points to spend; the locker board for an outfit and
 	// the fleet's livery, the upgrades board for the coffee machine. The client changes its own outfit too.
+	// Normal play has no navigation (only bot play builds a navmesh): no navigation data, so no octree to keep updated.
+	AddStep(TEXT("no navigation"), 0.f, [this]()
+	{
+		int32 NavData = 0;
+		for (TActorIterator<ANavigationData> It(GetWorld()); It; ++It)
+		{
+			++NavData;
+		}
+		const UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld());
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: navigation in normal play: %d navigation data, octree %s."), NavData,
+			Nav && Nav->GetNavOctree() ? TEXT("PRESENT") : TEXT("none"));
+	});
 	AddStep(TEXT("career"), 0.3f, [this]()
 	{
 		if (AFTOGameMode* GM = GetAuthGameMode())

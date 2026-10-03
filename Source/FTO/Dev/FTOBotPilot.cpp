@@ -43,7 +43,7 @@ namespace
 	/** Does one description fit another ("red top, bald..." vs "red top, bald..., carrying a sack")? */
 	bool Matches(const FString& Look, const FString& Wanted)
 	{
-		return !Look.IsEmpty() && (Wanted.StartsWith(Look) || Look.StartsWith(Wanted));
+		return !Look.IsEmpty() && !Wanted.IsEmpty() && (Wanted.StartsWith(Look) || Look.StartsWith(Wanted));
 	}
 
 	/** Which wire a riddle means, the way a player would work it out. */
@@ -618,7 +618,7 @@ void AFTOBotPilot::Work(AFTOIncident* Incident)
 	if (State == EFTOPerpArrest::Fleeing)
 	{
 		GoTo(At + Perp->GetVelocity() * 0.3f, true, false);
-		if (Close(At, 320.f))
+		if (Close(At, 320.f) && !MyCar())
 		{
 			Face(At);
 			Officer->DiveTackle();
@@ -829,7 +829,10 @@ void AFTOBotPilot::HandleTalk()
 	auto Choose = [&](int32 Index, const TCHAR* Why)
 	{
 		Say(FString::Printf(TEXT("talking to \"%s\": %s (\"%s\")."), *Title, Why, Options.IsValidIndex(Index) ? *Options[Index].ToString() : TEXT("?")));
-		Officer->TalkPressed(Index);
+		if (Options.IsValidIndex(Index))
+		{
+			Officer->TalkPressed(Index);
+		}
 	};
 	if (const AFTOBomb* Bomb = Cast<AFTOBomb>(Who))
 	{
@@ -956,6 +959,8 @@ void AFTOBotPilot::EnsureNavMesh()
 		return;
 	}
 	bNavRequested = true;
+	// The navigation data first (normal play never has any; see DefaultEngine.ini), so what follows is gathered into it.
+	Nav->GetDefaultNavDataInstance(FNavigationSystem::Create);
 	// The city's walls, floors, stairs and furniture are what the navmesh is built from (they're kept out of navigation
 	// in normal play, there being no navmesh); everything that moves stays out of it.
 	int32 Solid = 0;
@@ -989,7 +994,6 @@ void AFTOBotPilot::EnsureNavMesh()
 	Box->SetupAttachment(Volume->GetRootComponent());
 	Box->RegisterComponent();
 	Nav->OnNavigationBoundsUpdated(Volume);
-	Nav->GetDefaultNavDataInstance(FNavigationSystem::Create);
 	Say(FString::Printf(TEXT("building a navmesh over the city (%.0f x %.0f m)."), Box->GetScaledBoxExtent().X / 50.f, Box->GetScaledBoxExtent().Y / 50.f));
 }
 
@@ -1259,6 +1263,7 @@ void AFTOBotPilot::Steer(float DeltaSeconds)
 			if (Speed < 150.f && Now >= NextPress)
 			{
 				NextPress = Now + 1.5f;
+				Car->SetAutopilot(false);
 				Car->RequestExit();
 				Say(bWrecked ? TEXT("the car's a write-off: out, on foot.") : bNoProgress ? TEXT("getting nowhere in the car: out, on foot.") : TEXT("out of the car."));
 			}

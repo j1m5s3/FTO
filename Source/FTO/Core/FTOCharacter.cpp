@@ -717,8 +717,8 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 		const AFTOPerp* Perp = Cast<AFTOPerp>(SyncedAction.Partner);
 		const bool bStillOn = IsValid(Perp) && Perp->GetArrester() == this
 			&& (Perp->GetArrestState() == EFTOPerpArrest::Cuffing || Perp->GetArrestState() == EFTOPerpArrest::Struggling);
-		// (And never longer than any arrest takes: a wrestle's 7 s at most, the cuffs 2.6 s.)
-		const bool bOverdue = GetWorld()->GetTimeSeconds() - SyncedActionSince > 20.f;
+		// (And never longer than any arrest takes: the longest wrestle and then the cuffs, with time to spare.)
+		const bool bOverdue = GetWorld()->GetTimeSeconds() - SyncedActionSince > (Perp ? Perp->GetLongestArrestSeconds() : 10.f) + 10.f;
 		if (!bStillOn || bOverdue)
 		{
 			UE_LOG(LogFTO, Warning, TEXT("%s: the arrest of %s ended without us (%s: state %d, arrester %s, %.0f cm away, hidden %d, ticking %d): free to move."),
