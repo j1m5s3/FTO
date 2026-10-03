@@ -1,4 +1,5 @@
 #include "Core/FTOPlayerController.h"
+#include "Dev/FTOBotPilot.h"
 #include "Core/FTOPrecinctBoard.h"
 #include "Core/FTOCareer.h"
 #include "Core/FTOJuice.h"
@@ -75,6 +76,11 @@ void AFTOPlayerController::BeginPlay()
 	if (AFTOSmokeTest::IsRequested())
 	{
 		GetWorld()->SpawnActor<AFTOSmokeTest>(AFTOSmokeTest::StaticClass(), FTransform::Identity);
+		return;
+	}
+	if (AFTOBotPilot::IsRequested())
+	{
+		GetWorld()->SpawnActor<AFTOBotPilot>(AFTOBotPilot::StaticClass(), FTransform::Identity);
 		return;
 	}
 #endif

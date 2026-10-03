@@ -106,6 +106,8 @@ public:
 
 	/** Local player: what E does (use whatever's in focus; heave in a struggle). */
 	void PressInteract() { InteractPressed(); }
+	/** Sprint on or off, as the sprint key does (bot play). */
+	void SetSprinting(bool bOn) { if (bOn) { SprintStarted(); } else { SprintStopped(); } }
 
 	/** Server: play a full-body action for a while (ticket writing, chatting). */
 	void PlayTimedAction(EFTOAnimAction Action, float Duration);
@@ -380,6 +382,8 @@ protected:
 	FVector SyncFrom = FVector::ZeroVector;
 	FQuat SyncFromRotation = FQuat::Identity;
 	float SyncStartTime = -1.f;
+	/** When the synced action began (server). */
+	float SyncedActionSince = 0.f;
 	static constexpr float SyncEaseSeconds = 0.3f;
 
 	// ---- Weapons ----

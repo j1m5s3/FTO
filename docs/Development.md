@@ -202,6 +202,35 @@ and arrests a shoplifter the host puts beside them. Then the client calls for ba
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
 host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece, the front pages and the mutator, changes its own outfit at the locker board (the host checks it sees it), and that its own dispatcher spoke and its highlight photo was taken.
 
+## Bot play
+For play testing without a human at the keyboard (development builds), the local officer can play whole shifts by
+itself through the same inputs a player has: walking and sprinting, E and the conversation options, punches, the
+tackle, the weapons, and driving a cruiser by its throttle and wheel. It reads what a player would (the dispatch
+board, suspect descriptions, the bomb's riddles, what the drunk says), books its suspects at the cells, tasers armed
+suspects, and chases getaway cars in a cruiser (ramming them). It finds its way on foot by a navmesh it has built over
+the city once the city's generated (bot play only: the city's meshes are kept out of navigation otherwise; it's ready
+within a few seconds, agent radius 30 so doorways stay open, `Config/DefaultEngine.ini`), falling back on a building's
+front door or outside stairs, and feeling along walls, where there's no path. It drives by the street grid, a junction
+at a time, keeping right and slowing for corners.
+
+`UnrealEditor.exe FTO.uproject -game -windowed -FTOBotPlay -FTOBotStyle=Careful -FTOBotShifts=1 -FTOBotShots=30 -FTOBotTag=run1`
+
+- `-FTOBotStyle=`: `Careful` (by the book), `Reckless` (arrests first, drives fast, always votes for overtime) or
+  `Explorer` (wanders on foot, picks up kit at the armory, takes every call it passes).
+- `-FTOBotShifts=N` shifts in a row (the host starts each one, and New shift in between), then it quits.
+- `-FTOBotShots=S`: a screenshot every S seconds (and at the end and on the scoreboard) into `Saved/Screenshots/Bot`.
+- `-FTOBotWaitFor=2`: the host waits (up to a minute) for that many officers before starting.
+- `-FTOCareerSlot=Name` keeps the bot's career apart from yours.
+
+It logs what it's doing and how the shift's going on `BOT:` lines (a status every 15 s, each call it takes, each
+conversation choice, the results and the scoreboard). A status line says where it is, what it's doing (driving,
+booking, talking, in a synced move) and how its paths are going; `stuck:` lines (with a screenshot) say when it's gone
+15 s without getting closer, and why there's no path; a call that gets nowhere for 75 s is left for a minute. With a
+listen-server host and a client both bot-playing, it's a two-player session. It plays like a fair but plain player:
+it can still be shot going in through a door, and it walks long distances when there's no cruiser near.
+One difference from normal play: with a navmesh on the host, the crime director's fallback for placing a crime
+(projecting a spot onto the navmesh) finds one, so crimes may turn up in slightly different spots than without the bot.
+
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine
   animations (walking, jogging, jumping, holding a pistol or rifle) and ragdoll (`PA_Mannequin`). That content ships with

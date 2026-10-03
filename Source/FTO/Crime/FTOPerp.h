@@ -122,6 +122,8 @@ public:
 	float GetStruggleMeter() const { return StruggleMeter; }
 	/** 0-1 through the cuffing (every machine). */
 	float GetCuffProgress() const;
+	/** The longest an arrest can hold an officer in place: the wrestle at its longest, then the cuffs. */
+	float GetLongestArrestSeconds() const { return StruggleMaxSeconds + CuffSeconds; }
 	/** The officer we're struggling with or being cuffed by. */
 	AFTOCharacter* GetArrester() const { return Arrester; }
 

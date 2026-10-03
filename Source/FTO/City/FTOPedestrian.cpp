@@ -362,6 +362,7 @@ void AFTOPedestrian::TalkEnded(AFTOCharacter* Officer)
 	}
 	TalkingWith.Reset();
 	GetWorldTimerManager().ClearTimer(SearchPoseTimer);
+	bBeingSearched = false; // (a search cut short is over for them too)
 	bHandsUp = false;
 	bChatting = false;
 	GetWorldTimerManager().SetTimer(ResumeTimer, this, &AFTOPedestrian::Resume, 1.f, false);
