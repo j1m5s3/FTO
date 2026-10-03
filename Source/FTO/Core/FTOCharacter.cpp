@@ -637,7 +637,11 @@ void AFTOCharacter::CheckTackle()
 		{
 			if (Overlap.GetActor() != this && FTOImpact::Tackle(Overlap.GetActor(), Fwd, GetController()))
 			{
-				FTOJuice::SlowMo(GetWorld(), 0.3f, 0.6f); // the moment of impact, savoured
+				// The moment of impact, savoured: a suspect brought down (not a citizen or a partner).
+				if (const AFTOPerp* Perp = Cast<AFTOPerp>(Overlap.GetActor()); Perp && Perp->IsCriminal())
+				{
+					FTOJuice::SlowMo(GetWorld(), 0.3f, 0.6f);
+				}
 				GetWorldTimerManager().ClearTimer(TackleTimer);
 				return;
 			}

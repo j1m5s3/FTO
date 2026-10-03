@@ -1434,7 +1434,6 @@ void AFTODestruction::TickFalling(float DeltaSeconds)
 void AFTODestruction::Blast(const FVector& At, float Radius, float Amount, AController* ByWhom)
 {
 	check(HasAuthority());
-	FTOJuice::SlowMo(GetWorld(), 0.3f, 0.9f);
 	MulticastBlast(At, Radius);
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{

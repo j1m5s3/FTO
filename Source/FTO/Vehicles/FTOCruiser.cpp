@@ -497,15 +497,21 @@ void AFTOCruiser::ServerBounce_Implementation()
 
 void AFTOCruiser::OnRep_Hops()
 {
-	// (A late joiner's first update isn't a bounce.)
-	const bool bFirst = !bHopsSeen;
+	// (Counted from what this machine had when the car turned up: a late joiner's first update isn't a bounce.)
+	const bool bNew = bHopsSeen && Hops != SeenHops;
 	bHopsSeen = true;
-	const bool bNew = Hops != SeenHops;
 	SeenHops = Hops;
-	if (!bFirst && bNew)
+	if (bNew)
 	{
 		PlayHop();
 	}
+}
+
+void AFTOCruiser::PostNetInit()
+{
+	Super::PostNetInit();
+	SeenHops = Hops;
+	bHopsSeen = true;
 }
 
 void AFTOCruiser::PlayHop()

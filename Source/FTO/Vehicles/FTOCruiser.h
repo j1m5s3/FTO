@@ -229,6 +229,7 @@ protected:
 	uint8 SeenHops = 0;
 	bool bHopsSeen = false;
 	UFUNCTION() void OnRep_Hops();
+	virtual void PostNetInit() override;
 	/** The hop and the boing, here (at most one every 0.4 s). */
 	void PlayHop();
 	UPROPERTY(VisibleAnywhere, Category="Components") TArray<TObjectPtr<UStaticMeshComponent>> Wheels;

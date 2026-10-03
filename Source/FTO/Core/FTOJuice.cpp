@@ -108,18 +108,35 @@ void FTOJuice::SlowMo(UWorld* World, float Scale, float RealSeconds)
 	}
 	const float Now = World->GetTimeSeconds();
 	float& Last = LastSlowMoTimes.FindOrAdd(World, -100.f);
-	if (Now - Last < 6.f || UGameplayStatics::GetGlobalTimeDilation(World) < 1.f)
+	if (Now - Last < 15.f || UGameplayStatics::GetGlobalTimeDilation(World) < 1.f)
 	{
 		return; // (not one after another: it'd drag)
 	}
 	Last = Now;
 	UGameplayStatics::SetGlobalTimeDilation(World, Scale);
+	// (Out to the clients now, not at the world settings' next slow update.)
+	if (AWorldSettings* Settings = World->GetWorldSettings())
+	{
+		Settings->ForceNetUpdate();
+	}
 	// The timer runs on game time, slowed down with everything else.
 	FTimerHandle Back;
 	World->GetTimerManager().SetTimer(Back, FTimerDelegate::CreateWeakLambda(World, [World]()
 	{
 		UGameplayStatics::SetGlobalTimeDilation(World, 1.f);
+		if (AWorldSettings* Settings = World->GetWorldSettings())
+		{
+			Settings->ForceNetUpdate();
+		}
 	}), FMath::Max(0.01f, RealSeconds * Scale), false);
+	// (Old worlds out of the list.)
+	for (auto It = LastSlowMoTimes.CreateIterator(); It; ++It)
+	{
+		if (!It->Key.IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
 }
 
 float FTOJuice::LastSlowMo(const UWorld* World)

@@ -1296,8 +1296,8 @@ def _dispatch_builder(category):
 try:
     for _category, _lines in dispatch_lines().items():
         register(f"SW_Dispatch_{_category}", _dispatch_builder(_category), variants=len(_lines), base=False)
-except (OSError, ValueError):
-    pass  # (no lines file: no dispatcher)
+except (OSError, ValueError) as error:
+    print(f"fto_synth: no dispatcher lines ({error}): check {DISPATCH_LINES_PATH}", file=sys.stderr)
 
 
 def write_dispatch_inl(path):

@@ -129,7 +129,7 @@ protected:
 
 	// ---- The shift's highlight: a photo of the best bust this machine saw, for the scoreboard ----
 	/** Snap the camera's view now if it's the best bust yet (Points), captioned. */
-	void TakeHighlight(int32 Points, const FString& Caption);
+	void TakeHighlight(int32 Points, const FString& Caption, const FVector& Where);
 	UPROPERTY(Transient) TObjectPtr<class UTextureRenderTarget2D> Highlight;
 	UPROPERTY(Transient) TObjectPtr<class USceneCaptureComponent2D> HighlightCamera;
 	int32 HighlightPoints = 0;
@@ -139,6 +139,9 @@ protected:
 	/** Say something from Category (a random line), unless something was said just now (bForce: say it anyway). */
 	void Dispatch(FName Category, bool bForce = false);
 	float NextDispatchTime = 0.f;
+	/** The last line said from each category (no saying it twice running), and the radio it's playing on. */
+	TMap<FName, FString> LastLineOf;
+	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> DispatchVoice;
 	float LastResolvedTime = 0.f;
 	/** The last line said (tests). */
 	FString LastDispatch;

@@ -36,7 +36,7 @@ namespace FTOJuice
 	FTO_API bool ShakeFor(const USoundBase* Sound, float& OutAmount, float& OutRadius);
 	/** The local player's current trauma (tests). */
 	FTO_API float GetTrauma(const UWorld* World);
-	/** Server: the whole game in slow motion (Scale) for RealSeconds, unless there's been one in the last few seconds. */
+	/** Server: the whole game in slow motion (Scale) for RealSeconds, unless there's been one in the last 15 seconds. */
 	FTO_API void SlowMo(UWorld* World, float Scale, float RealSeconds);
 	/** When the last slow-mo started (server, world time; tests). */
 	FTO_API float LastSlowMo(const UWorld* World);

@@ -2175,7 +2175,7 @@ void AFTOSmokeTest::BuildSteps()
 			// (Out they come straight away: before the officer at the door gets a look in and finds them first.)
 			TestPerp->FinishDeedNow();
 		});
-		AddStep(TEXT("burglar heads out"), 0.6f, [this]() {});
+		AddStep(TEXT("burglar heads out"), 0.6f, []() {});
 		AddStep(TEXT("door guard result"), 0.f, [this]()
 		{
 			const AFTOPlayerState* PS = GetPawn() ? GetPawn()->GetPlayerState<AFTOPlayerState>() : nullptr;
@@ -2322,7 +2322,7 @@ void AFTOSmokeTest::BuildSteps()
 			const float Ago = GetWorld()->GetTimeSeconds() - FTOJuice::LastSlowMo(GetWorld());
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: slow motion: last played %.0f s ago (the tackle, a wall, a blast)."), Ago);
 		});
-		AddStep(TEXT("slow-mo"), 6.5f, [this]() {}); // (the cooldown)
+		AddStep(TEXT("slow-mo"), 15.5f, []() {}); // (the cooldown)
 		AddStep(TEXT("slow-mo now"), 0.1f, [this]()
 		{
 			FTOJuice::SlowMo(GetWorld(), 0.3f, 0.6f);

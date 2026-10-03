@@ -7,6 +7,7 @@
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Crime/FTOIncident.h"
+#include "Core/FTOJuice.h"
 #include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -215,6 +216,7 @@ void AFTOBomb::Tick(float DeltaSeconds)
 void AFTOBomb::Explode()
 {
 	bExploded = true;
+	FTOJuice::SlowMo(GetWorld(), 0.3f, 0.9f); // (the big one: everyone feels it)
 	// It's not a very good bomb, but it's good enough: windows, walls, street furniture and anyone nearby.
 	if (AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld()))
 	{
