@@ -402,6 +402,36 @@ void AFTOSmokeTest::BuildSteps()
 	});
 	AddShot(TEXT("02_on_duty"), 1.f);
 
+	// Pacing: a ten-minute shift, and the director putting new crimes a short run from the officer.
+	AddStep(TEXT("crimes nearby"), 0.f, [this]()
+	{
+		AFTOGameMode* GM = GetAuthGameMode();
+		const APawn* Officer = GetPawn();
+		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+		if (!GM || !Officer || !GS)
+		{
+			return;
+		}
+		UFTOCrimeDirector* Director = GM->GetCrimeDirector();
+		const float Chance = Director->NearOfficerChance;
+		Director->NearOfficerChance = 1.f;
+		int32 Near = 0;
+		float Farthest = 0.f;
+		for (int32 i = 0; i < 4; ++i)
+		{
+			if (AFTOIncident* Incident = Director->SpawnIncident(TEXT("LostTourist"), true))
+			{
+				const float Dist = FVector::Dist2D(Incident->GetActorLocation(), Officer->GetActorLocation());
+				Near += Dist <= Director->NearOfficerRange.Y * 2.f ? 1 : 0;
+				Farthest = FMath::Max(Farthest, Dist);
+				Incident->Destroy();
+			}
+		}
+		Director->NearOfficerChance = Chance;
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: pacing: a %.0f-minute shift (%.0f s left), %d of 4 new crimes near the officer (farthest %.0f m)."),
+			Director->ShiftLengthSeconds / 60.f, GS->GetShiftTimeRemaining(), Near, Farthest / 100.f);
+	});
+
 	// Arrest: across town, catch a shoplifter, cuff them, then bring them home.
 	AddStep(TEXT("arrest"), 1.f, [this]()
 	{

@@ -35,6 +35,23 @@ Each item is one PR, reviewed before it's merged.
   animations, plus weapon-handling fixes.
 - [x] **Hand-to-hand fighting** (upgrade 8): punches, kicks, grabs and throws with weighty, physical reactions.
 
+## Phase 4: more fun
+Seven upgrades from the "what would make it more fun" review, one reviewed PR each, then play testing
+(scores in [Playtests](Playtests.md)).
+- [x] **Pacing**: 10-minute shifts (5 of overtime), crimes every 12 s down to 4.5 s, and most placed near an officer.
+- [ ] **A twist per crime**: pickpockets in a crowd picked out by description, burglars hiding upstairs, drunks
+  talked down, brawls that need two officers.
+- [ ] **Shift shape**: a set piece mid-shift (bank heist and getaway, bomb defusal, city-wide pursuit, in rotation)
+  and a rush hour in the last two minutes.
+- [ ] **Teamwork**: jobs for two (one drives while the other shoots tyres, one guards a door while the other
+  searches) and a squad-wide combo.
+- [ ] **Comedy**: a mutator per shift (low gravity, bouncy cars, hot dog suits...), more absurd crimes, newspaper
+  headlines after big incidents.
+- [ ] **Juice**: screen shake, slow-mo on tackles and wall crashes, the best bust replayed on the scoreboard, a
+  synthesised dispatcher who roasts the squad.
+- [ ] **Progression**: unlockable cruisers and outfits, precinct upgrades between shifts, a saved career with
+  rising difficulty.
+
 ## Backlog (later ideas)
 - [ ] Set-piece crimes: multi-suspect bank heist with a getaway, "evil masterplan" defusal minigame
 - [ ] Day/night shifts and weather; night-time lights and headlights

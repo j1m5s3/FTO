@@ -51,7 +51,7 @@ public:
 	float BriefingSeconds = 10.f;
 
 	UPROPERTY(EditAnywhere, Category="Director|Shift")
-	float ShiftLengthSeconds = 20.f * 60.f;
+	float ShiftLengthSeconds = 10.f * 60.f;
 
 	/** When the clock runs out the squad has this long to vote for overtime or to clock off... */
 	UPROPERTY(EditAnywhere, Category="Director|Shift")
@@ -59,21 +59,25 @@ public:
 
 	/** ...and overtime puts this much back on the clock. */
 	UPROPERTY(EditAnywhere, Category="Director|Shift")
-	float OvertimeSeconds = 10.f * 60.f;
+	float OvertimeSeconds = 5.f * 60.f;
 
 	/** Server: count the votes now (everyone's voted, or time's up): overtime or clock off. */
 	void ResolveOvertimeVote();
 
 	/** Seconds between new incidents at 0 chaos and at 100 chaos. */
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
-	FVector2D SpawnIntervalRange = FVector2D(22.f, 7.f);
+	FVector2D SpawnIntervalRange = FVector2D(12.f, 4.5f);
 
 	/** Spawn interval multiplier per officer count (index = officers - 1). */
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
-	TArray<float> OfficerPacing = { 1.7f, 1.3f, 1.1f, 1.0f };
+	TArray<float> OfficerPacing = { 1.25f, 1.1f, 1.05f, 1.0f };
+
+	/** The first crime of the shift (and of overtime) comes this soon after the clock starts. */
+	UPROPERTY(EditAnywhere, Category="Director|Pacing")
+	float FirstCrimeDelay = 2.f;
 
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
-	int32 BaseMaxActiveIncidents = 4;
+	int32 BaseMaxActiveIncidents = 5;
 
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
 	int32 MaxActiveIncidentsPerOfficer = 2;
@@ -89,6 +93,17 @@ public:
 	/** New incidents won't spawn closer than this to an active one. */
 	UPROPERTY(EditAnywhere, Category="Director|Placement")
 	float MinIncidentSpacing = 1500.f;
+
+	/**
+	 * Chance a new crime is placed near an officer (taking turns round the squad) rather than anywhere in the city, so
+	 * there's always something close by. The rest still land anywhere, to keep the dispatch board worth reading.
+	 */
+	UPROPERTY(EditAnywhere, Category="Director|Placement")
+	float NearOfficerChance = 0.75f;
+
+	/** How far from that officer (cm): not right on top of them, but a short run or drive away. */
+	UPROPERTY(EditAnywhere, Category="Director|Placement")
+	FVector2D NearOfficerRange = FVector2D(1500.f, 6000.f);
 
 	/** Fallback random placement radius when no spawn points exist. */
 	UPROPERTY(EditAnywhere, Category="Director|Placement")
@@ -109,6 +124,8 @@ protected:
 	/** Where the perp stands (spawn points face the way they face), and the building it's in, if any. */
 	bool PickLocation(FName TemplateId, FTransform& OutWhere, int32& OutBuilding);
 	bool IsTooCloseToActiveIncident(const FVector& Location) const;
+	/** Where the officers are (their pawn, or the cruiser they're in). */
+	TArray<FVector> GetOfficerLocations() const;
 	AFTOIncident* SpawnFromTemplate(const FFTOCrimeTemplate& Template, const FTransform& Where, int32 BuildingIndex, bool bForceReported);
 
 	void HandleResolved(AFTOIncident* Incident);
@@ -129,5 +146,7 @@ protected:
 
 	FRandomStream Rng;
 	float NextSpawnTime = 0.f;
+	/** Whose turn it is to get a crime nearby. */
+	int32 NextOfficerFocus = 0;
 	bool bShiftStarted = false;
 };
