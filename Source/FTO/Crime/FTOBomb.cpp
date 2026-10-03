@@ -7,6 +7,7 @@
 #include "Core/FTOGameState.h"
 #include "Core/FTOPlayerController.h"
 #include "Crime/FTOIncident.h"
+#include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
@@ -149,7 +150,7 @@ int32 AFTOBomb::GetNextWire() const
 FString AFTOBomb::Clue() const
 {
 	const int32 Wire = WireFor(Stage);
-	return Riddles[Wire][uint32(Seed + Stage * 7) % 3];
+	return Riddles[Wire][(uint32(Seed) + uint32(Stage) * 7u) % 3u];
 }
 
 void AFTOBomb::OnRep_Wires()
@@ -194,9 +195,20 @@ void AFTOBomb::Tick(float DeltaSeconds)
 		Readout->SetWorldRotation(FRotator(0.f, To.Rotation().Yaw, 0.f));
 	}
 
-	if (HasAuthority() && !bDefused && !bExploded && Incident && FuseEndTime > 0.f && GetWorld()->GetTimeSeconds() >= FuseEndTime)
+	if (HasAuthority() && !bDefused && !bExploded && Incident && FuseEndTime > 0.f)
 	{
-		Explode();
+		// The city holds its breath while the squad votes on overtime (the fuse with it), and once the shift's over
+		// it's somebody else's problem.
+		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+		const EFTOShiftPhase Phase = GS ? GS->GetShiftPhase() : EFTOShiftPhase::OnDuty;
+		if (Phase == EFTOShiftPhase::OvertimeVote)
+		{
+			FuseEndTime += DeltaSeconds;
+		}
+		else if (Phase == EFTOShiftPhase::OnDuty && GetWorld()->GetTimeSeconds() >= FuseEndTime)
+		{
+			Explode();
+		}
 	}
 }
 
@@ -219,7 +231,19 @@ void AFTOBomb::Explode()
 	{
 		Incident->FailNow();
 	}
+	EndTalks();
 	SetActorHiddenInGame(true);
+}
+
+void AFTOBomb::EndTalks()
+{
+	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
+	{
+		if (It->GetTalkingTo() == this)
+		{
+			It->EndTalk();
+		}
+	}
 }
 
 void AFTOBomb::CutWire(int32 Index, AFTOCharacter* Officer)
@@ -234,8 +258,6 @@ void AFTOBomb::CutWire(int32 Index, AFTOCharacter* Officer)
 	{
 		Officer->PlayTimedAction(EFTOAnimAction::Interact, 0.8f);
 	}
-	CutMask |= (1 << Index);
-	OnRep_Wires();
 	if (Incident)
 	{
 		Incident->ReportByOfficer();
@@ -243,7 +265,7 @@ void AFTOBomb::CutWire(int32 Index, AFTOCharacter* Officer)
 	AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
 	if (Index != WireFor(Stage))
 	{
-		// Wrong one: it buzzes and the clock jumps.
+		// Wrong one: it sparks, buzzes and the clock jumps (the wire's still whole: the villain's very forgiving).
 		FuseEndTime -= WrongWirePenalty;
 		if (GS)
 		{
@@ -255,6 +277,8 @@ void AFTOBomb::CutWire(int32 Index, AFTOCharacter* Officer)
 		}
 		return;
 	}
+	CutMask |= (1 << Index);
+	OnRep_Wires();
 	++Stage;
 	if (GS)
 	{
@@ -279,6 +303,7 @@ void AFTOBomb::CutWire(int32 Index, AFTOCharacter* Officer)
 		{
 			Incident->HandledPeacefully();
 		}
+		EndTalks();
 		return;
 	}
 	if (PC)

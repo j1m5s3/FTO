@@ -883,7 +883,7 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 			{
 				Play(Sounds.Chime, 0.7f);
 			}
-			else if (State == EFTOIncidentState::Failed)
+			else if (State == EFTOIncidentState::Failed && !Incident->IsSuperseded())
 			{
 				Play(Sounds.Fail, 0.6f);
 			}

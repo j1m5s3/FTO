@@ -182,7 +182,8 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 
 	// 4. Spawn new trouble.
 	const int32 Officers = GetOfficerCount();
-	const int32 MaxActive = BaseMaxActiveIncidents + MaxActiveIncidentsPerOfficer * Officers + (bRushHour ? RushHourExtraIncidents : 0);
+	// (Rush hour's extra calls grow with the squad, so a lone officer isn't swamped.)
+	const int32 MaxActive = BaseMaxActiveIncidents + MaxActiveIncidentsPerOfficer * Officers + (bRushHour ? FMath::Min(RushHourExtraIncidents, Officers) : 0);
 	if (Now >= NextSpawnTime)
 	{
 		if (CountActiveIncidents() < MaxActive)
@@ -200,7 +201,7 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 
 		const float ChaosAlpha = GS->GetChaosAlpha();
 		const float Pacing = OfficerPacing.IsValidIndex(Officers - 1) ? OfficerPacing[Officers - 1] : 1.f;
-		const float Interval = FMath::Lerp(SpawnIntervalRange.X, SpawnIntervalRange.Y, ChaosAlpha) * Pacing * (bRushHour ? RushHourPacing : 1.f);
+		const float Interval = FMath::Lerp(SpawnIntervalRange.X, SpawnIntervalRange.Y, ChaosAlpha) * Pacing * (bRushHour ? RushHourPacing + 0.05f * FMath::Max(0, 4 - Officers) : 1.f);
 		NextSpawnTime = Now + Interval * Rng.FRandRange(0.7f, 1.3f);
 	}
 }
@@ -552,16 +553,24 @@ void UFTOCrimeDirector::TickShiftShape()
 	const float Now = GetWorld()->GetTimeSeconds();
 
 	// The set piece, part way into the shift (not again in overtime).
-	if (!bSetPieceDone && GS->GetOvertimes() == 0 && ShiftLengthSeconds - GS->GetShiftTimeRemaining() >= ShiftLengthSeconds * SetPieceAt)
+	if (!bSetPieceDone && Now >= NextSetPieceTry && GS->GetOvertimes() == 0 && ShiftLengthSeconds - GS->GetShiftTimeRemaining() >= ShiftLengthSeconds * SetPieceAt)
 	{
-		bSetPieceDone = true;
-		StartSetPiece();
+		// (If it couldn't start, say no car was free for a pursuit, try again in a bit.)
+		bSetPieceDone = StartSetPiece() != nullptr;
+		NextSetPieceTry = Now + 10.f;
 	}
 
-	// The heist crew make their run for it.
+	// The heist crew make their run for it, unless the police are in the bank (then they wait for their moment).
 	if (HeistIncident.IsValid() && HeistGetawayTime > 0.f && Now >= HeistGetawayTime)
 	{
-		TriggerHeistGetaway();
+		if (HeistIncident->GetOfficersOnScene() > 0)
+		{
+			HeistGetawayTime = Now + 5.f;
+		}
+		else
+		{
+			TriggerHeistGetaway();
+		}
 	}
 
 	// Rush hour: everyone's told, and the next crime's along in a moment.
@@ -605,7 +614,7 @@ AFTOTrafficCar* UFTOCrimeDirector::FindCarFor(const FVector& Near, float MinDist
 	}
 	if (InRange.Num() > 0)
 	{
-		return InRange[FMath::RandRange(0, InRange.Num() - 1)];
+		return InRange[Rng.RandRange(0, InRange.Num() - 1)];
 	}
 	return Nearest;
 }
@@ -624,8 +633,26 @@ AFTOIncident* UFTOCrimeDirector::StartSetPiece(FName Which)
 	AFTOIncident* Incident = nullptr;
 	if (Which == TEXT("Heist"))
 	{
-		// The bank's vault, the crew in their clown masks, and a car to make off in if nobody stops them.
-		Incident = SpawnIncident(TEXT("BankHeist"), true);
+		// The bank's vault, the crew in their clown masks, and a car to make off in if nobody stops them. Only if the bank's
+		// still standing and there isn't a heist on already.
+		const AFTOCityGenerator* City = nullptr;
+		for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
+		{
+			City = *It;
+			break;
+		}
+		const int32 BankIndex = City ? City->FindBuildingIndex(EFTOBuildingType::Bank) : INDEX_NONE;
+		const FFTOBuilding* Bank = City ? City->GetBuilding(BankIndex) : nullptr;
+		const AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld());
+		bool bHeistOn = false;
+		for (const AFTOIncident* Other : GS->GetIncidents())
+		{
+			bHeistOn |= Other && Other->IsActive() && Other->GetInfo().TemplateId == TEXT("BankHeist");
+		}
+		if (Bank && Bank->CrimeSpots.Num() > 1 && !bHeistOn && !(Wreckage && Wreckage->IsBuildingDown(BankIndex)))
+		{
+			Incident = SpawnIncidentAt(TEXT("BankHeist"), Bank->CrimeSpots[1], BankIndex, true);
+		}
 		if (Incident)
 		{
 			HeistIncident = Incident;
@@ -647,7 +674,8 @@ AFTOIncident* UFTOCrimeDirector::StartSetPiece(FName Which)
 		const FVector Near = Officers.Num() > 0 ? Officers[Rng.RandRange(0, Officers.Num() - 1)] : FVector::ZeroVector;
 		if (AFTOTrafficCar* Car = FindCarFor(Near, 2500.f, 9000.f))
 		{
-			Car->MakeGetaway(TEXT("Pursuit"), 240.f, 3.f);
+			// Tougher the bigger the squad after it.
+			Car->MakeGetaway(TEXT("Pursuit"), 240.f, 1.5f + 0.5f * GetOfficerCount());
 			Incident = Car->GetChaseIncident();
 		}
 	}
@@ -656,6 +684,8 @@ AFTOIncident* UFTOCrimeDirector::StartSetPiece(FName Which)
 		UE_LOG(LogFTO, Warning, TEXT("Couldn't start the %s set piece."), *Which.ToString());
 		return nullptr;
 	}
+	// Built for a full squad, but fair on a small one: no more officers needed on scene than there are.
+	Incident->SetOfficersRequired(FMath::Min(Incident->GetInfo().OfficersRequired, GetOfficerCount()));
 	GS->AnnounceSetPiece(Which);
 	UE_LOG(LogFTO, Log, TEXT("Set piece: %s."), *Which.ToString());
 	const FText Message = FText::Format(INVTEXT("ALL UNITS! {0}: {1}"), Incident->GetInfo().Title, Incident->GetInfo().Description);
@@ -693,9 +723,12 @@ void UFTOCrimeDirector::TriggerHeistGetaway()
 		}
 		break;
 	}
+	// (A car going by close to the bank: none about, and the crew sit tight.)
 	AFTOTrafficCar* Car = FindCarFor(Door, 0.f, 0.f);
-	if (!Car)
+	if (!Car || FVector::Dist2D(Car->GetActorLocation(), Door) > 6000.f)
 	{
+		HeistIncident = Heist;
+		HeistGetawayTime = GetWorld()->GetTimeSeconds() + 10.f;
 		return;
 	}
 	Heist->Supersede();

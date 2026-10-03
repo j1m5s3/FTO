@@ -452,20 +452,26 @@ void AFTOSmokeTest::BuildSteps()
 		}
 		UFTOCrimeDirector* Director = GM->GetCrimeDirector();
 		Director->SetPieceAt = 2.f; // (no more by themselves)
-		TArray<AFTOIncident*> Heists;
+		// (Whatever it was, out of the way: the tour stages its own. A heist at the bank already means the bomb instead.)
+		TArray<AFTOIncident*> Pieces;
 		for (AFTOIncident* Incident : GS->GetIncidents())
 		{
-			if (Incident && Incident->IsActive() && Incident->GetInfo().TemplateId == TEXT("BankHeist"))
+			const FName Crime = Incident ? Incident->GetInfo().TemplateId : NAME_None;
+			if (Incident && Incident->IsActive() && (Crime == TEXT("BankHeist") || Crime == TEXT("Bomb") || Crime == TEXT("Pursuit")))
 			{
-				Heists.Add(Incident);
+				Pieces.Add(Incident);
 			}
 		}
-		for (AFTOIncident* Heist : Heists)
+		for (AFTOIncident* Piece : Pieces)
 		{
-			Heist->Destroy(); // (out of the way: the tour stages its own)
+			if (Piece->GetInfo().TemplateId == TEXT("Pursuit") && Piece->GetAttachParentActor())
+			{
+				Piece->GetAttachParentActor()->Destroy();
+			}
+			Piece->Destroy();
 		}
-		UE_LOG(LogFTO, Display, TEXT("SMOKE: set piece on schedule: %s (%d heist(s) at the bank); in turn: %s, %s, %s."),
-			GS->GetSetPiece() == TEXT("Heist") && Heists.Num() > 0 ? TEXT("the bank heist started") : TEXT("NO SET PIECE"), Heists.Num(),
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: set piece on schedule: %s (%d set-piece call(s) open); in turn: %s, %s, %s."),
+			GS->GetSetPiece() != NAME_None && Pieces.Num() > 0 ? *FString::Printf(TEXT("the %s started"), *GS->GetSetPiece().ToString()) : TEXT("NO SET PIECE"), Pieces.Num(),
 			*UFTOCrimeDirector::SetPieceFor(0).ToString(), *UFTOCrimeDirector::SetPieceFor(1).ToString(), *UFTOCrimeDirector::SetPieceFor(2).ToString());
 	});
 
@@ -1892,10 +1898,19 @@ void AFTOSmokeTest::BuildSteps()
 			Bomb->Interact(Cop);
 			const float Before = Bomb->GetTimeLeft();
 			const FString Title = Bomb->GetTalkTitle().ToString();
-			const int32 Wrong = (Bomb->GetNextWire() + 1) % AFTOBomb::NumWires;
-			Bomb->TalkChoice(Cop, Wrong);
+			// Every wrong wire once (some of them are needed later: a wrong cut mustn't spoil them).
+			const int32 Next = Bomb->GetNextWire();
+			int32 Wrong = 0;
+			for (int32 Wire = 0; Wire < AFTOBomb::NumWires; ++Wire)
+			{
+				if (Wire != Next)
+				{
+					Bomb->TalkChoice(Cop, Wire);
+					++Wrong;
+				}
+			}
 			const float After = Bomb->GetTimeLeft();
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: bomb: %s (\"%s\"); a wrong wire took %.0f s off."), Cop->GetTalkingTo() == Bomb ? TEXT("at the wires") : TEXT("NOT AT THE WIRES"), *Title, Before - After);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: bomb: %s (\"%s\"); %d wrong wires took %.0f s off."), Cop->GetTalkingTo() == Bomb ? TEXT("at the wires") : TEXT("NOT AT THE WIRES"), *Title, Wrong, Before - After);
 			const FVector At = Bomb->GetActorLocation();
 			ViewFrom(At + Bomb->GetActorRightVector() * 260.f + Bomb->GetActorForwardVector() * 200.f + FVector(0.f, 0.f, 160.f), At);
 		});
@@ -1939,6 +1954,11 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				if (!It->IsActorBeingDestroyed())
 				{
+					// (Out at the edge of town, well away from the rest of the tour.)
+					if (const AFTOCityGenerator* City = GetCity())
+					{
+						It->SetActorLocation(City->GetSidewalkCorner(0, 0, 0));
+					}
 					It->SetTimeLeft(0.5f);
 					const FVector At = It->GetActorLocation();
 					ViewFrom(At + FVector(-1200.f, -900.f, 700.f), At);
@@ -2659,6 +2679,14 @@ void AFTOSmokeTest::BuildSteps()
 					Start = From;
 					TestAway = Dir;
 					break;
+				}
+			}
+			// (Nobody else's car wandering into the run-up.)
+			for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It; ++It)
+			{
+				if (FMath::PointDistToSegment(It->GetActorLocation(), Start, TestTarget) < 600.f)
+				{
+					It->Destroy();
 				}
 			}
 			TestCruiser->SetActorLocationAndRotation(Start, (-TestAway).Rotation(), false, nullptr, ETeleportType::TeleportPhysics);
@@ -3487,7 +3515,7 @@ void AFTOSmokeTest::BuildSteps()
 			{
 				return;
 			}
-			TestPerp = StagePerp(TEXT("Vandalism"), 300.f);
+			TestPerp = StagePerp(TEXT("Shoplifting"), 300.f); // (no victim in the way, and a moment before they move: a vandal wanders off to the next bin)
 			if (!TestPerp.IsValid())
 			{
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: grab: NO SUSPECT."));

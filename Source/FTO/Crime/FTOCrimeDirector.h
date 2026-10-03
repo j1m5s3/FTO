@@ -72,7 +72,7 @@ public:
 	UPROPERTY(EditAnywhere, Category="Director|Shift")
 	float RushHourPacing = 0.35f;
 	UPROPERTY(EditAnywhere, Category="Director|Shift")
-	int32 RushHourExtraIncidents = 3;
+	int32 RushHourExtraIncidents = 3;	// (up to one per officer)
 	/** Shifts played this session (the set piece goes round in turn). */
 	int32 ShiftNumber = 0;
 
@@ -168,6 +168,7 @@ protected:
 	class AFTOTrafficCar* FindCarFor(const FVector& Near, float MinDistance, float MaxDistance) const;
 
 	bool bSetPieceDone = false;
+	float NextSetPieceTry = 0.f;
 	bool bWasRushHour = false;
 	TWeakObjectPtr<AFTOIncident> HeistIncident;
 	float HeistGetawayTime = 0.f;

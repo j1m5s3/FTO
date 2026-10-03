@@ -72,6 +72,8 @@ protected:
 	FString Clue() const;
 	/** Server: boom. */
 	void Explode();
+	/** Server: whoever's at the wires steps back (it's defused, or gone). */
+	void EndTalks();
 	UFUNCTION() void OnRep_Wires();
 
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<USceneComponent> Root;

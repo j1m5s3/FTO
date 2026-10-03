@@ -74,6 +74,7 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, LastSightingTime);
 	DOREPLIFETIME(AFTOIncident, bCrowd);
 	DOREPLIFETIME(AFTOIncident, bHiddenInside);
+	DOREPLIFETIME(AFTOIncident, bSuperseded);
 }
 
 void AFTOIncident::SetBuilding(int32 Index)
@@ -160,6 +161,10 @@ void AFTOIncident::SpawnExtras()
 		{
 			Bomb->Arm(this, BombFuseSeconds, GetTypeHash(At));
 			Extras.Add(Bomb);
+		}
+		else
+		{
+			Supersede(); // (no device, no call)
 		}
 		return;
 	}
@@ -306,6 +311,7 @@ void AFTOIncident::Supersede()
 		return;
 	}
 	Info.EscalatesTo = NAME_None;
+	bSuperseded = true;
 	SetState(EFTOIncidentState::Failed);
 	SetLifeSpan(0.5f);
 }
@@ -1012,7 +1018,7 @@ void AFTOIncident::RefreshVisuals()
 	{
 	case EFTOIncidentState::Unreported: LabelText = INVTEXT("!"); break;
 	case EFTOIncidentState::Resolved:   LabelText = FText::Format(INVTEXT("{0}\nHANDLED"), Info.Title); break;
-	case EFTOIncidentState::Failed:     LabelText = FText::Format(INVTEXT("{0}\nWENT COLD"), Info.Title); break;
+	case EFTOIncidentState::Failed:     LabelText = FText::Format(bSuperseded ? INVTEXT("{0}\nTHEY'RE OFF!") : INVTEXT("{0}\nWENT COLD"), Info.Title); break;
 	default:
 		if (bSubdued)
 		{
