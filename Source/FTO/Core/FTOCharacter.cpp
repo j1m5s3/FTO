@@ -712,7 +712,9 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 		ApplySprint();
 	}
 	// (The hot dog suit off while we're a ragdoll, back on when we're up.)
-	if (!HotDogSuit.IsEmpty() && HotDogSuit[0] && HotDogSuit[0]->IsVisible() == (Knockdown && Knockdown->IsDown()))
+	const AFTOPlayerState* Badge = GetPlayerState<AFTOPlayerState>();
+	const bool bWantSuit = Badge && Badge->GetOutfit() == TEXT("HotDog") && !(Knockdown && Knockdown->IsDown());
+	if (!HotDogSuit.IsEmpty() && HotDogSuit[0] && HotDogSuit[0]->IsVisible() != bWantSuit)
 	{
 		RefreshOfficerColor();
 	}

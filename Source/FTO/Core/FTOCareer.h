@@ -68,7 +68,8 @@ namespace FTOCareer
 	/** The save slot: -FTOCareerSlot=Name, else "FTOCareer". */
 	FTO_API FString SlotName();
 
-	/** This machine's officer's outfit, as last chosen at the locker (put back on after a map change). */
+	/** This machine's officer's outfit, as last chosen at the locker (put back on after a map change). One per process:
+	 *  in a multi-client PIE session the players share it (fine for standalone builds, which is what's shipped). */
 	FTO_API FName& RememberedOutfit();
 	/** An outfit's shirt colour (Badge: the officer's badge colour). */
 	FTO_API bool OutfitColor(FName Outfit, FLinearColor& OutColor);

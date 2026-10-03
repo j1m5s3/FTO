@@ -59,6 +59,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UBoxComponent> Focus;
 
 	UPROPERTY(ReplicatedUsing=OnRep_Kind) EFTOBoardKind Kind = EFTOBoardKind::Locker;
-	/** When an upgrade was last bought here (server). */
+	/** When an upgrade was last bought here, and by whom (server: one officer's double-tap doesn't buy two). */
 	float LastPurchaseTime = -100.f;
+	TWeakObjectPtr<AFTOCharacter> LastPurchaser;
 };

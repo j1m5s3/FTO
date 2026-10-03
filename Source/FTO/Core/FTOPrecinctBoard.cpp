@@ -198,7 +198,14 @@ bool AFTOPrecinctBoard::TalkChoice(AFTOCharacter* Officer, int32 Index)
 				}
 			}
 		}
-		else if (Index == 1 && GS->GetShiftPhase() == EFTOShiftPhase::Lobby)
+		else if (Index == 1 && GS->GetShiftPhase() != EFTOShiftPhase::Lobby)
+		{
+			if (PC)
+			{
+				PC->ClientToast(INVTEXT("The motor pool only repaints the fleet between shifts."), FLinearColor(1.f, 0.6f, 0.3f));
+			}
+		}
+		else if (Index == 1)
 		{
 			const TConstArrayView<FTOCareer::FItem> Liveries = FTOCareer::Liveries();
 			int32 At = 0;
@@ -222,7 +229,7 @@ bool AFTOPrecinctBoard::TalkChoice(AFTOCharacter* Officer, int32 Index)
 	// Buying an upgrade: between shifts, and not twice from one double-tap (the offer moves up once something's bought).
 	const TArray<FName> Offer = OnOffer();
 	const float Now = GetWorld()->GetTimeSeconds();
-	if (!Offer.IsValidIndex(Index) || Now - LastPurchaseTime < 1.f)
+	if (!Offer.IsValidIndex(Index) || (LastPurchaser == Officer && Now - LastPurchaseTime < 1.f))
 	{
 		return true;
 	}
@@ -244,6 +251,7 @@ bool AFTOPrecinctBoard::TalkChoice(AFTOCharacter* Officer, int32 Index)
 		return true;
 	}
 	LastPurchaseTime = Now;
+	LastPurchaser = Officer;
 	Career.Bank -= Item->Points;
 	Career.Upgrades.AddUnique(Item->Id);
 	GS->SetCareer(Career, true);

@@ -62,14 +62,19 @@ void AFTOGameMode::InitGame(const FString& MapName, const FString& Options, FStr
 
 void AFTOGameMode::StartPlay()
 {
+	// The precinct's career (the host's save), before play starts: the host's own controller begins play inside
+	// Super::StartPlay and asks to be put back in its outfit, which the career's rank has to allow.
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+	{
+		GS->SetCareer(FTOCareer::Load(FTOCareer::SlotName()), false);
+	}
+
 	Super::StartPlay();
 
 	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
 	{
 		GS->ShiftSeed = ShiftSeed;
 		GS->OnShiftPhaseChanged.AddDynamic(this, &AFTOGameMode::HandleShiftPhase);
-		// The precinct's career (the host's save).
-		GS->SetCareer(FTOCareer::Load(FTOCareer::SlotName()), false);
 	}
 
 	if (CityGenerator)
