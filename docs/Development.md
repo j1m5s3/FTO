@@ -41,6 +41,8 @@ free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invite
 | `FTOShiftTimeLeft 0` | Set the shift clock (0 runs it out and starts the overtime vote) |
 | `FTOVote Overtime` | Vote at the end of the shift (`Overtime` or `ClockOff`); works for any player |
 | `FTOMutator LowGravity` | Change today's mutator (`LowGravity`, `BouncyCars`, `HotDogs`, `BigHeads`, `None`) |
+| `FTOCareerPoints 5000` | Add career points (earned and banked); `FTOCareerReset` starts a fresh career |
+| `FTOLocker` | Go to the precinct's locker board (any player) |
 | `FTOSetPiece Bomb` | Start a set piece now (`Heist`, `Bomb`, `Pursuit`; no argument for this shift's own) |
 
 Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately; `-FTOMutator=HotDogs` picks the
@@ -144,6 +146,17 @@ shift's mutator (`None` for none).
   most). The dispatcher has a word on the radio for the moments that matter (the shift starting, the set piece, rush
   hour, the chaos alarm, a big bust, a call gone cold, an oops, teamwork, idling, the end) with the line as a
   subtitle, and the best bust this machine saw gets its photo taken for the scoreboard (SHIFT HIGHLIGHT).
+- **Progression**: the precinct has a career, saved on the host (`FTOCareer` save slot; `-FTOCareerSlot=Name` for
+  another; the smoke test uses its own). Every shift pays a tenth of the squad's score in career points, plus 150 for
+  surviving it. Points ever earned raise the precinct's rank (Rookie, Officer, Sergeant, Lieutenant, Captain,
+  Commissioner) and unlock outfits (Hi-Vis, Tactical Black, Hawaiian Shirt, Hot Dog Suit, Gold Braid) and fleet
+  liveries (Interceptor: +12% top speed; Riot Wagon: 1.6x tougher, a bit slower; Ice Cream Patrol). Points in the
+  bank buy precinct upgrades: a coffee machine (everyone 12% quicker on foot), better radios (calls in twice as fast,
+  crimes spotted from further), a motor pool mechanic (cruisers 1.5x tougher), bigger holding cells (booking calms
+  the city 50% more) and body armour (half the shots that would put an officer down don't). Every shift survived
+  raises the precinct's level (to 10): crimes come 3% faster and do 4% more damage per level. Two boards on the
+  precinct's wall (E) change your outfit and the fleet's livery, and buy upgrades; the lobby shows the precinct's
+  rank, bank and level, and the scoreboard what the shift earned.
 - **End of shift**: when the 10-minute clock runs out the city holds still and everyone votes: Y (left bumper) for 5
   minutes of overtime (chaos carries over; the clock reads OVERTIME), N (view button) to clock off. Most votes win;
   the host's vote breaks a tie and decides for anyone who says nothing within 20 s. Clocking off (or the city falling)
@@ -158,7 +171,9 @@ The smoke test also runs on the packaged game: `FTO.exe -windowed -FTOSmokeTest 
 ## Smoke test
 `UnrealEditor.exe FTO.uproject -game -windowed -ResX=1600 -ResY=900 -FTOSmokeTest -FTOSmokeTestQuit`
 tours the city and writes screenshots to `Saved/Screenshots/SmokeTest/`. Handy after any gameplay or art change.
-Along the way it books a suspect into the cells (and checks they scored), checks the shift is ten minutes and that
+It starts in the lobby with a fresh smoke-test career: changes the officer's outfit and the fleet's livery at the
+locker board and buys the coffee machine (checking the walk speed), and after the debrief checks the shift paid into
+the saved career. Along the way it books a suspect into the cells (and checks they scored), checks the shift is ten minutes and that
 the director puts new crimes a short run from the officer, runs the shift clock out and votes for
 overtime, runs it out again and clocks off to the scoreboard with the squad lined up dancing outside the precinct,
 looks inside every kind of building (with their people), stages a
@@ -183,7 +198,7 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, fires out of the window, gets out
 and arrests a shoplifter the host puts beside them. Then the client calls for backup and stays on air, and the host
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
-host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece, the front pages and the mutator, and that its own dispatcher spoke and its highlight photo was taken.
+host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece, the front pages and the mutator, changes its own outfit at the locker board (the host checks it sees it), and that its own dispatcher spoke and its highlight photo was taken.
 
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine

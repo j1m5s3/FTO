@@ -42,6 +42,8 @@ namespace
 		return Shaker;
 	}
 
+	bool GSlowMoSuppressed = false;
+
 	/** Server: when the last slow motion started, per world. */
 	TMap<TWeakObjectPtr<const UWorld>, float> LastSlowMoTimes;
 }
@@ -102,7 +104,7 @@ float FTOJuice::GetTrauma(const UWorld* World)
 
 void FTOJuice::SlowMo(UWorld* World, float Scale, float RealSeconds)
 {
-	if (!World || World->GetNetMode() == NM_Client)
+	if (!World || World->GetNetMode() == NM_Client || GSlowMoSuppressed)
 	{
 		return;
 	}
@@ -137,6 +139,11 @@ void FTOJuice::SlowMo(UWorld* World, float Scale, float RealSeconds)
 			It.RemoveCurrent();
 		}
 	}
+}
+
+void FTOJuice::SuppressSlowMo(bool bSuppress)
+{
+	GSlowMoSuppressed = bSuppress;
 }
 
 float FTOJuice::LastSlowMo(const UWorld* World)

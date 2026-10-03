@@ -28,6 +28,8 @@
 #include "Crime/FTOArrestee.h"
 #include "Crime/FTOBomb.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOCareer.h"
+#include "Core/FTOPrecinctBoard.h"
 #include "Core/FTOJuice.h"
 #include "Audio/FTOAudio.h"
 #include "UI/FTOHUD.h"
@@ -68,6 +70,8 @@ bool AFTOSmokeTest::IsRequested()
 void AFTOSmokeTest::BeginPlay()
 {
 	Super::BeginPlay();
+	// (The tour's waits are in real time: slow motion would throw them. The slow-motion check turns it on for itself.)
+	FTOJuice::SuppressSlowMo(true);
 	BuildSteps();
 }
 
@@ -386,6 +390,145 @@ void AFTOSmokeTest::BuildSteps()
 		if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 	});
 
+	// Progression, in the lobby: a fresh (smoke-test) career with points to spend; the locker board for an outfit and
+	// the fleet's livery, the upgrades board for the coffee machine. The client changes its own outfit too.
+	AddStep(TEXT("career"), 0.3f, [this]()
+	{
+		if (AFTOGameMode* GM = GetAuthGameMode())
+		{
+			GM->FTOCareerReset();
+			GM->FTOCareerPoints(10000);
+		}
+	});
+	AddStep(TEXT("locker"), 0.5f, [this]()
+	{
+		AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+		AFTOPrecinctBoard* Locker = nullptr;
+		AFTOPrecinctBoard* Upgrades = nullptr;
+		for (TActorIterator<AFTOPrecinctBoard> It(GetWorld()); It; ++It)
+		{
+			(It->GetKind() == EFTOBoardKind::Locker ? Locker : Upgrades) = *It;
+		}
+		const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: precinct boards: %s, %s; career: %s, %d pts banked."), Locker ? TEXT("locker room") : TEXT("NO LOCKER"),
+			Upgrades ? TEXT("upgrades") : TEXT("NO UPGRADES"), GS ? *FTOCareer::RankFor(GS->GetCareer().Earned) : TEXT("?"), GS ? GS->GetCareer().Bank : -1);
+		if (!Cop || !Locker)
+		{
+			return;
+		}
+		const FVector Front = Locker->GetActorLocation() + Locker->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 100.f);
+		Cop->TeleportTo(Front, (-Locker->GetActorForwardVector()).Rotation());
+		if (GetNetMode() == NM_Client)
+		{
+			return; // (the client talks to it through the server: the next step)
+		}
+		// (Partners brought to the board too, beside us.)
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (APawn* Partner = It->Get() && !It->Get()->IsLocalController() ? It->Get()->GetPawn() : nullptr)
+			{
+				Partner->TeleportTo(Front + Locker->GetActorRightVector() * 110.f, (-Locker->GetActorForwardVector()).Rotation());
+			}
+		}
+		Locker->Interact(Cop);
+		const AFTOPlayerState* PS = Cop->GetPlayerState<AFTOPlayerState>();
+		for (int32 i = 0; i < 8 && PS && PS->GetOutfit() != TEXT("HotDog"); ++i)
+		{
+			Locker->TalkChoice(Cop, 0);
+		}
+		for (int32 i = 0; i < 5 && GS && GS->GetCareer().Livery != TEXT("Interceptor"); ++i)
+		{
+			Locker->TalkChoice(Cop, 1);
+		}
+		const float Stock = Cop->WalkSpeed;
+		if (Upgrades)
+		{
+			Upgrades->Interact(Cop);
+			Upgrades->TalkChoice(Cop, 0); // the cheapest: the coffee machine
+		}
+		AFTOCruiser* Cruiser = TActorIterator<AFTOCruiser>(GetWorld()) ? *TActorIterator<AFTOCruiser>(GetWorld()) : nullptr;
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: locker: outfit %s, fleet %s (a cruiser's top speed %.0f), upgrades [%s], %d pts left."),
+			PS ? *PS->GetOutfit().ToString() : TEXT("?"), GS ? *GS->GetCareer().Livery.ToString() : TEXT("?"), Cruiser ? Cruiser->MaxSpeed : -1.f,
+			GS ? *FString::JoinBy(GS->GetCareer().Upgrades, TEXT(", "), [](const FName& N) { return N.ToString(); }) : TEXT(""), GS ? GS->GetCareer().Bank : -1);
+		ViewFrom(Cop->GetActorLocation() + Cop->GetActorForwardVector() * 300.f + FVector(0.f, 0.f, 40.f), Cop->GetActorLocation());
+	});
+	AddShot(TEXT("01d_locker"), 0.3f);
+	AddStep(TEXT("coffee"), 0.3f, [this]()
+	{
+		if (AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn()))
+		{
+			Cop->AddMovementInput(Cop->GetActorForwardVector(), 1.f);
+			AFTOCruiser* Cruiser = TActorIterator<AFTOCruiser>(GetWorld()) ? *TActorIterator<AFTOCruiser>(GetWorld()) : nullptr;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: coffee: walking at %.0f (stock %.0f); a cruiser's top speed now %.0f."), Cop->GetCharacterMovement()->MaxWalkSpeed, Cop->WalkSpeed,
+				Cruiser ? Cruiser->MaxSpeed : -1.f);
+		}
+		if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
+	});
+	// The client: E at the locker, and the first option (the next outfit), through the server like a player.
+	if (GetNetMode() == NM_Client)
+	{
+		AddWait(TEXT("career points in"), 30.f, [this]()
+		{
+			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+			return GS && GS->GetCareer().Earned >= 800;
+		});
+		AddStep(TEXT("client to the locker"), 1.f, [this]()
+		{
+			if (AFTOPlayerController* PC = Cast<AFTOPlayerController>(GetPC()))
+			{
+				PC->FTOLocker();
+			}
+		});
+		AddStep(TEXT("client at the locker"), 0.8f, [this]()
+		{
+			if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn()))
+			{
+				Me->PressInteract();
+			}
+		});
+		AddStep(TEXT("client picks an outfit"), 0.8f, [this]()
+		{
+			if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn()))
+			{
+				const AActor* Board = nullptr;
+				for (TActorIterator<AFTOPrecinctBoard> It(GetWorld()); It; ++It)
+				{
+					Board = It->GetKind() == EFTOBoardKind::Locker ? *It : Board;
+				}
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: client at the locker: %.0f cm from it, talking to %s, focused on %s."), Board ? FVector::Dist2D(Board->GetActorLocation(), Me->GetActorLocation()) : -1.f,
+					*GetNameSafe(Me->GetTalkingTo()), *GetNameSafe(Me->GetFocusedInteractable()));
+				Me->TalkPressed(0);
+			}
+		});
+		AddStep(TEXT("client's outfit"), 0.f, [this]()
+		{
+			const AFTOPlayerState* PS = GetPC() ? GetPC()->GetPlayerState<AFTOPlayerState>() : nullptr;
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: client changed outfit: %s."), PS && PS->GetOutfit() != TEXT("Classic") ? *PS->GetOutfit().ToString() : TEXT("STILL CLASSIC"));
+			if (AFTOCharacter* Me = Cast<AFTOCharacter>(GetPawn()))
+			{
+				Me->PressInteract(); // (done)
+			}
+		});
+	}
+	else
+	{
+		// (Back to the usual for the rest of the tour, bar the coffee.)
+		AddStep(TEXT("back in uniform"), 0.2f, [this]()
+		{
+			AFTOCharacter* Cop = Cast<AFTOCharacter>(GetPawn());
+			if (AFTOPlayerState* PS = Cop ? Cop->GetPlayerState<AFTOPlayerState>() : nullptr)
+			{
+				PS->SetOutfit(TEXT("Classic"));
+			}
+			if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+			{
+				FFTOCareerState Career = GS->GetCareer();
+				Career.Livery = TEXT("Standard");
+				GS->SetCareer(Career, false);
+			}
+		});
+	}
+
 	// Start the shift and stage a few incidents in view (server/standalone only).
 	AddStep(TEXT("stage incidents"), 4.f, [this]()
 	{
@@ -680,6 +823,13 @@ void AFTOSmokeTest::BuildSteps()
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: debrief: the officer is %s outside the precinct, %s."),
 					Officer->GetAnimAction() == EFTOAnimAction::Dance ? TEXT("dancing") : TEXT("NOT dancing"),
 					GetCity() && FVector::Dist2D(Officer->GetActorLocation(), GetCity()->FindBuilding(EFTOBuildingType::Precinct)->DoorOutside) < 800.f ? TEXT("lined up") : TEXT("NOT LINED UP"));
+			}
+			// The precinct's career: paid, and saved.
+			if (const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+			{
+				const FFTOCareerState Saved = FTOCareer::Load(FTOCareer::SlotName());
+				UE_LOG(LogFTO, Display, TEXT("SMOKE: career: the shift paid %d pts (%d shift(s) played); the save says %d earned, rank %s, level %d."), GS->GetCareer().LastEarned,
+					GS->GetCareer().ShiftsPlayed, Saved.Earned, *FTOCareer::RankFor(Saved.Earned), FTOCareer::LevelFor(Saved));
 			}
 			// The tour goes on: hands back on the controls.
 			if (APlayerController* PC = GetPC())
@@ -2319,13 +2469,14 @@ void AFTOSmokeTest::BuildSteps()
 		AddStep(TEXT("shake result"), 0.f, [this]()
 		{
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: shake: a bang 6 m away left the camera at %.2f trauma."), FTOJuice::GetTrauma(GetWorld()));
-			const float Ago = GetWorld()->GetTimeSeconds() - FTOJuice::LastSlowMo(GetWorld());
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: slow motion: last played %.0f s ago (the tackle, a wall, a blast)."), Ago);
+
 		});
-		AddStep(TEXT("slow-mo"), 15.5f, []() {}); // (the cooldown)
+		AddStep(TEXT("slow-mo"), 0.2f, []() {});
 		AddStep(TEXT("slow-mo now"), 0.1f, [this]()
 		{
+			FTOJuice::SuppressSlowMo(false);
 			FTOJuice::SlowMo(GetWorld(), 0.3f, 0.6f);
+			FTOJuice::SuppressSlowMo(true);
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: slow motion on: time at x%.2f."), UGameplayStatics::GetGlobalTimeDilation(GetWorld()));
 		});
 		AddStep(TEXT("slow-mo over"), 1.2f, [this]() {});
@@ -3832,7 +3983,9 @@ void AFTOSmokeTest::BuildSteps()
 		AddStep(TEXT("grab result"), 0.f, [this]()
 		{
 			const bool bThrown = TestPerp.IsValid() && ((TestPerp->FindComponentByClass<UFTOKnockdownComponent>() && TestPerp->FindComponentByClass<UFTOKnockdownComponent>()->IsDown()) || TestPerp->GetArrestState() == EFTOPerpArrest::Surrendered);
-			UE_LOG(LogFTO, Display, TEXT("SMOKE: grabbed a suspect and threw them: %s."), bThrown ? TEXT("over they went") : TEXT("NOT THROWN"));
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: grabbed a suspect and threw them: %s."), bThrown ? TEXT("over they went") :
+				*FString::Printf(TEXT("NOT THROWN (they're %s, %.0f cm away)"), TestPerp.IsValid() ? *StaticEnum<EFTOPerpArrest>()->GetNameStringByValue(int64(TestPerp->GetArrestState())) : TEXT("gone"),
+					TestPerp.IsValid() && GetPawn() ? FVector::Dist2D(TestPerp->GetActorLocation(), GetPawn()->GetActorLocation()) : -1.f));
 			if (APlayerController* PC = GetPC()) { PC->SetViewTargetWithBlend(PC->GetPawn(), 0.f); }
 		});
 	}
@@ -3940,6 +4093,7 @@ void AFTOSmokeTest::BuildSteps()
 					const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS);
 					if (Officer && !Officer->IsLocalOfficer())
 					{
+						UE_LOG(LogFTO, Display, TEXT("SMOKE: host sees %s wearing %s."), *Officer->GetCallsign(), *Officer->GetOutfit().ToString());
 						UE_LOG(LogFTO, Display, TEXT("SMOKE: host heard %s: callout %s (%.1f s ago), %s, their voice %s."), *Officer->GetCallsign(),
 							*StaticEnum<EFTOCallout>()->GetNameStringByValue(int64(Officer->GetCallout().Callout)), Officer->GetCalloutAge(),
 							Officer->IsOnRadio() ? TEXT("on air") : TEXT("off air"), Officer->HasRadioVoice() ? TEXT("through the radio filter") : TEXT("NOT SET UP"));

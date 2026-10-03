@@ -20,6 +20,9 @@ public:
 
 	/** Server only. */
 	void SetBadgeIndex(int32 NewIndex);
+	/** The officer's outfit (FTOCareer::Outfits; NAME_None: Classic). Server. */
+	void SetOutfit(FName InOutfit);
+	FName GetOutfit() const { return Outfit; }
 
 	UFUNCTION(BlueprintPure, Category="FTO")
 	int32 GetBadgeIndex() const { return BadgeIndex; }
@@ -77,6 +80,8 @@ protected:
 	/** Every machine, whenever we learn who this officer is (the server sets it, clients get it replicated). */
 	virtual void OnSetUniqueId() override;
 
+	UPROPERTY(ReplicatedUsing=OnRep_BadgeIndex, BlueprintReadOnly, Category="FTO")
+	FName Outfit = TEXT("Classic");
 	UPROPERTY(ReplicatedUsing=OnRep_BadgeIndex, BlueprintReadOnly, Category="FTO")
 	int32 BadgeIndex = 0;
 

@@ -9,6 +9,7 @@
 #include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
 #include "Scoring/FTOScoring.h"
+#include "Core/FTOCareer.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Camera/PlayerCameraManager.h"
@@ -45,7 +46,7 @@ void AFTOHUD::AddScorePopup(const AFTOPlayerState* Officer, int32 Points, EFTOSc
 	Popup.Where = Where;
 	Popup.Start = GetWorld()->GetTimeSeconds();
 	Popup.Text = FString::Printf(TEXT("%s%d %s"), Points >= 0 ? TEXT("+") : TEXT(""), Points, *FTOScoring::Label(Event));
-	// The best bust of the shift gets its photo taken (whoever made it, from wherever this machine's camera is).
+	// The best bust this machine saw gets its photo taken (framed near the bust; see TakeHighlight).
 	if ((Event == EFTOScore::Arrest || Event == EFTOScore::Bust || Event == EFTOScore::Teamwork) && PC && PC->PlayerCameraManager)
 	{
 		// (Only what this machine can actually see: our own, or one close by in front of us.)
@@ -276,6 +277,13 @@ void AFTOHUD::DrawScoreboard(const AFTOGameState* GS)
 	const FString Footer = FString::Printf(TEXT("Handled %d  |  Caught in the act %d  |  Traffic stops %d  |  Booked %d  |  Went cold %d  |  Citizens bowled over %d  |  Property broken %d, cars %d  |  Peak chaos %d%%"),
 		GS->IncidentsResolved, GS->IncidentsWitnessed, GS->TrafficStops, GS->SuspectsBooked, GS->IncidentsFailed, GS->CiviliansBowledOver, GS->PropertyBroken, GS->CarsWrecked, FMath::RoundToInt(GS->PeakChaos));
 	DrawCenteredText(Footer, CX, Top + H - 32.f * S, FLinearColor(0.75f, 0.75f, 0.75f), Small, S * 1.1f);
+	// What the shift did for the precinct's career.
+	const FFTOCareerState& Career = GS->GetCareer();
+	if (Career.ShiftsPlayed > 0)
+	{
+		DrawCenteredText(FString::Printf(TEXT("+%d career points  |  Rank: %s  |  %d in the bank  |  Next shift: level %d"), Career.LastEarned,
+			*FTOCareer::RankFor(Career.Earned), Career.Bank, GS->GetCareerLevel()), CX, Top + H - 54.f * S, FLinearColor(1.f, 0.85f, 0.4f), Small, S * 1.1f);
+	}
 
 	// The shift's highlight, pinned up under the scoreboard like a photo.
 	if (HasHighlight())
@@ -326,7 +334,7 @@ void AFTOHUD::TakeHighlight(int32 Points, const FString& Caption, const FVector&
 	const FVector Side = FVector::CrossProduct(FVector::UpVector, Back);
 	FVector Shot = Where + Back * 380.f + Side * 160.f + FVector(0.f, 0.f, 60.f);
 	FHitResult Wall;
-	if (GetWorld()->LineTraceSingleByChannel(Wall, Where + FVector(0.f, 0.f, 60.f), Shot, ECC_Visibility))
+	if (GetWorld()->LineTraceSingleByObjectType(Wall, Where + FVector(0.f, 0.f, 60.f), Shot, FCollisionObjectQueryParams(ECC_WorldStatic)))
 	{
 		Shot = Wall.ImpactPoint + (Where - Shot).GetSafeNormal() * 30.f; // (not through a wall)
 	}

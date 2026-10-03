@@ -176,6 +176,8 @@ public:
 
 	/** Re-tints the uniform from the owning player state's badge colour. */
 	void RefreshOfficerColor();
+	/** The hot dog suit outfit's pieces (made the first time it's worn). */
+	UPROPERTY(Transient) TArray<TObjectPtr<UStaticMeshComponent>> HotDogSuit;
 
 	UFUNCTION(BlueprintPure, Category="FTO")
 	bool IsSprinting() const { return bSprinting; }

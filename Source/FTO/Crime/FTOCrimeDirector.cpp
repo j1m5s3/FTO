@@ -159,7 +159,8 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 	{
 		if (Incident)
 		{
-			ChaosDelta += Incident->GetChaosRate() * DeltaTime;
+			// (A higher-level precinct's city is rowdier.)
+		ChaosDelta += Incident->GetChaosRate() * DeltaTime * (1.f + 0.04f * GS->GetCareerLevel());
 		}
 	}
 	GS->AddChaos(ChaosDelta);
@@ -211,7 +212,7 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 
 		const float ChaosAlpha = GS->GetChaosAlpha();
 		const float Pacing = OfficerPacing.IsValidIndex(Officers - 1) ? OfficerPacing[Officers - 1] : 1.f;
-		const float Interval = FMath::Lerp(SpawnIntervalRange.X, SpawnIntervalRange.Y, ChaosAlpha) * Pacing * (bRushHour ? RushHourPacing + 0.05f * FMath::Max(0, 4 - Officers) : 1.f);
+		const float Interval = FMath::Lerp(SpawnIntervalRange.X, SpawnIntervalRange.Y, ChaosAlpha) * Pacing * (1.f - 0.03f * GS->GetCareerLevel()) * (bRushHour ? RushHourPacing + 0.05f * FMath::Max(0, 4 - Officers) : 1.f);
 		NextSpawnTime = Now + Interval * Rng.FRandRange(0.7f, 1.3f);
 	}
 }
@@ -410,7 +411,13 @@ AFTOIncident* UFTOCrimeDirector::SpawnFromTemplate(const FFTOCrimeTemplate& Temp
 
 	const FFTOIncidentInfo Info = Catalog->RollIncident(Template, Rng);
 	const bool bReported = bForceReported || Rng.FRand() < Template.ReportChance;
-	const float Delay = bForceReported ? 0.f : Rng.FRandRange(Template.ReportDelay.X, Template.ReportDelay.Y);
+	// (Better radios: calls come in twice as fast, and officers spot trouble from further off.)
+	const bool bRadios = GS->HasUpgrade(TEXT("Radios"));
+	const float Delay = (bForceReported ? 0.f : Rng.FRandRange(Template.ReportDelay.X, Template.ReportDelay.Y)) * (bRadios ? 0.5f : 1.f);
+	if (bRadios)
+	{
+		Incident->WitnessRadius *= 1.5f;
+	}
 	Incident->InitIncident(Info, bReported, Delay);
 
 	Incident->OnResolved.AddUObject(this, &UFTOCrimeDirector::HandleResolved);
@@ -507,7 +514,8 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 			const FRotator Facing = Perp ? FRotator(0.f, Perp->GetActorRotation().Yaw, 0.f) : Incident->GetActorRotation();
 			if (AFTOArrestee* Cuffed = GetWorld()->SpawnActor<AFTOArrestee>(AFTOArrestee::StaticClass(), SpawnAt, Facing, Params))
 			{
-				Cuffed->Init(Arresting, FMath::Max(2.f, Info.ChaosRelief * 0.6f), Info.Title);
+				// (Bigger holding cells: booking calms the city more.)
+				Cuffed->Init(Arresting, FMath::Max(2.f, Info.ChaosRelief * 0.6f) * (GS->HasUpgrade(TEXT("Cells")) ? 1.5f : 1.f), Info.Title);
 				if (Perp)
 				{
 					Perp->Destroy();

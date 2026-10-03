@@ -53,6 +53,9 @@ public:
 	AFTOIncident* FTOSetPieceNow(FName Which);
 	/** Change today's mutator (LowGravity, BouncyCars, HotDogs, BigHeads, None). */
 	UFUNCTION(Exec) void FTOMutator(FName Which);
+	/** Career points (banked and earned) for testing, and a fresh career. */
+	UFUNCTION(Exec) void FTOCareerPoints(int32 Points);
+	UFUNCTION(Exec) void FTOCareerReset();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")

@@ -50,6 +50,11 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
   on half of all calls.
 - The Daily Siren: every Major or Critical incident, handled or not, gets a silly headline on the front page.
 
+## Progression
+- A saved career for the precinct (the host's): career points every shift (more for surviving), a rank that unlocks
+  outfits and fleet liveries, a bank that buys precinct upgrades (coffee machine, better radios, motor pool mechanic,
+  bigger holding cells, body armour), and a level that rises with every shift survived (a busier, rowdier city).
+
 ## Juice
 - Screen shake for explosions, crashes, collapses and punches; slow motion for tackles, cars through walls and blasts.
 - The dispatcher: a synthesised radio voice (in-house formant synthesis, subtitled) that roasts the squad.

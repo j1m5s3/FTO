@@ -57,6 +57,9 @@ public:
 
 	/** Dev: ride shotgun in the nearest cruiser that has a driver. */
 	UFUNCTION(Exec) void FTORide();
+	/** Go to the precinct's locker board (any player; for testing). */
+	UFUNCTION(Exec) void FTOLocker();
+	UFUNCTION(Server, Reliable) void ServerLocker();
 
 	UFUNCTION(Server, Reliable)
 	void ServerRideAlong();

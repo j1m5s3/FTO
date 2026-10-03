@@ -1,4 +1,6 @@
 #include "Core/FTOGameMode.h"
+#include "Core/FTOCareer.h"
+#include "Core/FTOPrecinctBoard.h"
 #include "City/FTOAmbientPopulation.h"
 #include "City/FTOCityGenerator.h"
 #include "City/FTOInteriorLife.h"
@@ -66,6 +68,8 @@ void AFTOGameMode::StartPlay()
 	{
 		GS->ShiftSeed = ShiftSeed;
 		GS->OnShiftPhaseChanged.AddDynamic(this, &AFTOGameMode::HandleShiftPhase);
+		// The precinct's career (the host's save).
+		GS->SetCareer(FTOCareer::Load(FTOCareer::SlotName()), false);
 	}
 
 	if (CityGenerator)
@@ -96,6 +100,22 @@ void AFTOGameMode::StartPlay()
 			if (AFTOCruiser* Cruiser = GetWorld()->SpawnActor<AFTOCruiser>(AFTOCruiser::StaticClass(), Spawn, Params))
 			{
 				Cruiser->SetStripeColor(AFTOPlayerState::ColorForBadge(i));
+			}
+		}
+	}
+
+	// The locker-room and upgrades boards on the precinct's wall.
+	if (const FFTOBuilding* Precinct = CityGenerator ? CityGenerator->FindBuilding(EFTOBuildingType::Precinct) : nullptr)
+	{
+		for (int32 i = 0; i < 2; ++i)
+		{
+			const FVector At = Precinct->Room.TransformPosition(FVector(220.f + i * 220.f, Precinct->YMin + 6.f, 0.f));
+			const FRotator Facing = (Precinct->Room.GetRotation().GetRightVector()).Rotation();
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			if (AFTOPrecinctBoard* Board = GetWorld()->SpawnActor<AFTOPrecinctBoard>(AFTOPrecinctBoard::StaticClass(), At, Facing, Params))
+			{
+				Board->SetKind(i == 0 ? EFTOBoardKind::Locker : EFTOBoardKind::Upgrades);
 			}
 		}
 	}
@@ -203,6 +223,25 @@ void AFTOGameMode::FTOSpawnCrime(FName TemplateId)
 void AFTOGameMode::FTOSetPiece(FName Which)
 {
 	FTOSetPieceNow(Which);
+}
+
+void AFTOGameMode::FTOCareerPoints(int32 Points)
+{
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+	{
+		FFTOCareerState Career = GS->GetCareer();
+		Career.Earned += Points;
+		Career.Bank += Points;
+		GS->SetCareer(Career, true);
+	}
+}
+
+void AFTOGameMode::FTOCareerReset()
+{
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+	{
+		GS->SetCareer(FFTOCareerState(), true);
+	}
 }
 
 void AFTOGameMode::FTOMutator(FName Which)
@@ -319,6 +358,28 @@ void AFTOGameMode::HandleShiftPhase(EFTOShiftPhase NewPhase)
 	if (NewPhase == EFTOShiftPhase::Survived || NewPhase == EFTOShiftPhase::Overrun)
 	{
 		GatherForDebrief();
+		// Pay the precinct: a tenth of the squad's score, and a bonus for getting through it. Surviving raises the level.
+		if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+		{
+			int32 TeamScore = 0;
+			for (const APlayerState* PS : GS->PlayerArray)
+			{
+				if (const AFTOPlayerState* Officer = Cast<AFTOPlayerState>(PS))
+				{
+					TeamScore += Officer->GetShiftScore();
+				}
+			}
+			FFTOCareerState Career = GS->GetCareer();
+			const bool bSurvived = NewPhase == EFTOShiftPhase::Survived;
+			Career.LastEarned = FMath::Max(0, TeamScore / 10) + (bSurvived ? 150 : 0);
+			Career.Earned += Career.LastEarned;
+			Career.Bank += Career.LastEarned;
+			++Career.ShiftsPlayed;
+			Career.ShiftsSurvived += bSurvived ? 1 : 0;
+			GS->SetCareer(Career, true);
+			UE_LOG(LogFTO, Log, TEXT("Career: +%d points (%d earned, %d banked), %d shifts survived of %d."), Career.LastEarned, Career.Earned, Career.Bank,
+				Career.ShiftsSurvived, Career.ShiftsPlayed);
+		}
 	}
 }
 

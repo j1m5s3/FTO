@@ -38,6 +38,8 @@ namespace FTOJuice
 	FTO_API float GetTrauma(const UWorld* World);
 	/** Server: the whole game in slow motion (Scale) for RealSeconds, unless there's been one in the last 15 seconds. */
 	FTO_API void SlowMo(UWorld* World, float Scale, float RealSeconds);
+	/** Tests: no slow motion (the smoke test's timings are in real time). */
+	FTO_API void SuppressSlowMo(bool bSuppress);
 	/** When the last slow-mo started (server, world time; tests). */
 	FTO_API float LastSlowMo(const UWorld* World);
 }

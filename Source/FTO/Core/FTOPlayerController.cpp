@@ -1,4 +1,5 @@
 #include "Core/FTOPlayerController.h"
+#include "Core/FTOPrecinctBoard.h"
 #include "Core/FTOJuice.h"
 #include "Core/FTOInputConfig.h"
 #include "Core/FTOPlayerState.h"
@@ -393,6 +394,25 @@ void AFTOPlayerController::FTODrive()
 void AFTOPlayerController::FTORide()
 {
 	ServerRideAlong();
+}
+
+void AFTOPlayerController::FTOLocker()
+{
+	ServerLocker();
+}
+
+void AFTOPlayerController::ServerLocker_Implementation()
+{
+	APawn* Officer = GetPawn();
+	for (TActorIterator<AFTOPrecinctBoard> It(GetWorld()); It && Officer; ++It)
+	{
+		if (It->GetKind() == EFTOBoardKind::Locker)
+		{
+			Officer->TeleportTo(It->GetActorLocation() + It->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 100.f),
+				(-It->GetActorForwardVector()).Rotation());
+			SetControlRotation((-It->GetActorForwardVector()).Rotation());
+		}
+	}
 }
 
 void AFTOPlayerController::ServerRideAlong_Implementation()
