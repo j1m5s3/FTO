@@ -1994,6 +1994,25 @@ void AFTOSmokeTest::BuildSteps()
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: heist: NO HEIST."));
 				return;
 			}
+			// (A car going by the bank for the crew to take: the nearest one, brought round to the door.)
+			if (const AFTOCityGenerator* City = GetCity())
+			{
+				const FFTOBuilding* Bank = City->FindBuilding(EFTOBuildingType::Bank);
+				AFTOTrafficCar* Nearest = nullptr;
+				for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It && Bank; ++It)
+				{
+					if (It->GetCarState() == EFTOCarState::Driving &&
+						(!Nearest || FVector::DistSquared(It->GetActorLocation(), Bank->DoorOutside) < FVector::DistSquared(Nearest->GetActorLocation(), Bank->DoorOutside)))
+					{
+						Nearest = *It;
+					}
+				}
+				if (Nearest && FVector::Dist2D(Nearest->GetActorLocation(), Bank->DoorOutside) > 5000.f)
+				{
+					const FVector Out = (Bank->DoorOutside - Bank->Room.GetLocation()).GetSafeNormal2D();
+					Nearest->SetActorLocation(Bank->DoorOutside + Out * 600.f + FVector(0.f, 0.f, AFTOTrafficCar::RideHeight));
+				}
+			}
 			GM->GetCrimeDirector()->TriggerHeistGetaway();
 			const AFTOIncident* Chase = nullptr;
 			for (const AFTOIncident* Incident : GetWorld()->GetGameState<AFTOGameState>()->GetIncidents())
@@ -3786,7 +3805,7 @@ void AFTOSmokeTest::BuildSteps()
 		{
 			// Wait for the host to be parked up at the wheel in the precinct lot (they run extra checks first, and their
 			// test drives across town have a driver too).
-			AddWait(TEXT("find a ride"), 150.f, [this]()
+			AddWait(TEXT("find a ride"), 420.f, [this]()
 			{
 				const AFTOCityGenerator* City = GetCity();
 				for (TActorIterator<AFTOCruiser> It(GetWorld()); It && City; ++It)
