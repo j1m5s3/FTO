@@ -2172,14 +2172,10 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			TeamworkBefore = Cop->GetPlayerState<AFTOPlayerState>() ? Cop->GetPlayerState<AFTOPlayerState>()->GetStats().Teamwork : 0;
 			Cop->TeleportTo(Building->DoorOutside + FVector(0.f, 0.f, 100.f), Cop->GetActorRotation());
+			// (Out they come straight away: before the officer at the door gets a look in and finds them first.)
+			TestPerp->FinishDeedNow();
 		});
-		AddStep(TEXT("burglar heads out"), 0.6f, [this]()
-		{
-			if (TestPerp.IsValid())
-			{
-				TestPerp->FinishDeedNow();
-			}
-		});
+		AddStep(TEXT("burglar heads out"), 0.6f, [this]() {});
 		AddStep(TEXT("door guard result"), 0.f, [this]()
 		{
 			const AFTOPlayerState* PS = GetPawn() ? GetPawn()->GetPlayerState<AFTOPlayerState>() : nullptr;
