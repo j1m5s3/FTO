@@ -1,5 +1,6 @@
 #include "Vehicles/FTOCruiser.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOJuice.h"
 #include "Kismet/GameplayStatics.h"
 #include "City/FTOCityKit.h"
 #include "Audio/FTOAudio.h"
@@ -920,6 +921,10 @@ void AFTOCruiser::ServerBreakThrough_Implementation(FName Component, int32 Insta
 		FVector::DistSquared(FVector(Hit), GetActorLocation()) < FMath::Square(2500.f))
 	{
 		Wreckage->Break(Thing, Instance, Hit, FVector(Push).GetClampedToMaxSize(MaxSpeed * 1.2f), GetController());
+		if (AFTODestruction::KindOf(Thing) == EFTOBreakKind::Crumble)
+		{
+			FTOJuice::SlowMo(GetWorld(), 0.3f, 0.7f); // straight through a wall
+		}
 	}
 }
 

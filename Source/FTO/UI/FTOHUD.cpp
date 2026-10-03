@@ -2,6 +2,7 @@
 #include "Interaction/FTOTalkable.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOMutators.h"
+#include "Audio/FTOAudio.h"
 #include "Core/FTOPlayerState.h"
 #include "Crime/FTOIncident.h"
 #include "Engine/Canvas.h"
@@ -214,6 +215,35 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 		Rule = Rule.Left(Rule.Find(TEXT(".")));
 		DrawCenteredText(Rule, X + W * 0.5f, Y + H + (bRush ? 36.f : 12.f) * S, FLinearColor(1.f, 0.6f, 0.9f), GEngine->GetSmallFont(), S * 1.1f);
 	}
+}
+
+void AFTOHUD::Dispatch(FName Category, bool bForce)
+{
+	const float Now = GetWorld()->GetRealTimeSeconds();
+	if (!bForce && Now < NextDispatchTime)
+	{
+		return;
+	}
+	TArray<const FTOAudio::FDispatchLine*> Lines;
+	for (const FTOAudio::FDispatchLine& Line : FTOAudio::DispatchLines())
+	{
+		if (Category == Line.Category)
+		{
+			Lines.Add(&Line);
+		}
+	}
+	if (Lines.Num() == 0)
+	{
+		return;
+	}
+	const FTOAudio::FDispatchLine& Line = *Lines[FMath::RandRange(0, Lines.Num() - 1)];
+	NextDispatchTime = Now + 10.f;
+	LastDispatch = Line.Text;
+	if (USoundBase* Voice = FTOAudio::DispatchSound(Line))
+	{
+		UGameplayStatics::PlaySound2D(this, Voice, 0.9f);
+	}
+	AddToast(FText::FromString(FString::Printf(TEXT("DISPATCH: \"%s\""), Line.Text)), FLinearColor(0.45f, 0.95f, 0.9f));
 }
 
 void AFTOHUD::DrawNewspaper(const AFTOGameState* GS)
@@ -930,10 +960,20 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 		switch (Phase)
 		{
 		case EFTOShiftPhase::Briefing: Play(Sounds.Bugle, 0.8f); break;
-		case EFTOShiftPhase::Survived: Play(Sounds.Fanfare, 0.8f); break;
-		case EFTOShiftPhase::Overrun:  Play(Sounds.Womp, 0.8f); break;
+		case EFTOShiftPhase::Survived: Play(Sounds.Fanfare, 0.8f); Dispatch(TEXT("Survived"), true); break;
+		case EFTOShiftPhase::Overrun:  Play(Sounds.Womp, 0.8f); Dispatch(TEXT("Overrun"), true); break;
 		case EFTOShiftPhase::OvertimeVote: Play(Sounds.Alarm, 0.6f); break;
-		case EFTOShiftPhase::OnDuty:   if (LastPhase == EFTOShiftPhase::OvertimeVote) { Play(Sounds.Bugle, 0.8f); } break;
+		case EFTOShiftPhase::OnDuty:
+			if (LastPhase == EFTOShiftPhase::OvertimeVote)
+			{
+				Play(Sounds.Bugle, 0.8f);
+			}
+			else
+			{
+				Dispatch(TEXT("ShiftStart"), true);
+				LastResolvedTime = GetWorld()->GetRealTimeSeconds();
+			}
+			break;
 		default: break;
 		}
 	}
@@ -961,10 +1001,16 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 			if (State == EFTOIncidentState::Resolved)
 			{
 				Play(Sounds.Chime, 0.7f);
+				LastResolvedTime = GetWorld()->GetRealTimeSeconds();
+				if (Incident->GetInfo().Tier >= EFTOCrimeTier::Major)
+				{
+					Dispatch(TEXT("BigBust"));
+				}
 			}
 			else if (State == EFTOIncidentState::Failed && !Incident->IsSuperseded())
 			{
 				Play(Sounds.Fail, 0.6f);
+				Dispatch(TEXT("CallFailed"));
 			}
 		}
 		SeenIncidentStates.Add(Incident, State);
@@ -984,6 +1030,7 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 		if (LastSetPiece != NAME_None && GS->GetSetPieceAge() < 3.f)
 		{
 			Play(Sounds.Alarm, 0.8f);
+			Dispatch(TEXT("SetPiece"), true);
 		}
 	}
 	const bool bRush = Phase == EFTOShiftPhase::OnDuty && GS->IsRushHour();
@@ -991,10 +1038,26 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 	{
 		RushHourSince = GetWorld()->GetRealTimeSeconds();
 		Play(Sounds.Bugle, 0.9f);
+		Dispatch(TEXT("RushHour"), true);
 	}
 	else if (!bRush && Phase == EFTOShiftPhase::OnDuty)
 	{
 		RushHourSince = -1.f;
+	}
+
+	// The dispatcher nags if nothing's been handled in a minute with plenty open.
+	if (Phase == EFTOShiftPhase::OnDuty && GetWorld()->GetRealTimeSeconds() - LastResolvedTime > 60.f)
+	{
+		int32 Open = 0;
+		for (const AFTOIncident* Incident : GS->GetIncidents())
+		{
+			Open += Incident && Incident->IsActive() && Incident->IsKnownToDispatch() ? 1 : 0;
+		}
+		if (Open >= 4)
+		{
+			LastResolvedTime = GetWorld()->GetRealTimeSeconds();
+			Dispatch(TEXT("Idle"));
+		}
 	}
 
 	// Chaos alarm, re-armed once things calm down a bit.
@@ -1003,6 +1066,7 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 		if (bAlarmArmed && GS->GetChaos() >= 75.f)
 		{
 			Play(Sounds.Alarm, 0.7f);
+			Dispatch(TEXT("ChaosHigh"), true);
 			bAlarmArmed = false;
 		}
 		else if (!bAlarmArmed && GS->GetChaos() < 65.f)

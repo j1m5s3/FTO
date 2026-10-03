@@ -47,7 +47,7 @@ Seven upgrades from the "what would make it more fun" review, one reviewed PR ea
   searches) and a squad-wide combo.
 - [x] **Comedy**: a mutator per shift (low gravity, bouncy cars, hot dog suits...), more absurd crimes, newspaper
   headlines after big incidents.
-- [ ] **Juice**: screen shake, slow-mo on tackles and wall crashes, the best bust replayed on the scoreboard, a
+- [x] **Juice**: screen shake, slow-mo on tackles and wall crashes, the best bust replayed on the scoreboard, a
   synthesised dispatcher who roasts the squad.
 - [ ] **Progression**: unlockable cruisers and outfits, precinct upgrades between shifts, a saved career with
   rising difficulty.

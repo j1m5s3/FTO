@@ -9,6 +9,9 @@
 #include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
 #include "Scoring/FTOScoring.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Camera/PlayerCameraManager.h"
 
 namespace
 {
@@ -42,6 +45,20 @@ void AFTOHUD::AddScorePopup(const AFTOPlayerState* Officer, int32 Points, EFTOSc
 	Popup.Where = Where;
 	Popup.Start = GetWorld()->GetTimeSeconds();
 	Popup.Text = FString::Printf(TEXT("%s%d %s"), Points >= 0 ? TEXT("+") : TEXT(""), Points, *FTOScoring::Label(Event));
+	// The best bust of the shift gets its photo taken (whoever made it, from wherever this machine's camera is).
+	if (Event == EFTOScore::Arrest || Event == EFTOScore::Bust || Event == EFTOScore::Teamwork)
+	{
+		TakeHighlight(Points, FString::Printf(TEXT("%s: +%d %s"), Officer ? *Officer->GetPlayerName() : TEXT("Officer"), Points, *FTOScoring::Label(Event)));
+	}
+	// And the dispatcher has a word about the oopses and the teamwork.
+	if (FTOScoring::IsPenalty(Event))
+	{
+		Dispatch(TEXT("Oops"));
+	}
+	else if (Event == EFTOScore::Teamwork)
+	{
+		Dispatch(TEXT("Teamwork"));
+	}
 	if (Combo > 1)
 	{
 		Popup.Text += FString::Printf(TEXT(" x%s"), *FString::SanitizeFloat(FTOScoring::ComboMultiplier(Combo)));
@@ -252,6 +269,46 @@ void AFTOHUD::DrawScoreboard(const AFTOGameState* GS)
 	const FString Footer = FString::Printf(TEXT("Handled %d  |  Caught in the act %d  |  Traffic stops %d  |  Booked %d  |  Went cold %d  |  Citizens bowled over %d  |  Property broken %d, cars %d  |  Peak chaos %d%%"),
 		GS->IncidentsResolved, GS->IncidentsWitnessed, GS->TrafficStops, GS->SuspectsBooked, GS->IncidentsFailed, GS->CiviliansBowledOver, GS->PropertyBroken, GS->CarsWrecked, FMath::RoundToInt(GS->PeakChaos));
 	DrawCenteredText(Footer, CX, Top + H - 32.f * S, FLinearColor(0.75f, 0.75f, 0.75f), Small, S * 1.1f);
+
+	// The shift's highlight, pinned up under the scoreboard like a photo.
+	if (HasHighlight())
+	{
+		const float PW = 384.f * S;
+		const float PH = 216.f * S;
+		const float PX = CX - PW * 0.5f;
+		const float PY = FMath::Min(Top + H + 16.f * S, Canvas->ClipY - PH - 60.f * S);
+		DrawRect(FLinearColor(0.95f, 0.95f, 0.9f), PX - 8.f * S, PY - 8.f * S, PW + 16.f * S, PH + 44.f * S);
+		DrawTexture(Highlight, PX, PY, PW, PH, 0.f, 0.f, 1.f, 1.f);
+		DrawCenteredText(FString::Printf(TEXT("SHIFT HIGHLIGHT  |  %s"), *HighlightCaption), CX, PY + PH + 8.f * S, FLinearColor(0.1f, 0.1f, 0.1f), Small, S * 1.1f);
+	}
+}
+
+void AFTOHUD::TakeHighlight(int32 Points, const FString& Caption)
+{
+	const APlayerController* PC = GetOwningPlayerController();
+	if (Points <= HighlightPoints || !PC || !PC->PlayerCameraManager)
+	{
+		return;
+	}
+	if (!Highlight)
+	{
+		Highlight = NewObject<UTextureRenderTarget2D>(this);
+		Highlight->RenderTargetFormat = RTF_RGBA8_SRGB;
+		Highlight->InitAutoFormat(640, 360);
+		Highlight->UpdateResourceImmediate(true);
+		HighlightCamera = NewObject<USceneCaptureComponent2D>(this);
+		HighlightCamera->bCaptureEveryFrame = false;
+		HighlightCamera->bCaptureOnMovement = false;
+		HighlightCamera->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		HighlightCamera->TextureTarget = Highlight;
+		HighlightCamera->SetupAttachment(GetRootComponent());
+		HighlightCamera->RegisterComponent();
+	}
+	HighlightPoints = Points;
+	HighlightCaption = Caption;
+	HighlightCamera->FOVAngle = PC->PlayerCameraManager->GetFOVAngle();
+	HighlightCamera->SetWorldLocationAndRotation(PC->PlayerCameraManager->GetCameraLocation(), PC->PlayerCameraManager->GetCameraRotation());
+	HighlightCamera->CaptureScene();
 }
 
 void AFTOHUD::DrawOvertimeVote(const AFTOGameState* GS)

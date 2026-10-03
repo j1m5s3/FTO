@@ -21,6 +21,16 @@ namespace FTOAudio
 				{ TEXT("CarImpactLight"), 3 }, { TEXT("CarImpactHeavy"), 3 }, { TEXT("MetalCreak"), 2 },
 				{ TEXT("Rubble"), 4 }, { TEXT("WallBreak"), 3 }, { TEXT("Explosion"), 3 },
 			};
+			// The dispatcher's lines, a family per category.
+			TMap<FString, int32> Takes;
+			for (const FDispatchLine& Line : DispatchLines())
+			{
+				Takes.FindOrAdd(Line.Category) = FMath::Max(Takes.FindOrAdd(Line.Category), Line.Take);
+			}
+			for (const TPair<FString, int32>& Pair : Takes)
+			{
+				Out.Add({ FName(*FString::Printf(TEXT("Dispatch_%s"), *Pair.Key)), Pair.Value });
+			}
 			for (const TCHAR* Surface : { TEXT("Concrete"), TEXT("Wood"), TEXT("Tile"), TEXT("Carpet"), TEXT("Metal"), TEXT("Grass") })
 			{
 				Out.Add({ FName(*FString::Printf(TEXT("Step_%s"), Surface)), 6 });
@@ -29,6 +39,21 @@ namespace FTOAudio
 			return Out;
 		}();
 		return Specs;
+	}
+
+	TConstArrayView<FDispatchLine> DispatchLines()
+	{
+		static const FDispatchLine Lines[] =
+		{
+#include "Audio/FTODispatchLines.inl"
+		};
+		return Lines;
+	}
+
+	USoundBase* DispatchSound(const FDispatchLine& Line)
+	{
+		const FFTOSoundFamily* Takes = AFTOGameState::Sounds().Families.Find(FName(*FString::Printf(TEXT("Dispatch_%s"), Line.Category)));
+		return Takes && Takes->Sounds.IsValidIndex(Line.Take - 1) ? Takes->Sounds[Line.Take - 1].Get() : nullptr;
 	}
 
 	USoundBase* Pick(FName Family)

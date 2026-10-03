@@ -1,4 +1,5 @@
 #include "Physics/FTODestruction.h"
+#include "Core/FTOJuice.h"
 #include "Art/FTOArt.h"
 #include "Audio/FTOAudio.h"
 #include "City/FTOCityGenerator.h"
@@ -1433,6 +1434,7 @@ void AFTODestruction::TickFalling(float DeltaSeconds)
 void AFTODestruction::Blast(const FVector& At, float Radius, float Amount, AController* ByWhom)
 {
 	check(HasAuthority());
+	FTOJuice::SlowMo(GetWorld(), 0.3f, 0.9f);
 	MulticastBlast(At, Radius);
 	if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
 	{
@@ -1495,6 +1497,7 @@ void AFTODestruction::Blast(const FVector& At, float Radius, float Amount, ACont
 
 void AFTODestruction::MulticastBlast_Implementation(FVector_NetQuantize At, float Radius)
 {
+	FTOJuice::ShakeAt(GetWorld(), At, 1.f, Radius * 4.f);
 	UFTODebris* Debris = UFTODebris::Get(GetWorld());
 	if (!Debris)
 	{

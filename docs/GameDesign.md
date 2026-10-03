@@ -50,6 +50,11 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
   on half of all calls.
 - The Daily Siren: every Major or Critical incident, handled or not, gets a silly headline on the front page.
 
+## Juice
+- Screen shake for explosions, crashes, collapses and punches; slow motion for tackles, cars through walls and blasts.
+- The dispatcher: a synthesised radio voice (in-house formant synthesis, subtitled) that roasts the squad.
+- The shift highlight: a photo of the best bust, pinned under the scoreboard.
+
 ## Teamwork
 - Jobs built for two: shoot out a getaway's tyres from the passenger seat while your partner drives; guard a burgled
   building's door while your partner searches it. Both score TEAMWORK!.

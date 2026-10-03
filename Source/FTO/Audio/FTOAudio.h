@@ -41,6 +41,17 @@ namespace FTOAudio
 	/** A random take from a family ("Punch", "Kick", "BodyFall", "Whoosh", "CarImpactHeavy", "Rubble"...). */
 	FTO_API USoundBase* Pick(FName Family);
 
+	/** One of the dispatcher's lines (Tools/Audio/dispatch_lines.json, voiced as SW_Dispatch_<Category>_<Take>). */
+	struct FDispatchLine
+	{
+		const TCHAR* Category;
+		int32 Take;
+		const TCHAR* Text;
+	};
+	FTO_API TConstArrayView<FDispatchLine> DispatchLines();
+	/** The voice for a line (null if it hasn't been imported). */
+	FTO_API USoundBase* DispatchSound(const FDispatchLine& Line);
+
 	/** A footstep on Surface (a running one hits harder). */
 	FTO_API USoundBase* Step(EFTOSurface Surface, bool bRunning);
 

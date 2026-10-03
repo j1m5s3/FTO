@@ -1,6 +1,7 @@
 #include "Core/FTOGameState.h"
 #include "Scoring/FTOScoring.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOJuice.h"
 #include "GameFramework/WorldSettings.h"
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "GameFramework/PlayerState.h"
@@ -93,6 +94,13 @@ void AFTOGameState::MulticastPlaySound_Implementation(USoundBase* Sound, FVector
 	if (Sound && GetNetMode() != NM_DedicatedServer)
 	{
 		UGameplayStatics::PlaySoundAtLocation(this, FTOAudio::Vary(Sound), Location, Volume, FMath::FRandRange(0.96f, 1.04f), 0.f, SoundSet.World);
+		// Big noises rattle the camera of anyone near (explosions, crashes, walls coming down, a good punch).
+		float Amount = 0.f;
+		float Radius = 0.f;
+		if (FTOJuice::ShakeFor(Sound, Amount, Radius))
+		{
+			FTOJuice::ShakeAt(GetWorld(), Location, Amount * FMath::Clamp(Volume, 0.4f, 1.f), Radius);
+		}
 	}
 }
 

@@ -138,6 +138,12 @@ shift's mutator (`None` for none).
   garden gnome smuggling), and half of all calls come with a twist on the board. Every big incident, handled or not,
   makes the front page of *The Daily Siren*, which slides in for everyone with a silly headline; the shift's last
   front page heads the scoreboard.
+- **Juice**: big moments are felt. Explosions, crashes, walls coming down and good punches shake the camera of
+  anyone close (a camera modifier; more trauma the closer and the bigger). A tackle that connects, a cruiser going
+  through a wall and anything blowing up drop the whole game into slow motion for a moment (once every few seconds at
+  most). The dispatcher has a word on the radio for the moments that matter (the shift starting, the set piece, rush
+  hour, the chaos alarm, a big bust, a call gone cold, an oops, teamwork, idling, the end) with the line as a
+  subtitle, and the best bust this machine saw gets its photo taken for the scoreboard (SHIFT HIGHLIGHT).
 - **End of shift**: when the 10-minute clock runs out the city holds still and everyone votes: Y (left bumper) for 5
   minutes of overtime (chaos carries over; the clock reads OVERTIME), N (view button) to clock off. Most votes win;
   the host's vote breaks a tie and decides for anyone who says nothing within 20 s. Clocking off (or the city falling)
@@ -166,7 +172,8 @@ tower and climbs a house's outside stairs, starts the shift's set piece on sched
 lets another go off, watches the heist crew make off in a getaway car and starts a city-wide pursuit, runs the clock
 into rush hour, picks a pickpocket out of a crowd of look-alikes (searching a bystander first),
 finds a burglar hiding upstairs, talks a drunk round (after one answer that winds them up), checks one officer can't
-break up a bar fight, shoots out a getaway car's tyres, tries every mutator (the officer floating up a jump in low gravity, cars on their
+break up a bar fight, shoots out a getaway car's tyres, shakes the camera with a bang, checks slow motion played (and plays it again),
+that the dispatcher's lines are all voiced and one's been said, and that the best bust's photo was taken, tries every mutator (the officer floating up a jump in low gravity, cars on their
 hydraulics, a mime in a hot dog suit, a big head), makes the front page, catches a burglar at the door they're guarding, builds the
 squad's streak and breaks it, films a tagger
 and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
@@ -176,7 +183,7 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, fires out of the window, gets out
 and arrests a shoplifter the host puts beside them. Then the client calls for backup and stays on air, and the host
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
-host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece, the front pages and the mutator.
+host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece, the front pages and the mutator, and that its own dispatcher spoke and its highlight photo was taken.
 
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine
@@ -278,7 +285,13 @@ host). Finally the client checks it sees everything the host broke broken too, a
   - Variants: the original names stay, and frequently repeated sounds also come numbered (`_01`...), to pick at
     random: `SW_ShotPistol/Rifle/Shotgun_01..04`, `SW_Crash_01..04`, `SW_Glass_01..03`, `SW_Clang_01..03`,
     `SW_Ricochet_01..03`.
-  - Fighting: `SW_Punch_01..04`, `SW_Kick_01..03`, `SW_BodyFall_01..03`, `SW_Whoosh_01..03` (swings). No voices.
+  - Fighting: `SW_Punch_01..04`, `SW_Kick_01..03`, `SW_BodyFall_01..03`, `SW_Whoosh_01..03` (swings).
+  - The dispatcher: `SW_Dispatch_<Category>_NN`, one per line of `Tools/Audio/dispatch_lines.json`. A formant voice
+    (a glottal pulse train through vowel formant resonators, noise bursts and hums for the consonants, a falling
+    intonation that rises for a question) speaks each line's syllables, then it goes through the radio (band-limited,
+    driven, hissing, squelch either end). Not words as such: the subtitle carries those. After editing the JSON, render
+    the voices (`--only SW_Dispatch_...`) and regenerate the game's copy of the lines:
+    `python Tools/Audio/fto_synth.py --dispatch-inl Source/FTO/Audio/FTODispatchLines.inl`.
   - Footsteps: `SW_Step_<Surface>_01..06` and `SW_StepRun_<Surface>_01..04` for Concrete, Wood, Tile, Carpet, Metal
     and Grass, plus `SW_Land_Concrete_01..02` (jump landing) and `SW_Scuff_01..03` (shoe scrape).
   - Vehicles and destruction: `SW_CarImpactLight_01..03`, `SW_CarImpactHeavy_01..03`, `SW_MetalCreak_01..02`,

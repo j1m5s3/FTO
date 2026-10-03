@@ -1,5 +1,6 @@
 #include "Core/FTOCharacter.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOJuice.h"
 #include "Interaction/FTOTalkable.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -636,6 +637,7 @@ void AFTOCharacter::CheckTackle()
 		{
 			if (Overlap.GetActor() != this && FTOImpact::Tackle(Overlap.GetActor(), Fwd, GetController()))
 			{
+				FTOJuice::SlowMo(GetWorld(), 0.3f, 0.6f); // the moment of impact, savoured
 				GetWorldTimerManager().ClearTimer(TackleTimer);
 				return;
 			}

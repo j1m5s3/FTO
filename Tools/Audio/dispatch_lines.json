@@ -1,0 +1,52 @@
+{
+  "_comment": "The dispatcher's lines (Tools/Audio/fto_synth.py voices them as SW_Dispatch_<Category>_NN and writes Source/FTO/Audio/FTODispatchLines.inl for the subtitles).",
+  "ShiftStart": [
+    "Morning, officers. Try not to break anything today.",
+    "Dispatch here. The city's still standing. Let's keep it that way, shall we?",
+    "Shift's on. Coffee's cold. Off you go."
+  ],
+  "SetPiece": [
+    "All units, something big. Try to look professional.",
+    "This is the big one, officers. No pressure. Lots of pressure."
+  ],
+  "RushHour": [
+    "Rush hour. Good luck. You'll need it.",
+    "Two minutes left and the phones won't stop. Lovely."
+  ],
+  "ChaosHigh": [
+    "Chaos is through the roof. Is anyone actually working?",
+    "The mayor's on line two. He's crying.",
+    "I can see the smoke from here, officers."
+  ],
+  "CallFailed": [
+    "That call went cold. Like my coffee.",
+    "Another one gets away. Fantastic.",
+    "Missed it. I'll put that in the report. In capitals."
+  ],
+  "BigBust": [
+    "Nice bust. Don't let it go to your head.",
+    "Oh look, competence. Somebody write that down.",
+    "Well, well. Somebody's getting a sticker."
+  ],
+  "Oops": [
+    "That was a pedestrian, not a speed bump.",
+    "You arrested someone for standing there. Bold choice.",
+    "Please stop hurting the citizens. Think of the paperwork."
+  ],
+  "Teamwork": [
+    "Teamwork! I didn't know you lot could do that.",
+    "Look at you, working together. I'm almost proud."
+  ],
+  "Idle": [
+    "Officers, the crimes won't solve themselves. Allegedly.",
+    "Is everyone on a donut break? All of you? At once?"
+  ],
+  "Survived": [
+    "Shift's over. Not bad. For you.",
+    "Clock off, officers. The city survived. Barely."
+  ],
+  "Overrun": [
+    "The city has fallen. I'm updating my CV.",
+    "Well. That happened. Go home, everyone."
+  ]
+}
