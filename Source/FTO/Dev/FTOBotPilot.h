@@ -112,7 +112,7 @@ protected:
 	FVector RouteGoal = FVector::ZeroVector;
 	void Face(const FVector& Where);
 	/** Turn the view (and so the crosshair) onto Where. */
-	void Aim(const FVector& Where);
+	bool Aim(const FVector& Where);
 	/** A clear line from our eyes to them? */
 	bool InSight(const AActor* Who) const;
 	float NextZapLog = 0.f;

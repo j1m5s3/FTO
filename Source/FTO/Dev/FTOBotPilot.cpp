@@ -167,20 +167,24 @@ void AFTOBotPilot::Face(const FVector& Where)
 	}
 }
 
-void AFTOBotPilot::Aim(const FVector& Where)
+bool AFTOBotPilot::Aim(const FVector& Where)
 {
-	// The crosshair onto Where: from the camera, which is where a round's aimed from.
+	// The crosshair onto Where: from the camera, which is where a round's aimed from. The camera follows a frame or
+	// so behind: on target once it's caught up.
 	APlayerController* Controller = PC();
 	if (!Controller || !Controller->PlayerCameraManager)
 	{
-		return;
+		return false;
 	}
-	const FRotator Look = (Where - Controller->PlayerCameraManager->GetCameraLocation()).Rotation();
+	const FVector Eye = Controller->PlayerCameraManager->GetCameraLocation();
+	const FRotator Look = (Where - Eye).Rotation();
 	Controller->SetControlRotation(FRotator(Look.Pitch, Look.Yaw, 0.f));
 	if (AFTOCharacter* Officer = Me(); Officer && !MyCar())
 	{
 		Officer->SetActorRotation(FRotator(0.f, Look.Yaw, 0.f));
 	}
+	const FVector Seeing = Controller->PlayerCameraManager->GetCameraRotation().Vector();
+	return FVector::DotProduct(Seeing, (Where - Eye).GetSafeNormal()) > FMath::Cos(FMath::DegreesToRadians(1.5f));
 }
 
 bool AFTOBotPilot::InSight(const AActor* Who) const
@@ -370,9 +374,9 @@ AFTOIncident* AFTOBotPilot::PickTarget() const
 		}
 		// One about to escalate or go cold, before it does.
 		Score -= 3000.f * Incident->GetUrgency();
-		if (Incident->IsMobile() && !Perp)
+		if (Incident->IsMobile() && !Perp && Style == TEXT("Reckless"))
 		{
-			Score += Style == TEXT("Reckless") ? -1500.f : 2000.f; // a car chase: Reckless loves one
+			Score -= 1500.f; // a car chase: Reckless loves one
 		}
 		if (Score < BestScore)
 		{
@@ -395,7 +399,8 @@ bool AFTOBotPilot::TakeThemIn()
 	// (Straight to the cells, as a player would: a suspect left trailing about the city is a suspect who slips off. Only
 	// a suspect already down on the ground right here comes first.)
 	const AFTOIncident* Next = PickTarget();
-	const bool bTime = Following > 0 && !(Next && (Next->IsSubdued() || Next->IsFootChase()) && FVector::Dist2D(Next->GetActorLocation(), Here()) < 2500.f);
+	const bool bTime = Following > 0 && !(Next && (Next->IsSubdued() || Next->IsFootChase()) && FVector::Dist2D(Next->GetActorLocation(), Here()) < 2500.f)
+		&& !(Next && Next->GetInfo().Tier >= EFTOCrimeTier::Major && Following < 3); // (a big one first: they can tag along)
 	const float Now = GetWorld()->GetRealTimeSeconds();
 	if (bTime && bBooking && Now - LeftProgressAt > 60.f && Now >= NoBookingUntil)
 	{
@@ -561,17 +566,31 @@ void AFTOBotPilot::Work(AFTOIncident* Incident)
 		GoTo(Incident->GetActorLocation(), true, true);
 		if (!MyCar())
 		{
-			// (Into the nearest cruiser, if one's close; else on foot.)
+			// (Into the nearest free cruiser, if there's one to be had: nobody catches a getaway car on foot.)
+			const AFTOCruiser* Nearest = nullptr;
 			for (TActorIterator<AFTOCruiser> It(GetWorld()); It; ++It)
 			{
-				if (!It->HasDriver() && Close(It->GetActorLocation(), 700.f))
+				if (!It->HasDriver() && FVector::Dist2D(It->GetActorLocation(), Here()) < 9000.f &&
+					(!Nearest || FVector::Dist2D(It->GetActorLocation(), Here()) < FVector::Dist2D(Nearest->GetActorLocation(), Here())))
+				{
+					Nearest = *It;
+				}
+			}
+			if (Nearest)
+			{
+				GoTo(Nearest->GetActorLocation(), true, false);
+				if (Close(Nearest->GetActorLocation(), 500.f))
 				{
 					if (AFTOPlayerController* Controller = Cast<AFTOPlayerController>(PC()); Controller && Now >= NextPress)
 					{
-						NextPress = Now + 1.f;
+						NextPress = Now + 1.5f;
 						Controller->FTODrive();
+						Route.Reset();
+						RouteGoal = FVector::ZeroVector;
+						BestDriveDistance = TNumericLimits<float>::Max();
+						DriveProgressAt = Now;
+						Say(TEXT("into a cruiser, after them."));
 					}
-					break;
 				}
 			}
 		}
@@ -745,9 +764,8 @@ void AFTOBotPilot::Work(AFTOIncident* Incident)
 			{
 				bGoal = false; // (close enough: stand and shoot)
 			}
-			if (Distance < 800.f && bSeen && Officer->GetDrawnWeapon() == EFTOWeapon::Taser && Now >= NextSwing)
+			if (Distance < 800.f && bSeen && Officer->GetDrawnWeapon() == EFTOWeapon::Taser && Now >= NextSwing && Aim(At + FVector(0.f, 0.f, 20.f)))
 			{
-				Aim(At + FVector(0.f, 0.f, 20.f));
 				NextSwing = Now + 0.8f;
 				Officer->FirePressed();
 				if (Now >= NextZapLog)
