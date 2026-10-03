@@ -15,17 +15,17 @@
 namespace FTOSpawnTags
 {
 	// Out on the sidewalks...
-	static const TArray<FName> Street     = { "Jaywalking", "Speeding", "IllegalParking", "CarChase", "PettyTheft", "LostTourist", "Graffiti", "Mugging" };
+	static const TArray<FName> Street     = { "Jaywalking", "Speeding", "IllegalParking", "CarChase", "PettyTheft", "LostTourist", "Graffiti", "Mugging", "Drunk" };
 	static const TArray<FName> Commercial = { "Vandalism", "Riot", "TerrorPlot", "Graffiti" };
 	static const TArray<FName> Home       = { "CatInTree", "Vandalism" };
-	static const TArray<FName> Park       = { "CatInTree", "LostTourist", "Graffiti", "NoiseComplaint", "Riot", "PettyTheft", "Mugging" };
+	static const TArray<FName> Park       = { "CatInTree", "LostTourist", "Graffiti", "NoiseComplaint", "Riot", "PettyTheft", "Mugging", "Drunk" };
 	static const TArray<FName> Industrial = { "Vandalism", "Graffiti" };
 
 	// ...and indoors, by what the building is.
 	static const TArray<FName> InShop      = { "Shoplifting", "ArmedRobbery", "Vandalism" };
-	static const TArray<FName> InDiner     = { "ArmedRobbery", "NoiseComplaint", "BarFight" };
-	static const TArray<FName> InBar       = { "BarFight", "NoiseComplaint", "ArmedRobbery" };
-	static const TArray<FName> InOffice    = { "HostageSituation", "Standoff", "TerrorPlot", "Vandalism" };
+	static const TArray<FName> InDiner     = { "ArmedRobbery", "NoiseComplaint", "BarFight", "Drunk" };
+	static const TArray<FName> InBar       = { "BarFight", "NoiseComplaint", "ArmedRobbery", "Drunk" };
+	static const TArray<FName> InOffice    = { "HostageSituation", "Standoff", "TerrorPlot", "Vandalism", "Burglary" };
 	static const TArray<FName> InHome      = { "DomesticDispute", "NoiseComplaint", "Burglary", "Standoff" };
 	static const TArray<FName> InWarehouse = { "Burglary", "TerrorPlot", "HostageSituation", "Standoff" };
 	static const TArray<FName> InBankHall  = { "ArmedRobbery", "HostageSituation" };

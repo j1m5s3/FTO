@@ -92,6 +92,26 @@ public:
 	/** Server: dressed as the citizen they were a moment ago (found with contraband on a stop and search). */
 	void WearLookOf(int32 Seed);
 
+	// ---- The twists ----
+	/** Server: a pickpocket blends into the crowd at At (lying low from the start, idling like everyone else). */
+	void JoinCrowd(const FVector& At, float Yaw);
+	/** A burglar still hiding somewhere in the building. */
+	bool IsHidingInBuilding() const;
+	/** Hiding upstairs rather than on the ground floor (server). */
+	bool IsHidingUpstairs() const { return bHidingUpstairs; }
+	/** Server: an officer's laid eyes on the hidden burglar: they give up, fight or run. */
+	void Found(AFTOCharacter* Officer);
+	/** A drunk to be talked round (the "Drunk" call). */
+	bool IsDrunkCall() const;
+	/** How far the officers have talked the drunk round (of DrunkStages), and how worked up they are. */
+	int32 GetDrunkStage() const { return DrunkStage; }
+	int32 GetDrunkTemper() const { return DrunkTemper; }
+	/** Which of the options on the talk panel is the friendly one right now (tests). */
+	int32 GetDrunkRightAnswer() const;
+	static constexpr int32 DrunkStages = 3;
+	virtual FText GetTalkTitle() const override;
+	virtual void GetTalkOptions(const AFTOCharacter* Officer, TArray<FText>& OutOptions) const override;
+
 	// IFTOTalkable, lying low: they'll talk (nervously), and a search turns up the goods.
 	virtual bool TalkChoice(AFTOCharacter* Officer, int32 Index) override;
 	/** Wrestling with an officer or being cuffed: the scene's on hold meanwhile. */
@@ -172,6 +192,18 @@ protected:
 	virtual FString AnswerWhatTheySaw() override;
 	virtual FString Contraband() override;
 	virtual void ArrestForWhatWasFound(AFTOCharacter* Officer) override;
+
+	/** Server: hide away in the building (upstairs if there's an upstairs): the squad has to find us. */
+	void HideInBuilding();
+	/** Somewhere in our building to hide (capsule centre), and whether it's upstairs. */
+	bool FindHidingPlace(FVector& OutWhere, bool& bOutUpstairs) const;
+	/** The drunk's lines this stage (an index into the table), and the order the officer's answers are shown in. */
+	int32 DrunkLineFor(int32 Stage) const;
+	void DrunkOptions(int32 Stage, int32 OutOrder[3]) const;
+	/** Server: the officer said one of the answers on the panel (3: "You're under arrest"). */
+	bool DrunkAnswer(AFTOCharacter* Officer, int32 Index);
+	/** Server: talked round: off home, and that's the call handled. */
+	void CalmDown(AFTOCharacter* Officer);
 
 	/** Server: armed and cornered: pick an officer, turn to them, and fire now and then. */
 	void TickShooting(float DeltaSeconds);
@@ -254,6 +286,15 @@ protected:
 	UPROPERTY(Replicated) float StruggleMeter = 0.f;
 	/** Server world time the cuffing started (a moment with hands on head, then the cuffs). */
 	UPROPERTY(Replicated) float CuffStartTime = 0.f;
+	/** A drunk: answers they've liked, and ones they haven't. */
+	UPROPERTY(Replicated) uint8 DrunkStage = 0;
+	UPROPERTY(Replicated) uint8 DrunkTemper = 0;
+
+	// Server: the twists.
+	/** A pickpocket among the crowd (Hiding from the start, but staying put), and when they next shuffle about. */
+	bool bInCrowd = false;
+	float NextShuffle = 0.f;
+	bool bHidingUpstairs = false;
 
 	FVector Home = FVector::ZeroVector;
 	float HomeYaw = 0.f;

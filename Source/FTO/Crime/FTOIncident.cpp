@@ -71,6 +71,8 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, bSearch);
 	DOREPLIFETIME(AFTOIncident, SearchStartTime);
 	DOREPLIFETIME(AFTOIncident, LastSightingTime);
+	DOREPLIFETIME(AFTOIncident, bCrowd);
+	DOREPLIFETIME(AFTOIncident, bHiddenInside);
 }
 
 void AFTOIncident::SetBuilding(int32 Index)
@@ -138,10 +140,15 @@ void AFTOIncident::SpawnExtras()
 	const FName Crime = Info.TemplateId;
 	int32 Count = 0;
 	EFTOExtraRole ExtraRole = EFTOExtraRole::Victim;
-	if (Crime == TEXT("Mugging") || Crime == TEXT("PettyTheft")) { Count = 1; ExtraRole = EFTOExtraRole::Victim; }
+	if (Crime == TEXT("Mugging")) { Count = 1; ExtraRole = EFTOExtraRole::Victim; }
 	else if (Crime == TEXT("BarFight")) { Count = 1; ExtraRole = EFTOExtraRole::Brawler; }
 	else if (Crime == TEXT("Riot")) { Count = 3; ExtraRole = EFTOExtraRole::Brawler; }
 	else if (Crime == TEXT("DomesticDispute")) { Count = 1; ExtraRole = EFTOExtraRole::Arguer; }
+	if (Crime == TEXT("PettyTheft") && IsValid(Perp) && Perp->IsCriminal())
+	{
+		SpawnCrowd();
+		return;
+	}
 	if (Count == 0 || !IsValid(Perp))
 	{
 		return;
@@ -149,7 +156,6 @@ void AFTOIncident::SpawnExtras()
 
 	const FVector PerpAt = Perp->GetActorLocation();
 	const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
-	const FVector Side = FVector::CrossProduct(FVector::UpVector, Fwd);
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	for (int32 i = 0; i < Count; ++i)
@@ -159,18 +165,117 @@ void AFTOIncident::SpawnExtras()
 		const FVector Dir = Fwd.RotateAngleAxis(Angle, FVector::UpVector);
 		FVector At = PerpAt + Dir * (Crime == TEXT("Riot") ? 140.f : 115.f);
 		FVector Face = PerpAt;
-		if (Crime == TEXT("PettyTheft"))
-		{
-			// The mark has their back to the pickpocket, none the wiser.
-			At = PerpAt + Fwd * 70.f;
-			Face = At + Fwd * 100.f + Side * 30.f;
-		}
 		if (AFTOCrimeExtra* Extra = GetWorld()->SpawnActor<AFTOCrimeExtra>(AFTOCrimeExtra::StaticClass(), At, Dir.Rotation(), Params))
 		{
 			Extra->SetupExtra(this, ExtraRole, At, Face, GetTypeHash(At) + i * 7919);
 			Extras.Add(Extra);
 		}
 	}
+}
+
+void AFTOIncident::SpawnCrowd()
+{
+	// A knot of people at the bus stop, any of whom could be the one with the wallet: each looks a bit like the
+	// pickpocket (the same outfit, or the same colour top), and the pickpocket stands among them somewhere.
+	const FVector Center = Perp->GetActorLocation();
+	const FVector Fwd = GetActorForwardVector().GetSafeNormal2D();
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	FRandomStream CrowdRng(GetTypeHash(Center));
+	constexpr int32 Crowd = 6;
+	const int32 PerpSlot = CrowdRng.RandRange(0, Crowd - 1);
+	for (int32 i = 0; i < Crowd; ++i)
+	{
+		const float Angle = i * 360.f / Crowd + CrowdRng.FRandRange(-15.f, 15.f);
+		const FVector At = Center + Fwd.RotateAngleAxis(Angle, FVector::UpVector) * CrowdRng.FRandRange(170.f, 330.f);
+		const FVector Face = At + FRotator(0.f, CrowdRng.FRandRange(0.f, 360.f), 0.f).Vector() * 100.f;
+		if (i == PerpSlot)
+		{
+			Perp->JoinCrowd(At, (Face - At).Rotation().Yaw);
+			continue;
+		}
+		if (AFTOCrimeExtra* Extra = GetWorld()->SpawnActor<AFTOCrimeExtra>(AFTOCrimeExtra::StaticClass(), At, (Face - At).Rotation(), Params))
+		{
+			Extra->SetupExtra(this, EFTOExtraRole::Bystander, At, Face, Perp->LookAlikeSeed(Perp->GetLookSeed(), i));
+			Extras.Add(Extra);
+		}
+	}
+	// The mark, just outside the crowd, patting their empty pockets.
+	const FVector VictimAt = Center - Fwd * 520.f;
+	if (AFTOCrimeExtra* Victim = GetWorld()->SpawnActor<AFTOCrimeExtra>(AFTOCrimeExtra::StaticClass(), VictimAt, Fwd.Rotation(), Params))
+	{
+		Victim->SetupExtra(this, EFTOExtraRole::Victim, VictimAt, Center, GetTypeHash(VictimAt) + 31);
+		Extras.Add(Victim);
+	}
+	SetCrowd(true);
+}
+
+void AFTOIncident::SetCrowd(bool bInCrowd)
+{
+	bCrowd = bInCrowd;
+	RefreshVisuals();
+}
+
+void AFTOIncident::SetHiddenInside(bool bInHiding)
+{
+	bHiddenInside = bInHiding;
+	RefreshVisuals();
+}
+
+void AFTOIncident::SuspectFound(const FVector& Where, bool bLeaveRoom)
+{
+	check(HasAuthority());
+	bHiddenInside = false;
+	SetActorLocation(Where);
+	if (bLeaveRoom)
+	{
+		BuildingIndex = INDEX_NONE; // (upstairs: the ground-floor room's no use for counting who's on scene)
+	}
+	ReportByOfficer();
+	RefreshVisuals();
+}
+
+void AFTOIncident::SetTalkProgress(float Value)
+{
+	Progress = FMath::Clamp(Value, 0.f, 1.f);
+}
+
+void AFTOIncident::HandledPeacefully()
+{
+	check(HasAuthority());
+	Info.bArrest = false; // nobody to walk to the cells: it's scored as a call handled
+	Resolve();
+}
+
+bool AFTOIncident::IsBrawl() const
+{
+	return Info.TemplateId == TEXT("BarFight") || Info.TemplateId == TEXT("Riot");
+}
+
+bool AFTOIncident::IsTalkedDownByPresence() const
+{
+	return !bCrowd && !bHiddenInside && Info.TemplateId != TEXT("Drunk");
+}
+
+FString AFTOIncident::GetTwistHint() const
+{
+	if (bCrowd)
+	{
+		return FString::Printf(TEXT("The pickpocket's in this crowd. Look for: %s. Talk to them (E) and search the one who matches"), *Info.SuspectDescription.ToString());
+	}
+	if (bHiddenInside)
+	{
+		return TEXT("The burglar's hiding somewhere in the building, maybe upstairs (lift or outside stairs). Find them!");
+	}
+	if (Info.TemplateId == TEXT("Drunk") && !bSubdued)
+	{
+		return TEXT("Talk them round (E): keep it friendly. Two wrong answers and they'll swing for you");
+	}
+	if (IsBrawl() && !bSubdued && OfficersOnScene < GetMinCrew())
+	{
+		return TEXT("It takes two to pull a brawl apart: call backup (T), or put them down yourself (punch, kick, grab)");
+	}
+	return FString();
 }
 
 float AFTOIncident::GetAge() const
@@ -573,6 +678,55 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 		return;
 	}
 
+	// The pickpocket's been found (talked to and caught, or they've bolted): the scene's wherever they are now.
+	if (bCrowd && (!IsValid(Perp) || !Perp->IsHiding()))
+	{
+		bCrowd = false;
+		if (IsValid(Perp))
+		{
+			SetActorLocation(Perp->GetActorLocation() - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight));
+		}
+		RefreshVisuals();
+	}
+
+	// A pickpocket in a crowd, a burglar hiding in the building: nobody's talked down by the police just being there,
+	// they have to be found. Officers about the place keep it from going cold.
+	if (bCrowd || bHiddenInside)
+	{
+		const float Near = bCrowd ? SceneRadius * 1.5f : 2500.f;
+		int32 Count = 0;
+		for (const APlayerState* PS : GetWorld()->GetGameState()->PlayerArray)
+		{
+			const APawn* Pawn = PS ? PS->GetPawn() : nullptr;
+			Count += Pawn && FVector::DistSquared2D(Pawn->GetActorLocation(), GetActorLocation()) <= FMath::Square(Near) ? 1 : 0;
+		}
+		OfficersOnScene = Count;
+		Progress = 0.f;
+		if (Count > 0)
+		{
+			if (State == EFTOIncidentState::Unreported)
+			{
+				bWitnessed = true;
+				OnReported.Broadcast(this);
+			}
+			SetState(EFTOIncidentState::Responding);
+			if (!bTwistAnnounced && IsValid(Perp))
+			{
+				bTwistAnnounced = true;
+				Perp->ToastOfficersNear(FText::FromString(GetTwistHint()), FLinearColor(1.f, 0.85f, 0.3f), Near * 1.5f);
+			}
+		}
+		else
+		{
+			if (State == EFTOIncidentState::Responding)
+			{
+				SetState(EFTOIncidentState::Reported);
+			}
+			TickNeglect(DeltaSeconds);
+		}
+		return;
+	}
+
 	OfficersOnScene = CountOfficersOnScene();
 
 	// Wrestling an officer, or being cuffed: the scene waits on how that goes.
@@ -593,6 +747,16 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 				OnReported.Broadcast(this);
 			}
 			SetState(EFTOIncidentState::Responding);
+		}
+		// The twist, said once to whoever turns up first.
+		if (!bTwistAnnounced && IsValid(Perp) && !GetTwistHint().IsEmpty())
+		{
+			bTwistAnnounced = true;
+			Perp->ToastOfficersNear(FText::FromString(GetTwistHint()), FLinearColor(1.f, 0.85f, 0.3f), GetSceneRadius() * 2.f);
+		}
+		if (!IsTalkedDownByPresence() || OfficersOnScene < GetMinCrew())
+		{
+			return; // (a drunk's talked round in conversation; a brawl waits for a second officer)
 		}
 
 		const float Crew = FMath::Min(OfficersOnScene, Info.OfficersRequired) / float(FMath::Max(1, Info.OfficersRequired));
@@ -619,15 +783,22 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 		{
 			SetState(EFTOIncidentState::Reported);
 		}
-		Progress = FMath::Max(0.f, Progress - 0.05f * DeltaSeconds);
-		NeglectTime += DeltaSeconds;
-
-		if (Info.TimeToEscalate > 0.f && NeglectTime >= Info.TimeToEscalate)
+		if (IsTalkedDownByPresence())
 		{
-			SetState(EFTOIncidentState::Failed);
-			OnFailed.Broadcast(this);
-			SetLifeSpan(CleanupDelay);
+			Progress = FMath::Max(0.f, Progress - 0.05f * DeltaSeconds);
 		}
+		TickNeglect(DeltaSeconds);
+	}
+}
+
+void AFTOIncident::TickNeglect(float DeltaSeconds)
+{
+	NeglectTime += DeltaSeconds;
+	if (Info.TimeToEscalate > 0.f && NeglectTime >= Info.TimeToEscalate)
+	{
+		SetState(EFTOIncidentState::Failed);
+		OnFailed.Broadcast(this);
+		SetLifeSpan(CleanupDelay);
 	}
 }
 
@@ -779,6 +950,14 @@ void AFTOIncident::RefreshVisuals()
 		else if (bSearch)
 		{
 			LabelText = FText::Format(INVTEXT("{0}\nLAST SEEN HERE"), Info.Title);
+		}
+		else if (bCrowd)
+		{
+			LabelText = FText::Format(INVTEXT("{0}\nPICK THEM OUT"), Info.Title);
+		}
+		else if (bHiddenInside)
+		{
+			LabelText = FText::Format(INVTEXT("{0}\nSEARCH THE BUILDING"), Info.Title);
 		}
 		break;
 	}

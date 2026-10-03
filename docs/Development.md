@@ -85,6 +85,15 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   sighting). Suspects in street clothes look like anyone else, so find whoever matches and talk to them (E); crooks
   ditch the striped jumper. Take a victim's statement (E) for the description and which way they ran. Lying low, a
   suspect may bolt if an officer gets close.
+- **Every crime its twist**: standing at the scene talks most crooks down, but not all of them.
+  - *Pickpockets* work a crowd: the board has their description from the start, and the crowd is full of people who
+    look a bit like them (the same outfit, or the same colour top). Talk to people (E), search the one who matches and
+    arrest them; searching or arresting the wrong one costs goodwill as usual.
+  - *Burglars* hide somewhere in the building, upstairs if it has an upstairs (take the lift, or a house's outside
+    stairs). Get a look at them and they give up, have a go, or run. Leave it too long and they slip out with the goods.
+  - *Drunks* (Drunk and Disorderly) are talked round: E to talk, then pick the friendly answer three times (the options
+    are shuffled). Two answers that wind them up and they swing for you. Talked round, they wobble off home.
+  - *Brawls* (bar fights, street brawls) take two officers to pull apart; on your own, put them down with your fists.
 - **Weapons** (on foot): every officer carries a taser; the precinct armory racks hand out a pistol, a shotgun and a
   rifle (three slots; E at a rack takes one, swaps it for the one in hand when you're full, or restocks its ammo).
   1, 2, 3 or the mouse wheel pick a weapon (the same number again puts it away), right mouse raises the last one
@@ -129,7 +138,9 @@ cuffs them where they fell), has a downed officer helped up (the radio calls it 
 quietly: a brawler wrestled down, a vandal who wins the struggle and runs (and is tackled), and a getaway driver who
 gives up beside their car, watches a mugger walk off with the goods and tracks them down in the crowd (a word, a search, the cuffs), stops
 and searches citizens (arresting one caught carrying and, wrongly, one who was clean), rides a lift to the top of a
-tower and climbs a house's outside stairs, films a tagger
+tower and climbs a house's outside stairs, picks a pickpocket out of a crowd of look-alikes (searching a bystander first),
+finds a burglar hiding upstairs, talks a drunk round (after one answer that winds them up), checks one officer can't
+break up a bar fight, films a tagger
 and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
 hydrant, knocks a lamp post flat with a cruiser, crashes the cruiser until it's a burning wreck, and writes off a
 citizen's car; the log (`SMOKE:` lines) reports each check.
