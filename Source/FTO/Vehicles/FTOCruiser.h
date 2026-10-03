@@ -97,6 +97,7 @@ public:
 
 	UFTOVehicleDamage* GetDamage() const { return Damage; }
 
+
 	/** Dev/testing: already doing Speed (cm/s) straight ahead. */
 	void Launch(float Speed)
 	{
