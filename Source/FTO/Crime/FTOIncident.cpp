@@ -341,7 +341,7 @@ FString AFTOIncident::GetTwistHint() const
 	}
 	if (bHiddenInside)
 	{
-		return TEXT("The burglar's hiding somewhere in the building, maybe upstairs (lift or outside stairs). Find them!");
+		return TEXT("The burglar's hiding somewhere in the building, maybe upstairs (lift or outside stairs). Find them! A partner guarding the front door stops them slipping out");
 	}
 	if (Info.TemplateId == TEXT("Bomb"))
 	{

@@ -201,10 +201,12 @@ int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector
 	}
 
 	int32 Points = BasePoints;
+	AFTOGameState* Squad = GetWorld()->GetGameState<AFTOGameState>();
 	if (FTOScoring::IsPenalty(Event))
 	{
 		Combo = 1; // that's the streak over
 		ComboTime = -100.f;
+		Squad->BreakSquadCombo(); // (the whole squad's)
 	}
 	else
 	{
@@ -216,7 +218,9 @@ int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector
 			Combo = Now - ComboTime <= FTOScoring::ComboWindow ? FMath::Min<int32>(Combo + 1, FTOScoring::MaxCombo) : 1;
 			ComboTime = Now;
 		}
-		Points = FMath::RoundToInt(BasePoints * FTOScoring::ComboMultiplier(GetCombo()));
+		// The squad's streak rides on top: everyone's good work keeps it going.
+		const float SquadMultiplier = bFollowUp ? Squad->GetSquadMultiplier() : Squad->BumpSquadCombo(this);
+		Points = FMath::RoundToInt(BasePoints * FTOScoring::ComboMultiplier(GetCombo()) * SquadMultiplier);
 		Stats.BestCombo = FMath::Max<int32>(Stats.BestCombo, GetCombo());
 	}
 
@@ -233,6 +237,7 @@ int32 AFTOPlayerState::AddScore(EFTOScore Event, int32 BasePoints, const FVector
 	case EFTOScore::Collateral:   ++Stats.Collateral; break;
 	case EFTOScore::FriendlyFire: ++Stats.FriendlyFire; break;
 	case EFTOScore::WrongfulArrest: ++Stats.Collateral; break; // (an "oops" on the scoreboard)
+	case EFTOScore::Teamwork:     ++Stats.Teamwork; break;
 	default: break;
 	}
 	ForceNetUpdate();

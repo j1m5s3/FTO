@@ -172,6 +172,18 @@ void AFTOHUD::DrawChaosMeter(const AFTOGameState* GS)
 
 	DrawCenteredText(FString::Printf(TEXT("CITY CHAOS  %d%%"), FMath::RoundToInt(DisplayedChaos)), X + W * 0.5f, Y + 6.f * S, FLinearColor::White, Font, S);
 	DrawCenteredText(ChaosMood(Alpha), X + W * 0.5f, Y + H + 6.f * S, ChaosColor(Alpha), GEngine->GetSmallFont(), S * 1.2f);
+
+	// The squad's streak, under the meter while it's going: the multiplier, and a fuse running down.
+	const int32 Streak = GS->GetSquadCombo();
+	if (Streak >= 2)
+	{
+		const FString Line = FString::Printf(TEXT("SQUAD COMBO x%s  (%d in a row)%s"), *FString::SanitizeFloat(FMath::RoundToFloat(GS->GetSquadMultiplier() * 10.f) / 10.f),
+			Streak, GS->IsTagTeam() ? TEXT("  TAG TEAM!") : TEXT(""));
+		const float LY = Y + H + 30.f * S;
+		DrawPanel(X + W * 0.2f, LY - 4.f * S, W * 0.6f, 30.f * S, FLinearColor(0.05f, 0.1f, 0.3f, 0.75f));
+		DrawCenteredText(Line, X + W * 0.5f, LY, FLinearColor(0.5f, 0.9f, 1.f), GEngine->GetSmallFont(), S * 1.2f);
+		DrawRect(FLinearColor(0.4f, 0.85f, 1.f), X + W * 0.2f, LY + 22.f * S, W * 0.6f * GS->GetSquadComboFuse(), 3.f * S);
+	}
 }
 
 void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
@@ -432,7 +444,7 @@ void AFTOHUD::ShowHitMarker(bool bBadHit)
 void AFTOHUD::DrawWeaponPanel()
 {
 	const AFTOCharacter* Me = Cast<AFTOCharacter>(GetOwningPawn());
-	if (!Me || Me->GetCurrentVehicle())
+	if (!Me || (Me->GetCurrentVehicle() && !Me->IsRidingShotgun()))
 	{
 		return;
 	}
@@ -443,7 +455,7 @@ void AFTOHUD::DrawWeaponPanel()
 	const EFTOWeapon Drawn = Me->GetDrawnWeapon();
 
 	// Crosshair while a weapon is up: a dot and four ticks, and an X when a round lands on someone.
-	if (Drawn != EFTOWeapon::None && Me->GetAimPose() != EFTOAimPose::None)
+	if (Drawn != EFTOWeapon::None && (Me->GetAimPose() != EFTOAimPose::None || Me->IsRidingShotgun()))
 	{
 		const FLinearColor Cross(1.f, 1.f, 1.f, 0.9f);
 		const float Gap = 7.f * S;
@@ -489,7 +501,8 @@ void AFTOHUD::DrawWeaponPanel()
 		}
 	}
 	// (Empty-handed, the same buttons fight.)
-	DrawText(Me->GetDrawnWeapon() == EFTOWeapon::None ? TEXT("RMB: raise a weapon   LMB: punch   G: kick   F: grab (close) or tackle") :
+	DrawText(Me->IsRidingShotgun() ? TEXT("Riding shotgun: 1-3 weapons   LMB: fire out of the window (two tyres stop a car)") :
+		Me->GetDrawnWeapon() == EFTOWeapon::None ? TEXT("RMB: raise a weapon   LMB: punch   G: kick   F: grab (close) or tackle") :
 		TEXT("1-3 / wheel: weapons   RMB: lower   LMB: fire   R: reload"), FLinearColor(0.7f, 0.7f, 0.7f, 0.8f), X0, Y0 - 16.f * S, Font, S * 0.85f);
 
 	// Shot down: a banner until a partner comes.

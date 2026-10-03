@@ -27,6 +27,7 @@
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Weapons/FTOBallistics.h"
+#include "Scoring/FTOScoring.h"
 
 namespace
 {
@@ -779,8 +780,80 @@ void AFTOPerp::FinishDeedNow()
 {
 	if (HasAuthority() && bCriminal && ArrestState == EFTOPerpArrest::None && Incident && Incident->IsActive())
 	{
-		GoIntoHiding(false);
+		SlipOut();
 	}
+}
+
+void AFTOPerp::SlipOut()
+{
+	DeedEndTime = 0.f;
+	if (Incident->GetInfo().TemplateId == TEXT("Burglary"))
+	{
+		if (AFTOCharacter* Guard = DoorGuard())
+		{
+			CaughtAtTheDoor(Guard);
+			return;
+		}
+	}
+	if (Incident->IsHiddenInside())
+	{
+		const AFTOCityGenerator* TheCity = FindCity();
+		if (const FFTOBuilding* Building = TheCity ? TheCity->GetBuilding(Incident->GetBuildingIndex()) : nullptr)
+		{
+			TeleportAndHold(Building->Room.TransformPosition(FVector(70.f, 0.f, 0.f)) + FVector(0.f, 0.f, HalfHeight));
+		}
+		bHidingUpstairs = false;
+		Incident->SetHiddenInside(false);
+		ToastOfficersNear(FText::Format(INVTEXT("{0}: nobody found them, and they've slipped out with the goods!"), Incident->GetInfo().Title), BadNews, 1000000.f);
+	}
+	GoIntoHiding(false);
+}
+
+AFTOCharacter* AFTOPerp::DoorGuard() const
+{
+	const AFTOCityGenerator* TheCity = City ? City.Get() : nullptr;
+	if (!TheCity)
+	{
+		for (TActorIterator<AFTOCityGenerator> It(GetWorld()); It; ++It)
+		{
+			TheCity = *It;
+			break;
+		}
+	}
+	const FFTOBuilding* Building = TheCity && Incident ? TheCity->GetBuilding(Incident->GetBuildingIndex()) : nullptr;
+	if (!Building)
+	{
+		return nullptr;
+	}
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		AFTOCharacter* Cop = It->IsValid() ? Cast<AFTOCharacter>((*It)->GetPawn()) : nullptr;
+		if (Cop && Cop->IsReadyForAction() && FVector::Dist2D(Cop->GetActorLocation(), Building->DoorOutside) < 400.f &&
+			FMath::Abs(Cop->GetActorLocation().Z - HalfHeight - Building->DoorOutside.Z) < 150.f)
+		{
+			return Cop;
+		}
+	}
+	return nullptr;
+}
+
+void AFTOPerp::CaughtAtTheDoor(AFTOCharacter* Guard)
+{
+	const AFTOCityGenerator* TheCity = FindCity();
+	if (const FFTOBuilding* Building = TheCity ? TheCity->GetBuilding(Incident->GetBuildingIndex()) : nullptr)
+	{
+		TeleportAndHold(Building->Room.TransformPosition(FVector(70.f, 0.f, 0.f)) + FVector(0.f, 0.f, HalfHeight));
+		FaceToward(Building->DoorOutside);
+	}
+	bHidingUpstairs = false;
+	bCornered = false;
+	if (Incident->IsHiddenInside())
+	{
+		Incident->SuspectFound(GetActorLocation() - FVector(0.f, 0.f, HalfHeight), false);
+	}
+	FTOScoring::Award(Guard, EFTOScore::Teamwork, GetActorLocation() + FVector(0.f, 0.f, 200.f));
+	ToastOfficersNear(INVTEXT("Caught at the door! They ran straight into the officer guarding it. Teamwork!"), GoodNews, 4000.f);
+	GiveUp(Guard->GetController());
 }
 
 void AFTOPerp::TickDeed(float DeltaSeconds)
@@ -823,18 +896,7 @@ void AFTOPerp::TickDeed(float DeltaSeconds)
 	// Done: off with the goods, before anyone comes (a burglar who was never found slips out of the front door).
 	if (DeedEndTime > 0.f && Now >= DeedEndTime)
 	{
-		if (Incident->IsHiddenInside())
-		{
-			const AFTOCityGenerator* TheCity = FindCity();
-			if (const FFTOBuilding* Building = TheCity ? TheCity->GetBuilding(Incident->GetBuildingIndex()) : nullptr)
-			{
-				TeleportAndHold(Building->Room.TransformPosition(FVector(70.f, 0.f, 0.f)) + FVector(0.f, 0.f, HalfHeight));
-			}
-			bHidingUpstairs = false;
-			Incident->SetHiddenInside(false);
-			ToastOfficersNear(FText::Format(INVTEXT("{0}: nobody found them, and they've slipped out with the goods!"), Incident->GetInfo().Title), BadNews, 1000000.f);
-		}
-		GoIntoHiding(false);
+		SlipOut();
 		return;
 	}
 	// The tag goes up a letter at a time (finished a little before they leave).
@@ -1753,6 +1815,15 @@ void AFTOPerp::EndStruggle(bool bOfficersWon)
 
 void AFTOPerp::BeginFleeing(const AActor* From)
 {
+	// A burglar bolting for the front door runs into whoever's guarding it.
+	if (Incident && Incident->GetInfo().TemplateId == TEXT("Burglary") && Incident->GetBuildingIndex() != INDEX_NONE)
+	{
+		if (AFTOCharacter* Guard = DoorGuard(); Guard && Guard != From)
+		{
+			CaughtAtTheDoor(Guard);
+			return;
+		}
+	}
 	if (bCornered)
 	{
 		// Found upstairs: there's no way out but past the police. They give up.

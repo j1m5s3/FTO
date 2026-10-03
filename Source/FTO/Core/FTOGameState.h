@@ -152,6 +152,19 @@ public:
 	/** Server: the squad voted to keep going: Seconds more on the clock, chaos as it was. */
 	void StartOvertime(float Seconds);
 
+	// ---- The squad's streak ----
+	/** Server: good work by Officer: the squad's streak goes on (or starts again). Returns the multiplier now. */
+	float BumpSquadCombo(const APlayerState* Officer);
+	/** Server: a penalty: the streak's over. */
+	void BreakSquadCombo();
+	/** The streak, if it's still going (0 if it's lapsed), and its multiplier (every machine). */
+	int32 GetSquadCombo() const;
+	float GetSquadMultiplier() const;
+	bool IsTagTeam() const { return bTagTeam && GetSquadCombo() > 1; }
+	/** 0-1: how much of the window is left before the streak lapses. */
+	float GetSquadComboFuse() const;
+	int32 GetBestSquadCombo() const { return BestSquadCombo; }
+
 	// ---- The shape of a shift: a set piece in the middle, rush hour at the end ----
 	/** The last this-many seconds on the clock are rush hour (crimes come thick and fast). */
 	static constexpr float RushHourSeconds = 120.f;
@@ -197,6 +210,12 @@ protected:
 	UPROPERTY(Replicated) float VoteDuration = 20.f;
 	UPROPERTY(Replicated) float OvertimeOffer = 300.f;
 	UPROPERTY(Replicated) int32 Overtimes = 0;
+	UPROPERTY(Replicated) int32 SquadCombo = 0;
+	UPROPERTY(Replicated) float SquadComboTime = -1000.f;
+	UPROPERTY(Replicated) bool bTagTeam = false;
+	UPROPERTY(Replicated) int32 BestSquadCombo = 0;
+	/** Server: whose work last kept the streak going. */
+	TWeakObjectPtr<const APlayerState> LastSquadContributor;
 	UPROPERTY(Replicated) FName SetPiece;
 	UPROPERTY(Replicated) float SetPieceTime = -1000.f;
 

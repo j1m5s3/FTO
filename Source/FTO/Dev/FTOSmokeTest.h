@@ -115,6 +115,8 @@ protected:
 	float RamBaseline = 0.f;
 	/** The fight checks: blows thrown before the brawl was watched, and how often the officer was rocked. */
 	uint8 BlowsBefore = 0;
+	/** Teamwork scored before a check. */
+	int32 TeamworkBefore = 0;
 	int32 OfficerHits = 0;
 	/** Find a standing wall panel (Face, Column, Level) of structure S. */
 	/** Where a camera can stand on the way from From to Wanted (short of whatever's in the way). */

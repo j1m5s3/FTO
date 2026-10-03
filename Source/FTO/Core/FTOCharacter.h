@@ -71,6 +71,8 @@ public:
 	AActor* GetCurrentVehicle() const { return CurrentVehicle; }
 
 	EFTOSeat GetCurrentSeat() const { return CurrentSeat; }
+	/** A passenger in a cruiser (front or back): free to lean out of the window and shoot (at a getaway car's tyres, say). */
+	bool IsRidingShotgun() const { return CurrentVehicle != nullptr && CurrentSeat != EFTOSeat::None && CurrentSeat != EFTOSeat::Driver; }
 
 	/** Hides this officer's head on this machine only, so a seat-view camera isn't inside it. */
 	void SetHeadHidden(bool bHide);
@@ -396,6 +398,8 @@ protected:
 	/** The slot in hand, or INDEX_NONE with everything put away. */
 	UPROPERTY(ReplicatedUsing=OnRep_Loadout)
 	int32 DrawnSlot = INDEX_NONE;
+	/** Shooting from the passenger seat, rounds start this far out along the aim (clear of the car). */
+	static constexpr float SeatMuzzleReach = 230.f;
 
 	/** The last slot drawn (what the right mouse button brings back out). */
 	int32 LastDrawnSlot = 0;

@@ -1,4 +1,6 @@
 #include "Core/FTOGameState.h"
+#include "Scoring/FTOScoring.h"
+#include "GameFramework/PlayerState.h"
 #include "Audio/FTOAudio.h"
 #include "Crime/FTOIncident.h"
 #include "GameFramework/Pawn.h"
@@ -115,6 +117,10 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, VoteEndTime);
 	DOREPLIFETIME(AFTOGameState, VoteDuration);
 	DOREPLIFETIME(AFTOGameState, OvertimeOffer);
+	DOREPLIFETIME(AFTOGameState, SquadCombo);
+	DOREPLIFETIME(AFTOGameState, SquadComboTime);
+	DOREPLIFETIME(AFTOGameState, bTagTeam);
+	DOREPLIFETIME(AFTOGameState, BestSquadCombo);
 	DOREPLIFETIME(AFTOGameState, SetPiece);
 	DOREPLIFETIME(AFTOGameState, SetPieceTime);
 	DOREPLIFETIME(AFTOGameState, Overtimes);
@@ -195,6 +201,49 @@ void AFTOGameState::BeginOvertimeVote(float Seconds, float Offer)
 	OvertimeOffer = Offer;
 	VoteEndTime = GetServerWorldTimeSeconds() + Seconds;
 	SetShiftPhase(EFTOShiftPhase::OvertimeVote);
+}
+
+float AFTOGameState::BumpSquadCombo(const APlayerState* Officer)
+{
+	check(HasAuthority());
+	const float Now = GetServerWorldTimeSeconds();
+	if (Now - SquadComboTime <= FTOScoring::SquadComboWindow && SquadCombo > 0)
+	{
+		++SquadCombo;
+		bTagTeam |= LastSquadContributor.IsValid() && LastSquadContributor.Get() != Officer;
+	}
+	else
+	{
+		SquadCombo = 1;
+		bTagTeam = false;
+	}
+	SquadComboTime = Now;
+	LastSquadContributor = Officer;
+	BestSquadCombo = FMath::Max(BestSquadCombo, SquadCombo);
+	return GetSquadMultiplier();
+}
+
+void AFTOGameState::BreakSquadCombo()
+{
+	check(HasAuthority());
+	SquadCombo = 0;
+	bTagTeam = false;
+	SquadComboTime = -1000.f;
+}
+
+int32 AFTOGameState::GetSquadCombo() const
+{
+	return GetServerWorldTimeSeconds() - SquadComboTime <= FTOScoring::SquadComboWindow ? SquadCombo : 0;
+}
+
+float AFTOGameState::GetSquadMultiplier() const
+{
+	return FTOScoring::SquadMultiplier(GetSquadCombo(), bTagTeam);
+}
+
+float AFTOGameState::GetSquadComboFuse() const
+{
+	return GetSquadCombo() > 0 ? FMath::Clamp(1.f - (GetServerWorldTimeSeconds() - SquadComboTime) / FTOScoring::SquadComboWindow, 0.f, 1.f) : 0.f;
 }
 
 bool AFTOGameState::IsRushHour() const

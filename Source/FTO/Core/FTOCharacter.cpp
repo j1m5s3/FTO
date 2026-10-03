@@ -1236,13 +1236,14 @@ FVector AFTOCharacter::GetCrosshairTarget() const
 	const FVector Start = Eye + Look * (FVector::Dist(Eye, GetActorLocation()) + 40.f);
 	const FVector End = Eye + Look * 10000.f;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCrosshair), false, this);
+	Params.AddIgnoredActor(CurrentVehicle); // (from the passenger seat, past our own car)
 	FHitResult Hit;
 	return GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_FTOProjectile, Params) ? Hit.ImpactPoint : End;
 }
 
 void AFTOCharacter::SelectSlot(int32 Slot)
 {
-	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction())
+	if ((CurrentVehicle && !IsRidingShotgun()) || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction())
 	{
 		return;
 	}
@@ -1266,7 +1267,7 @@ void AFTOCharacter::SelectSlot(int32 Slot)
 void AFTOCharacter::ServerSelectSlot_Implementation(int32 Slot)
 {
 	const int32 Asked = Slot;
-	if (CurrentVehicle || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction() || (Slot != INDEX_NONE && GetWeaponInSlot(Slot) == EFTOWeapon::None))
+	if ((CurrentVehicle && !IsRidingShotgun()) || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction() || (Slot != INDEX_NONE && GetWeaponInSlot(Slot) == EFTOWeapon::None))
 	{
 		Slot = INDEX_NONE;
 	}
@@ -1334,13 +1335,20 @@ void AFTOCharacter::CycleWeapon(int32 Step)
 
 void AFTOCharacter::FirePressed()
 {
-	if (!IsReadyForAction())
+	// Riding shotgun, the window's open: rounds go out of it (nothing up yet: the last weapon comes out first).
+	const bool bFromSeat = IsRidingShotgun();
+	if (!IsReadyForAction() && !bFromSeat)
 	{
 		return;
 	}
-	// Nothing up: it's fists (RMB raises a weapon).
 	if (GetDrawnWeapon() == EFTOWeapon::None)
 	{
+		if (bFromSeat)
+		{
+			SelectSlot(GetWeaponInSlot(LastDrawnSlot) != EFTOWeapon::None ? LastDrawnSlot : 0);
+			return;
+		}
+		// Nothing up: it's fists (RMB raises a weapon).
 		PunchPressed();
 		return;
 	}
@@ -1358,10 +1366,12 @@ void AFTOCharacter::FirePressed()
 	}
 	NextShotTime = Now + Spec.Interval;
 
-	// From the muzzle toward whatever's under the crosshair.
+	// From the muzzle toward whatever's under the crosshair (from the seat: out past the car's bodywork).
 	UpdateWeaponMesh();
-	const FVector Muzzle = WeaponMesh->GetSocketLocation(TEXT("Muzzle"));
-	const FVector Aim = (GetCrosshairTarget() - Muzzle).GetSafeNormal();
+	const FVector Target = GetCrosshairTarget();
+	const FVector Eye = GetPawnViewLocation();
+	const FVector Muzzle = bFromSeat ? Eye + (Target - Eye).GetSafeNormal() * SeatMuzzleReach : WeaponMesh->GetSocketLocation(TEXT("Muzzle"));
+	const FVector Aim = (Target - Muzzle).GetSafeNormal();
 	const int32 Seed = FMath::Rand();
 	if (!HasAuthority())
 	{
@@ -1378,7 +1388,7 @@ void AFTOCharacter::FirePressed()
 void AFTOCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVector_NetQuantizeNormal Aim, int32 Seed)
 {
 	const EFTOWeapon Weapon = GetDrawnWeapon();
-	if (Weapon == EFTOWeapon::None || CurrentVehicle || GetClip(DrawnSlot) <= 0 || IsReloading() || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction())
+	if (Weapon == EFTOWeapon::None || (CurrentVehicle && !IsRidingShotgun()) || GetClip(DrawnSlot) <= 0 || IsReloading() || (Knockdown && Knockdown->IsDown()) || IsInSyncedAction())
 	{
 		return;
 	}
@@ -1392,7 +1402,7 @@ void AFTOCharacter::ServerFire_Implementation(FVector_NetQuantize Origin, FVecto
 	NextServerShotTime = Now + Spec.Interval * 0.8f;
 	// The shot has to leave from somewhere near our hands.
 	FVector Muzzle = Origin;
-	if (FVector::DistSquared(Muzzle, GetActorLocation()) > FMath::Square(250.f))
+	if (FVector::DistSquared(Muzzle, GetActorLocation()) > FMath::Square(IsRidingShotgun() ? SeatMuzzleReach + 150.f : 250.f))
 	{
 		Muzzle = GetPawnViewLocation();
 	}

@@ -553,7 +553,8 @@ void UFTOCrimeDirector::TickShiftShape()
 	const float Now = GetWorld()->GetTimeSeconds();
 
 	// The set piece, part way into the shift (not again in overtime).
-	if (!bSetPieceDone && Now >= NextSetPieceTry && GS->GetOvertimes() == 0 && ShiftLengthSeconds - GS->GetShiftTimeRemaining() >= ShiftLengthSeconds * SetPieceAt)
+	if (!bSetPieceDone && Now >= NextSetPieceTry && GS->GetOvertimes() == 0 && !GS->IsRushHour() &&
+		ShiftLengthSeconds - GS->GetShiftTimeRemaining() >= ShiftLengthSeconds * SetPieceAt)
 	{
 		// (If it couldn't start, say no car was free for a pursuit, try again in a bit.)
 		bSetPieceDone = StartSetPiece() != nullptr;
@@ -679,7 +680,7 @@ AFTOIncident* UFTOCrimeDirector::StartSetPiece(FName Which)
 			Incident = Car->GetChaseIncident();
 		}
 	}
-	if (!Incident)
+	if (!Incident || !Incident->IsActive())
 	{
 		UE_LOG(LogFTO, Warning, TEXT("Couldn't start the %s set piece."), *Which.ToString());
 		return nullptr;
@@ -732,7 +733,12 @@ void UFTOCrimeDirector::TriggerHeistGetaway()
 		return;
 	}
 	Heist->Supersede();
-	Car->MakeGetaway(TEXT("HeistGetaway"), 180.f, 2.5f);
+	// As tough as the squad's big, and no more officers needed on its tail than there are.
+	Car->MakeGetaway(TEXT("HeistGetaway"), 180.f, 1.5f + 0.25f * GetOfficerCount());
+	if (AFTOIncident* Chase = Car->GetChaseIncident())
+	{
+		Chase->SetOfficersRequired(FMath::Min(Chase->GetInfo().OfficersRequired, GetOfficerCount()));
+	}
 	UE_LOG(LogFTO, Log, TEXT("The heist crew are making their getaway."));
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{

@@ -22,7 +22,8 @@ enum class EFTOScore : uint8
 	Revive,			// helped a downed partner up
 	Collateral,		// a citizen hurt by the police (bowled over, shot, zapped)
 	FriendlyFire,	// shot a partner
-	WrongfulArrest	// cuffed someone who'd done nothing
+	WrongfulArrest,	// cuffed someone who'd done nothing
+	Teamwork		// a job done by two (tyres shot out from the passenger seat, a burglar caught at the door)
 };
 
 /** An officer's tally for the end-of-shift scoreboard. */
@@ -42,6 +43,7 @@ struct FFTOOfficerStats
 	UPROPERTY(BlueprintReadOnly) int32 Collateral = 0;
 	UPROPERTY(BlueprintReadOnly) int32 FriendlyFire = 0;
 	UPROPERTY(BlueprintReadOnly) int32 BestCombo = 1;
+	UPROPERTY(BlueprintReadOnly) int32 Teamwork = 0;
 };
 
 /**
@@ -60,6 +62,11 @@ namespace FTOScoring
 	FTO_API int32 BasePoints(EFTOScore Event, EFTOCrimeTier Tier = EFTOCrimeTier::Petty);
 	FTO_API FString Label(EFTOScore Event);
 	FTO_API bool IsPenalty(EFTOScore Event);
+	/** The squad's streak: every officer's good work in quick succession builds it, any penalty breaks it. */
+	constexpr float SquadComboWindow = 20.f;
+	/** x1.05 per step after the first, to x1.5; officers taking turns ("tag team") add another 0.15. */
+	FTO_API float SquadMultiplier(int32 Streak, bool bTagTeam);
+
 	/** 1, 1.5, 2, 2.5, 3. */
 	FTO_API float ComboMultiplier(int32 Combo);
 

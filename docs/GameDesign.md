@@ -44,6 +44,12 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
   a very tough car.
 - **Rush hour**: the last two minutes, crimes come about three times as often and up to three more at once.
 
+## Teamwork
+- Jobs built for two: shoot out a getaway's tyres from the passenger seat while your partner drives; guard a burgled
+  building's door while your partner searches it. Both score TEAMWORK!.
+- The squad combo: the whole squad's good work in quick succession builds one streak that multiplies everyone's
+  points (to x1.5), more when officers take turns; any penalty breaks it.
+
 ## Pacing
 - A new crime every 12 s or so in a calm city, down to every 4.5 s as chaos climbs (solo slower: x1.5; two officers
   x1.1). The first one comes 2 s after the briefing. Up to 4 + 2 per officer at once.

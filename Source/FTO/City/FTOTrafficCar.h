@@ -67,6 +67,12 @@ public:
 
 	/** Server: floor it with the police after us (a wanted driver at a traffic stop), a chase incident riding along. */
 	void MakeGetaway(FName ChaseCrime = NAME_None, float Seconds = 120.f, float Toughness = 1.f);
+	/** Server: a round landed at At (By fired it): a tyre, if it's by a wheel. Two flat tyres stop a getaway. */
+	void RoundHit(const FVector& At, AController* By);
+	int32 GetFlatTyres() const { return FMath::CountBits(uint64(FlatTyres)); }
+	FVector GetWheelLocation(int32 Index) const;
+	int32 NumWheels() const { return Wheels.Num(); }
+
 	/** How badly it's been knocked about. */
 	UFTOVehicleDamage* GetDamage() const { return Damage; }
 	/** Server: the chase is over: stopped, and the driver climbs out with their hands up (the incident's perp now). */
@@ -141,6 +147,11 @@ protected:
 	UPROPERTY(ReplicatedUsing=OnRep_CarState) EFTOCarViolation Violation = EFTOCarViolation::None;
 	/** Busted at the end of a chase, the driver's out on the road (their seat's empty). */
 	UPROPERTY(ReplicatedUsing=OnRep_CarState) bool bDriverOut = false;
+	/** Shot-out tyres, a bit per wheel. */
+	UPROPERTY(ReplicatedUsing=OnRep_Tyres) uint8 FlatTyres = 0;
+	UFUNCTION() void OnRep_Tyres();
+	/** Every machine: the wheels already sagging on their rims. */
+	uint8 ShownFlat = 0;
 
 	FRandomStream Rng;
 	FIntPoint Node = FIntPoint::ZeroValue;		// intersection we're heading to

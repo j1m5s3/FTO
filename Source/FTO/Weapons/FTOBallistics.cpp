@@ -13,6 +13,7 @@
 #include "Physics/FTOImpact.h"
 #include "Physics/FTOKnockdownComponent.h"
 #include "Physics/FTOVehicleDamage.h"
+#include "City/FTOTrafficCar.h"
 #include "GameFramework/Pawn.h"
 #include "Sound/SoundBase.h"
 
@@ -196,6 +197,10 @@ bool UFTOBallistics::Land(FRound& Round, const FHitResult& Hit)
 		if (UFTOVehicleDamage* Car = Victim ? Victim->FindComponentByClass<UFTOVehicleDamage>() : nullptr)
 		{
 			Car->ApplyDamage(Spec.CarDamage, Hit.ImpactPoint, InstigatorOf(Round));
+			if (AFTOTrafficCar* Traffic = Cast<AFTOTrafficCar>(Car->GetOwner()))
+			{
+				Traffic->RoundHit(Hit.ImpactPoint, InstigatorOf(Round));
+			}
 		}
 		else if (AFTODestruction* Wreckage = AFTODestruction::Get(GetWorld()))
 		{
