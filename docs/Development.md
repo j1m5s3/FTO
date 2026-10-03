@@ -42,7 +42,7 @@ free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invite
 | `FTOVote Overtime` | Vote at the end of the shift (`Overtime` or `ClockOff`); works for any player |
 | `FTOMutator LowGravity` | Change today's mutator (`LowGravity`, `BouncyCars`, `HotDogs`, `BigHeads`, `None`) |
 | `FTOCareerPoints 5000` | Add career points (earned and banked); `FTOCareerReset` starts a fresh career |
-| `FTOLocker` | Go to the precinct's locker board (any player; in the lobby only) |
+| `FTOLocker` | Go to the precinct's locker board (any player; in a shipping build, the lobby only) |
 | `FTOSetPiece Bomb` | Start a set piece now (`Heist`, `Bomb`, `Pursuit`; no argument for this shift's own) |
 
 Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately; `-FTOMutator=HotDogs` picks the

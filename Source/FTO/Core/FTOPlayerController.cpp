@@ -410,9 +410,13 @@ void AFTOPlayerController::FTOLocker()
 
 void AFTOPlayerController::ServerLocker_Implementation()
 {
-	// (A shortcut for the lobby only: never a way out of trouble mid-shift.)
+	// (A dev shortcut. In a shipping build, the lobby only: never a way out of trouble mid-shift.)
+#if UE_BUILD_SHIPPING
 	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
 	APawn* Officer = GS && GS->GetShiftPhase() == EFTOShiftPhase::Lobby ? GetPawn() : nullptr;
+#else
+	APawn* Officer = GetPawn();
+#endif
 	for (TActorIterator<AFTOPrecinctBoard> It(GetWorld()); It && Officer; ++It)
 	{
 		if (It->GetKind() == EFTOBoardKind::Locker)
