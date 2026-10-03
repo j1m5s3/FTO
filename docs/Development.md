@@ -92,7 +92,7 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   - *Burglars* hide somewhere in the building, upstairs if it has an upstairs (take the lift, or a house's outside
     stairs). Get a look at them and they give up, have a go, or run. Leave it too long and they slip out with the goods.
   - *Drunks* (Drunk and Disorderly) are talked round: E to talk, then pick the friendly answer three times (the options
-    are shuffled). Two answers that wind them up and they swing for you. Talked round, they wobble off home.
+    are shuffled). Two answers that wind them up and they swing for you. Talked round, they wave you off (a taxi home); option 4 just ends the chat. Wound up, they fight, and put on the floor they can be cuffed.
   - *Brawls* (bar fights, street brawls) take two officers to pull apart; on your own, put them down with your fists.
 - **Weapons** (on foot): every officer carries a taser; the precinct armory racks hand out a pistol, a shotgun and a
   rifle (three slots; E at a rack takes one, swaps it for the one in hand when you're full, or restocks its ammo).
