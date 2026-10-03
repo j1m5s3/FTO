@@ -51,6 +51,8 @@ public:
 	/** Start a set piece now (Heist, Bomb, Pursuit; nothing for this shift's own). */
 	UFUNCTION(Exec) void FTOSetPiece(FName Which = NAME_None);
 	AFTOIncident* FTOSetPieceNow(FName Which);
+	/** Change today's mutator (LowGravity, BouncyCars, HotDogs, BigHeads, None). */
+	UFUNCTION(Exec) void FTOMutator(FName Which);
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")

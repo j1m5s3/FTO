@@ -1,4 +1,6 @@
 #include "Vehicles/FTOCruiser.h"
+#include "Core/FTOMutators.h"
+#include "Kismet/GameplayStatics.h"
 #include "City/FTOCityKit.h"
 #include "Audio/FTOAudio.h"
 #include "Crime/FTOArrestee.h"
@@ -489,6 +491,17 @@ void AFTOCruiser::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	// Bouncy cars: always bobbing a little, and a big hop off whatever we bounced off (just for show).
+	const bool bBouncy = FTOMutators::Is(this, TEXT("BouncyCars"));
+	if (bBouncy || bWasBouncy)
+	{
+		bWasBouncy = bBouncy;
+		const float Since = GetWorld()->GetTimeSeconds() - HopStart;
+		const float BigHop = Since < 0.7f ? 90.f * FMath::Sin(PI * Since / 0.7f) : 0.f;
+		const float Bob = 10.f * FMath::Abs(FMath::Sin(GetWorld()->GetTimeSeconds() * 6.f));
+		Body->SetRelativeLocation(FVector(0.f, 0.f, -RideHeight + (bBouncy ? BigHop + Bob : 0.f)));
+	}
+
 	// A fire with someone at the wheel smoulders on; left empty, it burns down (and goes up).
 	if (Damage && HasAuthority())
 	{
@@ -694,7 +707,14 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 		{
 			Scrape(Hit); // grinding along it
 		}
-		Velocity = (Velocity - 1.4f * FVector::DotProduct(Velocity, Normal) * Normal) * 0.5f;
+		// (Bouncy cars bounce right back off, and hop.)
+		const bool bBouncy = FTOMutators::Is(this, TEXT("BouncyCars"));
+		Velocity = (Velocity - (bBouncy ? 2.f : 1.4f) * FVector::DotProduct(Velocity, Normal) * Normal) * (bBouncy ? 0.9f : 0.5f);
+		if (bBouncy && Into > 300.f)
+		{
+			HopStart = GetWorld()->GetTimeSeconds();
+			UGameplayStatics::PlaySoundAtLocation(this, AFTOGameState::Sounds().Bonk, GetActorLocation(), 0.9f, 0.8f, 0.f, AFTOGameState::Sounds().World);
+		}
 	}
 	SetActorRotation(NewRotation);
 

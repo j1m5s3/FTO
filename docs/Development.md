@@ -40,9 +40,11 @@ free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invite
 | `FTOCallout Backup` | Make a radio callout (`Backup`, `Fleeing`, `OfficerDown`, `Copy`); works for any player |
 | `FTOShiftTimeLeft 0` | Set the shift clock (0 runs it out and starts the overtime vote) |
 | `FTOVote Overtime` | Vote at the end of the shift (`Overtime` or `ClockOff`); works for any player |
+| `FTOMutator LowGravity` | Change today's mutator (`LowGravity`, `BouncyCars`, `HotDogs`, `BigHeads`, `None`) |
 | `FTOSetPiece Bomb` | Start a set piece now (`Heist`, `Bomb`, `Pursuit`; no argument for this shift's own) |
 
-Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
+Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately; `-FTOMutator=HotDogs` picks the
+shift's mutator (`None` for none).
 
 ## Controls
 - **On foot**: WASD / left stick to move, Shift to sprint, Space to jump. Q blows the police whistle (citizens
@@ -114,7 +116,7 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   in a getaway car's tyres stop it dead (the driver gives up), and that's teamwork for the gunner and the driver.
 - **Teamwork**: some jobs want two. One drives while the other shoots out a getaway's tyres; one guards a burgled
   building's front door while the other searches it (a burglar who bolts or tries to slip out runs straight into the
-  guard). Both score TEAMWORK! for everyone in on it. The whole squad shares a streak too: every bit of good work
+  guard). With a partner in on it (a player at the wheel; someone else on the shift), both score TEAMWORK!. The whole squad shares a streak too: every bit of good work
   within 20 s of the last adds to it, up to x1.5 on everyone's points (0.1 a step solo, less in a bigger squad; another 0.1 if officers are taking
   turns: TAG TEAM!), shown under the chaos meter; a penalty knocks it back three steps.
 - **Radio** (anywhere, on foot or in a car): hold V (d-pad down) to talk to the squad; teammates hear you through a
@@ -129,6 +131,13 @@ Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately.
   three right ones defuse it, and if it goes off it takes the windows, walls and everyone near with it) and a
   *city-wide pursuit* (the city's most wanted in a car three times tougher than most). The last two minutes on the
   clock are *rush hour*: crimes come about three times as fast and there can be three more at once.
+- **Comedy**: every shift rolls a mutator, announced at roll call and shown under the clock: *low gravity* (floaty
+  jumps, slow-falling ragdolls and debris), *bouncy cars* (every car on hydraulics; cruisers bounce off walls with a
+  boing), *hot dog day* (every crook, and a pickpocket's whole crowd, in a hot dog suit) or *big heads*. Absurd calls
+  turn up as often as anything else (a mime in an invisible box, unlicensed pigeon feeding, competitive yodelling,
+  garden gnome smuggling), and half of all calls come with a twist on the board. Every big incident, handled or not,
+  makes the front page of *The Daily Siren*, which slides in for everyone with a silly headline; the shift's last
+  front page heads the scoreboard.
 - **End of shift**: when the 10-minute clock runs out the city holds still and everyone votes: Y (left bumper) for 5
   minutes of overtime (chaos carries over; the clock reads OVERTIME), N (view button) to clock off. Most votes win;
   the host's vote breaks a tie and decides for anyone who says nothing within 20 s. Clocking off (or the city falling)
@@ -157,7 +166,8 @@ tower and climbs a house's outside stairs, starts the shift's set piece on sched
 lets another go off, watches the heist crew make off in a getaway car and starts a city-wide pursuit, runs the clock
 into rush hour, picks a pickpocket out of a crowd of look-alikes (searching a bystander first),
 finds a burglar hiding upstairs, talks a drunk round (after one answer that winds them up), checks one officer can't
-break up a bar fight, shoots out a getaway car's tyres, catches a burglar at the door they're guarding, builds the
+break up a bar fight, shoots out a getaway car's tyres, tries every mutator (the officer floating up a jump in low gravity, cars on their
+hydraulics, a mime in a hot dog suit, a big head), makes the front page, catches a burglar at the door they're guarding, builds the
 squad's streak and breaks it, films a tagger
 and a vandal at work, then opens the callout wheel and keys the radio, then shoots out a shop window and a
 hydrant, knocks a lamp post flat with a cruiser, crashes the cruiser until it's a burning wreck, and writes off a
@@ -166,7 +176,7 @@ For a two-player check, run a listen-server host and a client (see *Play*) both 
 (or `client`) and `-FTOSmokeRideAlong`: the host parks in a cruiser, and the client rides shotgun, looks around, fires out of the window, gets out
 and arrests a shoplifter the host puts beside them. Then the client calls for backup and stays on air, and the host
 checks it heard the call and has the client's voice going through the radio filter (the client checks the same for the
-host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece.
+host). Finally the client checks it sees everything the host broke broken too, and the shift's set piece, the front pages and the mutator.
 
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine

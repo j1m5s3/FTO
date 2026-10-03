@@ -22,6 +22,7 @@
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Art/FTOArt.h"
+#include "Core/FTOMutators.h"
 
 namespace
 {
@@ -145,6 +146,44 @@ void AFTOPedestrian::ApplyLook()
 
 	// Every variant tints its shirt (vertex alpha 1) with a random cheerful colour.
 	PaintBody(FLinearColor::MakeFromHSV8(uint8(LookRng.RandRange(0, 255)), 170, 235));
+}
+
+void AFTOPedestrian::UpdateHotDogSuit()
+{
+	const bool bWant = WantsHotDogSuit() && FTOMutators::Is(this, TEXT("HotDogs"));
+	if (bWant && HotDogSuit.IsEmpty() && Body && Body->GetSkeletalMeshAsset())
+	{
+		// A bun either side, the sausage up the middle and over the head, and a squiggle of mustard.
+		UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+		UStaticMesh* Ball = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+		struct FPiece { UStaticMesh* Mesh; FVector At; FVector Scale; FLinearColor Color; };
+		const FPiece Pieces[] =
+		{
+			{ Ball, FVector(0.f, 0.f, 105.f), FVector(0.55f, 0.55f, 1.9f), FLinearColor(0.75f, 0.25f, 0.12f) }, // the sausage
+			{ Ball, FVector(0.f, 30.f, 80.f), FVector(0.35f, 0.5f, 1.45f), FLinearColor(0.93f, 0.72f, 0.4f) }, // bun
+			{ Ball, FVector(0.f, -30.f, 80.f), FVector(0.35f, 0.5f, 1.45f), FLinearColor(0.93f, 0.72f, 0.4f) }, // bun
+			{ Cylinder, FVector(24.f, 0.f, 120.f), FVector(0.06f, 0.06f, 1.3f), FLinearColor(1.f, 0.85f, 0.1f) }, // mustard
+		};
+		for (const FPiece& Piece : Pieces)
+		{
+			UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this);
+			Part->SetStaticMesh(Piece.Mesh);
+			Part->SetupAttachment(GetRootComponent());
+			Part->SetRelativeLocation(Piece.At - FVector(0.f, 0.f, HalfHeight));
+			Part->SetRelativeScale3D(Piece.Scale);
+			Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Part->RegisterComponent();
+			FTOArt::ApplyColor(Part, BaseMaterial, Piece.Color);
+			HotDogSuit.Add(Part);
+		}
+	}
+	for (UStaticMeshComponent* Part : HotDogSuit)
+	{
+		if (Part && Part->IsVisible() != bWant)
+		{
+			Part->SetVisibility(bWant);
+		}
+	}
 }
 
 FString AFTOPedestrian::DescribeLook() const

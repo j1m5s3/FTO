@@ -19,6 +19,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Net/UnrealNetwork.h"
 #include "Scoring/FTOScoring.h"
+#include "Core/FTOMutators.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Animation/FTOCharacterAnimInstance.h"
@@ -412,6 +413,15 @@ bool AFTOTrafficCar::IsPathBlocked(bool bIncludeCars) const
 void AFTOTrafficCar::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	// Bouncy cars: hydraulics, every car bobbing along to its own beat (just for show: the car itself stays put).
+	const bool bBouncy = FTOMutators::Is(this, TEXT("BouncyCars"));
+	if (bBouncy || bWasBouncy)
+	{
+		bWasBouncy = bBouncy;
+		const float Hop = bBouncy ? 28.f * FMath::Abs(FMath::Sin(GetWorld()->GetTimeSeconds() * 5.f + (LookSeed % 100) * 0.37f)) : 0.f;
+		Body->SetRelativeLocation(FVector(0.f, 0.f, -RideHeight + Hop));
+	}
 
 	// Spin the wheels while moving.
 	if (GetCurrentSpeed() > 0.f)

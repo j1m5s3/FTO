@@ -205,6 +205,14 @@ void AFTOGameMode::FTOSetPiece(FName Which)
 	FTOSetPieceNow(Which);
 }
 
+void AFTOGameMode::FTOMutator(FName Which)
+{
+	if (AFTOGameState* GS = GetGameState<AFTOGameState>())
+	{
+		GS->SetMutator(Which == TEXT("None") ? NAME_None : Which);
+	}
+}
+
 AFTOIncident* AFTOGameMode::FTOSetPieceNow(FName Which)
 {
 	return CrimeDirector->StartSetPiece(Which);

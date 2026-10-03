@@ -96,6 +96,7 @@ EFTOAnimAction AFTOCrimeExtra::GetAnimAction() const
 void AFTOCrimeExtra::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	UpdateHotDogSuit();
 	if (!HasAuthority() || !Incident)
 	{
 		return;

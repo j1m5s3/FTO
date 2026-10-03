@@ -16,6 +16,8 @@
 #include "City/FTOCityGenerator.h"
 #include "City/FTOTrafficCar.h"
 #include "Physics/FTOVehicleDamage.h"
+#include "Core/FTOMutators.h"
+#include "Misc/CommandLine.h"
 #include "FTO.h"
 
 UFTOCrimeDirector::UFTOCrimeDirector()
@@ -75,7 +77,14 @@ void UFTOCrimeDirector::BeginShift(int32 Seed)
 	bShiftStarted = true;
 
 	RefreshSpawnPoints();
-	UE_LOG(LogFTO, Log, TEXT("Shift started. Seed %d, %d crime spawn points."), Seed, SpawnPoints.Num());
+
+	// Today's silly rule (or the one asked for).
+	FString Asked;
+	const TArray<FName>& Mutators = FTOMutators::All();
+	const FName Mutator = FParse::Value(FCommandLine::Get(), TEXT("FTOMutator="), Asked) ? FName(*Asked)
+		: Mutators[FRandomStream(Seed ^ 0x5eed).RandRange(0, Mutators.Num() - 1)];
+	GS->SetMutator(Mutator == TEXT("None") ? NAME_None : Mutator);
+	UE_LOG(LogFTO, Log, TEXT("Shift started. Seed %d, %d crime spawn points, mutator %s."), Seed, SpawnPoints.Num(), *Mutator.ToString());
 }
 
 void UFTOCrimeDirector::RefreshSpawnPoints()
@@ -444,6 +453,10 @@ void UFTOCrimeDirector::HandleResolved(AFTOIncident* Incident)
 
 	const FFTOIncidentInfo& Info = Incident->GetInfo();
 	const float Relief = Info.ChaosRelief * (Incident->WasWitnessed() ? WitnessBonus : 1.f);
+	if (Info.Tier >= EFTOCrimeTier::Major)
+	{
+		GS->PrintHeadline(FTOHeadlines::For(Info, true, Rng));
+	}
 	GS->AddChaos(-Relief);
 	++GS->IncidentsResolved;
 	// Credit whoever put the cuffs on (else whoever put the perp on the floor).
@@ -513,6 +526,10 @@ void UFTOCrimeDirector::HandleFailed(AFTOIncident* Incident)
 
 	const FFTOIncidentInfo Info = Incident->GetInfo();
 	GS->AddChaos(Info.FailPenalty);
+	if (Info.Tier >= EFTOCrimeTier::Major)
+	{
+		GS->PrintHeadline(FTOHeadlines::For(Info, false, Rng));
+	}
 	++GS->IncidentsFailed;
 
 	// Ignored problems grow into bigger problems (indoors, right there in the same room).

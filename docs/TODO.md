@@ -45,7 +45,7 @@ Seven upgrades from the "what would make it more fun" review, one reviewed PR ea
   and a rush hour in the last two minutes.
 - [x] **Teamwork**: jobs for two (one drives while the other shoots tyres, one guards a door while the other
   searches) and a squad-wide combo.
-- [ ] **Comedy**: a mutator per shift (low gravity, bouncy cars, hot dog suits...), more absurd crimes, newspaper
+- [x] **Comedy**: a mutator per shift (low gravity, bouncy cars, hot dog suits...), more absurd crimes, newspaper
   headlines after big incidents.
 - [ ] **Juice**: screen shake, slow-mo on tackles and wall crashes, the best bust replayed on the scoreboard, a
   synthesised dispatcher who roasts the squad.

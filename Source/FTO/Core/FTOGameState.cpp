@@ -1,5 +1,7 @@
 #include "Core/FTOGameState.h"
 #include "Scoring/FTOScoring.h"
+#include "Core/FTOMutators.h"
+#include "GameFramework/WorldSettings.h"
 #include "GameFramework/PlayerState.h"
 #include "Audio/FTOAudio.h"
 #include "Crime/FTOIncident.h"
@@ -117,6 +119,10 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, VoteEndTime);
 	DOREPLIFETIME(AFTOGameState, VoteDuration);
 	DOREPLIFETIME(AFTOGameState, OvertimeOffer);
+	DOREPLIFETIME(AFTOGameState, Mutator);
+	DOREPLIFETIME(AFTOGameState, LatestHeadline);
+	DOREPLIFETIME(AFTOGameState, HeadlineTime);
+	DOREPLIFETIME(AFTOGameState, FrontPages);
 	DOREPLIFETIME(AFTOGameState, SquadCombo);
 	DOREPLIFETIME(AFTOGameState, SquadComboTime);
 	DOREPLIFETIME(AFTOGameState, bTagTeam);
@@ -201,6 +207,37 @@ void AFTOGameState::BeginOvertimeVote(float Seconds, float Offer)
 	OvertimeOffer = Offer;
 	VoteEndTime = GetServerWorldTimeSeconds() + Seconds;
 	SetShiftPhase(EFTOShiftPhase::OvertimeVote);
+}
+
+void AFTOGameState::SetMutator(FName Which)
+{
+	check(HasAuthority());
+	Mutator = Which;
+	ApplyMutator();
+}
+
+void AFTOGameState::OnRep_Mutator()
+{
+	ApplyMutator();
+}
+
+void AFTOGameState::ApplyMutator()
+{
+	// Low gravity: the world's gravity, for walking, jumping, ragdolls and debris alike.
+	if (AWorldSettings* Settings = GetWorldSettings())
+	{
+		const float Normal = Settings->bGlobalGravitySet ? Settings->GlobalGravityZ : -980.f;
+		Settings->WorldGravityZ = Mutator == TEXT("LowGravity") ? Normal * FTOMutators::LowGravityScale : Normal;
+		Settings->bWorldGravitySet = true;
+	}
+}
+
+void AFTOGameState::PrintHeadline(const FString& Headline)
+{
+	check(HasAuthority());
+	LatestHeadline = Headline;
+	HeadlineTime = GetServerWorldTimeSeconds();
+	FrontPages.Add(Headline);
 }
 
 float AFTOGameState::BumpSquadCombo(const APlayerState* Officer)

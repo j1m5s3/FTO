@@ -9,6 +9,47 @@
 #include "GameFramework/GameStateBase.h"
 #include "GameFramework/Pawn.h"
 
+FString FTOHeadlines::For(const FFTOIncidentInfo& Info, bool bHandled, FRandomStream& Rng)
+{
+	const FName Crime = Info.TemplateId;
+	const FString Title = Info.Title.ToString().ToUpper();
+	// The big ones get a page of their own.
+	if (Crime == TEXT("Bomb"))
+	{
+		return bHandled ? TEXT("GLITTER BOMB DEFUSED WITH SECONDS TO SPARE; VILLAIN 'FURIOUS', ALSO 'COVERED IN GLITTER'")
+			: TEXT("KABOOM! EVIL MASTERPLAN GOES OFF DOWNTOWN; LOCAL WINDOWS 'DEVASTATED'");
+	}
+	if (Crime == TEXT("HeistGetaway"))
+	{
+		return bHandled ? TEXT("GETAWAY CAR GETS NOWHERE; HEIST CREW 'SHOULD HAVE TAKEN THE BUS'") : TEXT("HEIST CREW ESCAPES WITH THE BANK'S PENS. AND MONEY. MOSTLY PENS.");
+	}
+	if (Crime == TEXT("Pursuit"))
+	{
+		return bHandled ? TEXT("CITY'S MOST WANTED DRIVER FINALLY FINDS THE BRAKES") : TEXT("MOST WANTED DRIVER LAPS CITY TWICE, WAVES, LEAVES");
+	}
+	if (Crime == TEXT("BankHeist"))
+	{
+		return bHandled ? TEXT("BANK HEIST FOILED; CLOWN MASKS 'NOT AS SCARY AS HOPED'") : TEXT("BANK HEIST SUCCEEDS; BANK 'HAD IT COMING', SAYS NOBODY");
+	}
+	static const TCHAR* Handled[] =
+	{
+		TEXT("LOCAL COPS NAB %s SUSPECT; SUSPECT 'NOT EVEN THAT SORRY'"),
+		TEXT("%s OVER IN MINUTES. OFFICERS 'WERE PASSING ANYWAY'"),
+		TEXT("POLICE 1, CRIME 0: %s WRAPPED UP BEFORE LUNCH"),
+		TEXT("HEROES IN HI-VIS: %s SORTED, DONUTS AWARDED"),
+		TEXT("%s ENDS IN HANDCUFFS AND A STERN TALKING-TO"),
+	};
+	static const TCHAR* Failed[] =
+	{
+		TEXT("%s: POLICE 'STUCK IN TRAFFIC, PROBABLY'"),
+		TEXT("CITY SHRUGS AS %s GOES UNSOLVED"),
+		TEXT("WHERE WERE THE COPS? %s SUSPECT STILL AT LARGE"),
+		TEXT("%s: PRECINCT 'LOOKING INTO IT', SAYS PRECINCT"),
+	};
+	const TCHAR* Format = bHandled ? Handled[Rng.RandRange(0, UE_ARRAY_COUNT(Handled) - 1)] : Failed[Rng.RandRange(0, UE_ARRAY_COUNT(Failed) - 1)];
+	return FString(Format).Replace(TEXT("%s"), *Title);
+}
+
 int32 FTOScoring::BasePoints(EFTOScore Event, EFTOCrimeTier Tier)
 {
 	static const int32 ArrestByTier[] = { 100, 200, 400, 800 };

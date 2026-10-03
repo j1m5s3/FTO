@@ -73,6 +73,7 @@ public:
 	FVector GetWheelLocation(int32 Index) const;
 	int32 NumWheels() const { return Wheels.Num(); }
 
+	UStaticMeshComponent* GetBodyMesh() const { return Body; }
 	/** How badly it's been knocked about. */
 	UFTOVehicleDamage* GetDamage() const { return Damage; }
 	/** Server: the chase is over: stopped, and the driver climbs out with their hands up (the incident's perp now). */
@@ -152,6 +153,8 @@ protected:
 	UFUNCTION() void OnRep_Tyres();
 	/** Every machine: the wheels already sagging on their rims. */
 	uint8 ShownFlat = 0;
+	/** Every machine: was bobbing on bouncy-car hydraulics last frame. */
+	bool bWasBouncy = false;
 
 	FRandomStream Rng;
 	FIntPoint Node = FIntPoint::ZeroValue;		// intersection we're heading to

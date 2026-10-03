@@ -149,6 +149,23 @@ void UFTOCrimeCatalog::PopulateDefaults()
 		.Flavor({ TEXT("A villain is threatening to release 10,000 bees at City Hall."), TEXT("Suspicious device ticking downtown. It might be a very loud clock.") })
 		.Chaos(0.45f, 35.f, 30.f).Work(15.f, 4).Report(1.f, 0.f, 1.f).Escalate(300.f).Spawn(0.1f, 60.f, true).Crook();
 
+	// ---- Absurd: the city's strange side, as often as anything else ----------------------
+	Add(Templates, "Mime", TEXT("Mime Disturbance"), E::Petty)
+		.Flavor({ TEXT("Mime trapped in an invisible box is blocking the pavement. The box is getting smaller."), TEXT("Mime is 'walking against the wind' straight into traffic.") })
+		.Chaos(0.03f, 2.5f, 2.f).Work(3.f, 1).Report(0.9f, 2.f, 6.f).Escalate(180.f).Spawn(1.1f).Getaway(0.3f);
+
+	Add(Templates, "Pigeons", TEXT("Unlicensed Pigeon Feeding"), E::Petty)
+		.Flavor({ TEXT("Man has fed the pigeons so much bread they've formed a union."), TEXT("A woman is training pigeons to steal chips. It's working.") })
+		.Chaos(0.03f, 2.5f, 2.f).Work(3.f, 1).Report(0.8f, 2.f, 6.f).Escalate(180.f).Spawn(1.f).Getaway(0.2f);
+
+	Add(Templates, "Yodelling", TEXT("Competitive Yodelling"), E::Petty)
+		.Flavor({ TEXT("Two yodellers, one street corner. Windows are rattling."), TEXT("Yodel-off has drawn a crowd. The crowd is also yodelling.") })
+		.Chaos(0.035f, 2.5f, 2.f).Work(3.f, 1).Report(1.f, 1.f, 4.f).Escalate(180.f, "Riot").Spawn(1.f).NoArrest();
+
+	Add(Templates, "Gnomes", TEXT("Garden Gnome Smuggling"), E::Minor)
+		.Flavor({ TEXT("Van full of garden gnomes. All of them are looking at you."), TEXT("Suspect claims the gnomes 'came willingly'.") })
+		.Chaos(0.05f, 4.f, 3.f).Work(4.f, 1).Report(0.7f, 3.f, 8.f).Escalate(180.f).Spawn(0.8f).Crook().Getaway(0.5f, 90.f);
+
 	// ---- Set pieces: one per shift, mid-shift, by the director (never rolled) ------------
 	Add(Templates, "HeistGetaway", TEXT("Heist Getaway"), E::Critical)
 		.Flavor({ TEXT("The heist crew are making off in a borrowed car. With the bank's pens."), TEXT("Getaway driver is wearing a balaclava and sunglasses. At night. Indoors. Somehow.") })
@@ -179,7 +196,8 @@ void UFTOCrimeCatalog::PopulateDefaults()
 	AddMod("Armed",    TEXT("Armed"),    TEXT("Suspect may be armed (probably with a baguette)."), 1.5f, 1.3f, 1, E::Minor, 1.f);
 	AddMod("Drunk",    TEXT("Drunk"),    TEXT("Suspect keeps trying to hug the officers."),         1.1f, 1.2f, 0, E::Petty, 1.f);
 	AddMod("Repeat",   TEXT("Repeat"),   TEXT("It's Gary. It's always Gary."),                      1.2f, 0.8f, 0, E::Petty, 1.f);
-	AddMod("Costumed", TEXT(""),         TEXT("Suspect is dressed as a hot dog."),                  1.0f, 1.0f, 0, E::Petty, 1.f);
+	AddMod("Costumed", TEXT(""),         TEXT("Suspect is dressed as a hot dog."),                  1.0f, 1.0f, 0, E::Petty, 2.5f);
+	AddMod("Absurd",   TEXT("Bizarre"),  TEXT("Witnesses describe it as 'deeply, deeply weird'."),   1.1f, 1.0f, 0, E::Petty, 1.5f);
 	AddMod("Livestream", TEXT("Viral"),  TEXT("Someone is livestreaming this. Chaos spreads faster."), 1.8f, 1.0f, 0, E::Petty, 0.6f);
 	AddMod("Fleeing",  TEXT("Fleeing"),  TEXT("Suspect is on the move."),                           1.3f, 1.5f, 0, E::Minor, 0.8f);
 }

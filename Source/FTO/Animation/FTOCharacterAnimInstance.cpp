@@ -1,4 +1,5 @@
 #include "Animation/FTOCharacterAnimInstance.h"
+#include "Core/FTOMutators.h"
 #include "Physics/FTOKnockdownComponent.h"
 #include "Animation/AnimSequence.h"
 #include "Animation/AnimationPoseData.h"
@@ -362,6 +363,16 @@ bool FFTOCharacterAnimProxy::Evaluate(FPoseContext& Output)
 	// 4. Weapon pose from the waist up.
 	ApplyAimLayer(Output);
 
+	// The BigHeads mutator: a head twice the size.
+	if (HeadScale != 1.f && HeadBone != INDEX_NONE)
+	{
+		const FCompactPoseBoneIndex Head = Output.Pose.GetBoneContainer().MakeCompactPoseIndex(FMeshPoseBoneIndex(HeadBone));
+		if (Head.IsValid())
+		{
+			Output.Pose[Head].SetScale3D(Output.Pose[Head].GetScale3D() * HeadScale);
+		}
+	}
+
 	// 5. Easing out of a pose we were thrown into (getting up from a ragdoll).
 	if (FromWeight > 0.f && FromPose.Num() > 0)
 	{
@@ -472,6 +483,11 @@ void UFTOCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 		Proxy.Serial = Animated->GetAnimActionSerial();
 		Proxy.Aim = Animated->GetAimPose();
 		Proxy.AimPitch = Animated->GetAimPitch();
+		Proxy.HeadScale = FTOMutators::Is(Owner, TEXT("BigHeads")) ? 2.f : 1.f;
+		if (Proxy.HeadBone == INDEX_NONE && GetSkelMeshComponent())
+		{
+			Proxy.HeadBone = GetSkelMeshComponent()->GetBoneIndex(TEXT("head"));
+		}
 		// A blow thrown or taken (FTOFighting) shows over whatever else they're doing, the weapon put by for it.
 		if (!Knockdown.IsValid() && Owner)
 		{

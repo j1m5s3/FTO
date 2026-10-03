@@ -61,9 +61,21 @@ namespace
 		{
 			return EFTOAnimAction::Spray;
 		}
-		if (Crime == TEXT("NoiseComplaint") || Crime == TEXT("Jaywalking"))
+		if (Crime == TEXT("NoiseComplaint") || Crime == TEXT("Jaywalking") || Crime == TEXT("Yodelling"))
 		{
 			return EFTOAnimAction::Dance; // the party, or showing off in the middle of the road
+		}
+		if (Crime == TEXT("Mime"))
+		{
+			return EFTOAnimAction::Wave; // pressing on the walls of the invisible box
+		}
+		if (Crime == TEXT("Pigeons"))
+		{
+			return EFTOAnimAction::Point; // "fly, my pretties!"
+		}
+		if (Crime == TEXT("Gnomes"))
+		{
+			return EFTOAnimAction::Grab;
 		}
 		if (Crime == TEXT("Mugging"))
 		{
@@ -369,6 +381,9 @@ void AFTOPerp::Tick(float DeltaSeconds)
 		TickShooting(DeltaSeconds);
 		TickArrest(DeltaSeconds);
 	}
+
+	// Hot dog day.
+	UpdateHotDogSuit();
 
 	// The pistol: in hand and pointing where they aim, or tossed away once they give up.
 	const bool bShowGun = GetAimPose() != EFTOAimPose::None;

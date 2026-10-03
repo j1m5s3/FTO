@@ -44,6 +44,12 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
   a very tough car.
 - **Rush hour**: the last two minutes, crimes come about three times as often and up to three more at once.
 
+## Comedy
+- A mutator every shift (rolled from the seed): low gravity, bouncy cars, hot dog suits for every crook, big heads.
+- Absurd crimes are common (mimes, pigeons, yodellers, gnome smugglers), and the "Costumed"/"Bizarre" twists turn up
+  on half of all calls.
+- The Daily Siren: every Major or Critical incident, handled or not, gets a silly headline on the front page.
+
 ## Teamwork
 - Jobs built for two: shoot out a getaway's tyres from the passenger seat while your partner drives; guard a burgled
   building's door while your partner searches it. Both score TEAMWORK!.
