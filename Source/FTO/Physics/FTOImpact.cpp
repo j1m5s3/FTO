@@ -134,6 +134,16 @@ bool FTOImpact::Shot(AActor* Victim, const FVector& Velocity, EFTOWeapon Weapon,
 	// Officers hit by gunfire go down until a partner helps them up (or they come round on their own).
 	if (AFTOCharacter* Officer = Cast<AFTOCharacter>(Victim))
 	{
+		// (Body armour: half the time, the vest takes it.)
+		const AFTOGameState* Precinct = Officer->GetWorld()->GetGameState<AFTOGameState>();
+		if (!Spec.bStun && !Officer->IsDowned() && Precinct && Precinct->HasUpgrade(TEXT("BodyArmour")) && FMath::FRand() < 0.5f)
+		{
+			if (AFTOPlayerController* Hit = Cast<AFTOPlayerController>(Officer->GetController()))
+			{
+				Hit->ClientToast(INVTEXT("Your vest took that one!"), FLinearColor(0.6f, 0.85f, 1.f));
+			}
+			return false;
+		}
 		if (!Officer->GoDown(Launch, Spec.bStun ? 4.f : 12.f))
 		{
 			return false;

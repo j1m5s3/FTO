@@ -1,4 +1,6 @@
 #include "Core/FTOPlayerController.h"
+#include "Core/FTOPrecinctBoard.h"
+#include "Core/FTOCareer.h"
 #include "Core/FTOJuice.h"
 #include "Core/FTOInputConfig.h"
 #include "Core/FTOPlayerState.h"
@@ -49,6 +51,12 @@ void AFTOPlayerController::BeginPlay()
 	if (!IsLocalPlayerController())
 	{
 		return;
+	}
+
+	// Back into the outfit this officer last chose (it doesn't survive the map change on its own).
+	if (FTOCareer::RememberedOutfit() != TEXT("Classic"))
+	{
+		ServerWearOutfit(FTOCareer::RememberedOutfit());
 	}
 
 	// Screen shake for the big moments (FTOJuice).
@@ -393,6 +401,47 @@ void AFTOPlayerController::FTODrive()
 void AFTOPlayerController::FTORide()
 {
 	ServerRideAlong();
+}
+
+void AFTOPlayerController::FTOLocker()
+{
+	ServerLocker();
+}
+
+void AFTOPlayerController::ServerLocker_Implementation()
+{
+	// (A dev shortcut. In a shipping build, the lobby only: never a way out of trouble mid-shift.)
+#if UE_BUILD_SHIPPING
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	APawn* Officer = GS && GS->GetShiftPhase() == EFTOShiftPhase::Lobby ? GetPawn() : nullptr;
+#else
+	APawn* Officer = GetPawn();
+#endif
+	for (TActorIterator<AFTOPrecinctBoard> It(GetWorld()); It && Officer; ++It)
+	{
+		if (It->GetKind() == EFTOBoardKind::Locker)
+		{
+			Officer->TeleportTo(It->GetActorLocation() + It->GetActorForwardVector() * 150.f + FVector(0.f, 0.f, 100.f),
+				(-It->GetActorForwardVector()).Rotation());
+			SetControlRotation((-It->GetActorForwardVector()).Rotation());
+		}
+	}
+}
+
+void AFTOPlayerController::ServerWearOutfit_Implementation(FName Outfit)
+{
+	// (Only what the precinct's rank has unlocked.)
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	const FTOCareer::FItem* Item = FTOCareer::Find(FTOCareer::Outfits(), Outfit);
+	if (AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>(); PS && GS && Item && GS->GetCareer().Earned >= Item->Points)
+	{
+		PS->SetOutfit(Outfit);
+	}
+}
+
+void AFTOPlayerController::ClientRememberOutfit_Implementation(FName Outfit)
+{
+	FTOCareer::RememberedOutfit() = Outfit;
 }
 
 void AFTOPlayerController::ServerRideAlong_Implementation()

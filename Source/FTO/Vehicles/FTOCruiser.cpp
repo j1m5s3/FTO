@@ -1,6 +1,7 @@
 #include "Vehicles/FTOCruiser.h"
 #include "Core/FTOMutators.h"
 #include "Core/FTOJuice.h"
+#include "Core/FTOCareer.h"
 #include "Kismet/GameplayStatics.h"
 #include "City/FTOCityKit.h"
 #include "Audio/FTOAudio.h"
@@ -148,6 +149,8 @@ void AFTOCruiser::BeginPlay()
 	Super::BeginPlay();
 
 	PaintMaterial = FTOArt::ApplyColor(Body, VehicleMaterial ? VehicleMaterial.Get() : BaseMaterial.Get(), StripeColor, 0.f, FTOArt::BodySlot(Body));
+	AppliedLivery = NAME_None; // (now there's paint to put it on)
+	ApplyLivery();
 	const FFTOSoundSet& Sounds = AFTOGameState::Sounds();
 	EngineAudio->SetSound(Sounds.EngineLoop);
 	EngineAudio->AttenuationSettings = Sounds.World;
@@ -171,6 +174,13 @@ void AFTOCruiser::BeginPlay()
 	}
 }
 
+void AFTOCruiser::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	// (Before any replicated update can arrive: the livery scales from the stock top speed, never from a scaled one.)
+	StockMaxSpeed = MaxSpeed;
+}
+
 void AFTOCruiser::SetStripeColor(const FLinearColor& Color)
 {
 	StripeColor = Color;
@@ -179,7 +189,32 @@ void AFTOCruiser::SetStripeColor(const FLinearColor& Color)
 
 void AFTOCruiser::OnRep_StripeColor()
 {
-	FTOArt::SetColor(PaintMaterial, StripeColor);
+	AppliedLivery = NAME_None; // (ApplyLivery repaints, or puts the stripe back)
+	ApplyLivery();
+}
+
+void AFTOCruiser::ApplyLivery()
+{
+	const AFTOGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFTOGameState>() : nullptr;
+	const FName Livery = GS ? GS->GetCareer().Livery : FName(TEXT("Standard"));
+	const bool bMotorPool = GS && GS->HasUpgrade(TEXT("MotorPool"));
+	if (!PaintMaterial || (Livery == AppliedLivery && bMotorPool == bAppliedMotorPool))
+	{
+		return;
+	}
+	AppliedLivery = Livery;
+	bAppliedMotorPool = bMotorPool;
+	FLinearColor Paint;
+	bool bRepaint = false;
+	float Speed = 1.f;
+	float Toughness = 1.f;
+	FTOCareer::LiveryStats(Livery, Paint, bRepaint, Speed, Toughness);
+	FTOArt::SetColor(PaintMaterial, bRepaint ? Paint : StripeColor);
+	MaxSpeed = StockMaxSpeed * Speed;
+	if (Damage)
+	{
+		Damage->Toughness = Toughness * (bMotorPool ? 1.5f : 1.f);
+	}
 }
 
 void AFTOCruiser::OnRep_Siren()
@@ -527,6 +562,7 @@ void AFTOCruiser::PlayHop()
 void AFTOCruiser::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	ApplyLivery(); // (the fleet's look and handling follow the precinct's choice, on every machine)
 
 	// Bouncy cars: always bobbing a little, and a big hop off whatever we bounced off (just for show).
 	// (Not for whoever's sitting in it: the seat view and a passenger's aim would bob along.)

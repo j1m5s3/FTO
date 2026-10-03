@@ -49,10 +49,10 @@ Seven upgrades from the "what would make it more fun" review, one reviewed PR ea
   headlines after big incidents.
 - [x] **Juice**: screen shake, slow-mo on tackles and wall crashes, the best bust replayed on the scoreboard, a
   synthesised dispatcher who roasts the squad.
-- [ ] **Progression**: unlockable cruisers and outfits, precinct upgrades between shifts, a saved career with
+- [x] **Progression**: unlockable cruisers and outfits, precinct upgrades between shifts, a saved career with
   rising difficulty.
 
 ## Backlog (later ideas)
 - [x] Set-piece crimes: bank heist with a getaway, "evil masterplan" defusal (Phase 4: shift shape)
 - [ ] Day/night shifts and weather; night-time lights and headlights
-- [ ] Emotes, officer customisation
+- [ ] Emotes, officer customisation (outfits: done, Phase 4 progression)

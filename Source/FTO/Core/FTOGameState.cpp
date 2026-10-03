@@ -128,6 +128,7 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, VoteEndTime);
 	DOREPLIFETIME(AFTOGameState, VoteDuration);
 	DOREPLIFETIME(AFTOGameState, OvertimeOffer);
+	DOREPLIFETIME(AFTOGameState, Career);
 	DOREPLIFETIME(AFTOGameState, Mutator);
 	DOREPLIFETIME(AFTOGameState, LatestHeadline);
 	DOREPLIFETIME(AFTOGameState, HeadlineTime);
@@ -218,6 +219,16 @@ void AFTOGameState::BeginOvertimeVote(float Seconds, float Offer)
 	OvertimeOffer = Offer;
 	VoteEndTime = GetServerWorldTimeSeconds() + Seconds;
 	SetShiftPhase(EFTOShiftPhase::OvertimeVote);
+}
+
+void AFTOGameState::SetCareer(const FFTOCareerState& InCareer, bool bSave)
+{
+	check(HasAuthority());
+	Career = InCareer;
+	if (bSave)
+	{
+		FTOCareer::Save(FTOCareer::SlotName(), Career);
+	}
 }
 
 void AFTOGameState::SetMutator(FName Which)

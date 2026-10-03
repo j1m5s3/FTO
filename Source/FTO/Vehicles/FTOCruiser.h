@@ -221,6 +221,12 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category="Components") TObjectPtr<UStaticMeshComponent> Body;
 	/** Bouncy cars (every machine): when we last bounced off something, and whether we were bobbing last frame. */
 	float HopStart = -100.f;
+	/** The fleet's livery and the motor pool, as last applied (every machine), and the stock top speed. */
+	FName AppliedLivery;
+	bool bAppliedMotorPool = false;
+	float StockMaxSpeed = 0.f;
+	void ApplyLivery();
+	virtual void PostInitializeComponents() override;
 	bool bWasBouncy = false;
 	/** Bounced off something (bouncy cars): the driver tells the server, which tells everyone. */
 	UFUNCTION(Server, Unreliable) void ServerBounce();

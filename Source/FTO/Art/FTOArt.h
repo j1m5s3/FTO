@@ -24,6 +24,8 @@ namespace FTOArt
 
 	/** Updates an existing instance. */
 	FTO_API void SetColor(UMaterialInstanceDynamic* Material, const FLinearColor& Color, float Emissive = 0.f);
+	/** A hot dog suit (buns, sausage, mustard) for someone whose capsule Parent is HalfHeight tall, into Out. */
+	FTO_API void BuildHotDogSuit(AActor* Owner, USceneComponent* Parent, float HalfHeight, UMaterialInterface* Base, TArray<TObjectPtr<UStaticMeshComponent>>& Out);
 
 	/**
 	 * The paintable slot: "Body" on Blender-built vehicles (whose other slots are glass and glowing

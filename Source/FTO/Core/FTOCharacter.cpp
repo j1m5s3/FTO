@@ -1,6 +1,7 @@
 #include "Core/FTOCharacter.h"
 #include "Core/FTOMutators.h"
 #include "Core/FTOJuice.h"
+#include "Core/FTOCareer.h"
 #include "Interaction/FTOTalkable.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -340,16 +341,29 @@ void AFTOCharacter::RefreshOfficerColor()
 	// Real model: vertex alpha marks the shirt, so one tint colours just the uniform.
 	// Placeholder: the body cylinder is the uniform.
 	UPrimitiveComponent* UniformTarget = BodyMesh ? static_cast<UPrimitiveComponent*>(BodyMesh) : GetMesh();
+	// The outfit's colour, or the badge's.
+	FLinearColor Uniform = PS->GetOfficerColor();
+	FTOCareer::OutfitColor(PS->GetOutfit(), Uniform);
 	if (!UniformMaterial)
 	{
-		UniformMaterial = FTOArt::ApplyColor(UniformTarget, BaseMaterial, PS->GetOfficerColor());
+		UniformMaterial = FTOArt::ApplyColor(UniformTarget, BaseMaterial, Uniform);
 		// Imported meshes can carry several (identical) slots; they all share the one tint.
 		for (int32 Slot = 1; Slot < UniformTarget->GetNumMaterials(); ++Slot)
 		{
 			UniformTarget->SetMaterial(Slot, UniformMaterial);
 		}
 	}
-	FTOArt::SetColor(UniformMaterial, PS->GetOfficerColor());
+	FTOArt::SetColor(UniformMaterial, Uniform);
+	// Hot dog suit: undercover. (Not while they're a ragdoll: the suit's on the capsule, which stays upright; see Tick.)
+	const bool bHotDog = PS->GetOutfit() == TEXT("HotDog") && !(Knockdown && Knockdown->IsDown());
+	if (bHotDog && HotDogSuit.IsEmpty())
+	{
+		FTOArt::BuildHotDogSuit(this, GetCapsuleComponent(), GetCapsuleComponent()->GetScaledCapsuleHalfHeight(), BaseMaterial, HotDogSuit);
+	}
+	for (UStaticMeshComponent* Part : HotDogSuit)
+	{
+		Part->SetVisibility(bHotDog);
+	}
 
 	if (HeadMesh && !HeadMaterial)
 	{
@@ -407,7 +421,10 @@ void AFTOCharacter::OnRep_Sprinting()
 void AFTOCharacter::ApplySprint()
 {
 	// With a weapon up it's a careful walk, sprint or no sprint.
-	GetCharacterMovement()->MaxWalkSpeed = GetDrawnWeapon() != EFTOWeapon::None ? DrawnWalkSpeed : (bSprinting ? SprintSpeed : WalkSpeed);
+	// (The precinct's coffee machine: everyone a bit quicker.)
+	const AFTOGameState* Precinct = GetWorld()->GetGameState<AFTOGameState>();
+	const float Coffee = Precinct && Precinct->HasUpgrade(TEXT("Coffee")) ? 1.12f : 1.f;
+	GetCharacterMovement()->MaxWalkSpeed = (GetDrawnWeapon() != EFTOWeapon::None ? DrawnWalkSpeed : (bSprinting ? SprintSpeed : WalkSpeed)) * Coffee;
 }
 
 void AFTOCharacter::InteractReleased() {}
@@ -689,6 +706,18 @@ void AFTOCharacter::ServerWhistle_Implementation()
 void AFTOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// (The walking pace follows the precinct's upgrades as they come, on every machine that moves us.)
+	if (HasAuthority() || IsLocallyControlled())
+	{
+		ApplySprint();
+	}
+	// (The hot dog suit off while we're a ragdoll, back on when we're up.)
+	const AFTOPlayerState* Badge = GetPlayerState<AFTOPlayerState>();
+	const bool bWantSuit = Badge && Badge->GetOutfit() == TEXT("HotDog") && !(Knockdown && Knockdown->IsDown());
+	if (!HotDogSuit.IsEmpty() && HotDogSuit[0] && HotDogSuit[0]->IsVisible() != bWantSuit)
+	{
+		RefreshOfficerColor();
+	}
 
 	// A conversation's over if either of us goes (or gets in a car, gets shot, or it's gone quiet for a while).
 	if (HasAuthority() && TalkingTo)

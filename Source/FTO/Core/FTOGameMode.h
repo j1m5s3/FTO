@@ -53,6 +53,9 @@ public:
 	AFTOIncident* FTOSetPieceNow(FName Which);
 	/** Change today's mutator (LowGravity, BouncyCars, HotDogs, BigHeads, None). */
 	UFUNCTION(Exec) void FTOMutator(FName Which);
+	/** Career points (banked and earned) for testing, and a fresh career. */
+	UFUNCTION(Exec) void FTOCareerPoints(int32 Points);
+	UFUNCTION(Exec) void FTOCareerReset();
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="FTO")
@@ -68,5 +71,7 @@ protected:
 
 	/** The shift's over (survived or overrun): the squad lines up outside the precinct for the scoreboard. */
 	UFUNCTION() void HandleShiftPhase(EFTOShiftPhase NewPhase);
+	/** The shift's clock ran out (the overtime vote came): it counts as survived for the career. */
+	bool bClockRanOut = false;
 	void GatherForDebrief();
 };

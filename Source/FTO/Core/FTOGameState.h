@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
 #include "Weapons/FTOWeapons.h"
+#include "Core/FTOCareer.h"
 #include "FTOGameState.generated.h"
 
 class AFTOIncident;
@@ -152,6 +153,14 @@ public:
 	/** Server: the squad voted to keep going: Seconds more on the clock, chaos as it was. */
 	void StartOvertime(float Seconds);
 
+	// ---- Progression (FTOCareer): the precinct's career, as the host's save has it ----
+	const FFTOCareerState& GetCareer() const { return Career; }
+	/** The precinct's level (0-10): crimes come a little faster and hurt a little more. */
+	int32 GetCareerLevel() const { return FTOCareer::LevelFor(Career); }
+	bool HasUpgrade(FName Upgrade) const { return Career.Has(Upgrade); }
+	/** Server: the career's changed (bSave: and write it to the host's save). */
+	void SetCareer(const FFTOCareerState& InCareer, bool bSave);
+
 	// ---- Comedy: the shift's mutator, and the papers ----
 	FName GetMutator() const { return Mutator; }
 	/** Server: this shift's silly rule (FTOMutators). */
@@ -223,6 +232,7 @@ protected:
 	UPROPERTY(Replicated) float VoteDuration = 20.f;
 	UPROPERTY(Replicated) float OvertimeOffer = 300.f;
 	UPROPERTY(Replicated) int32 Overtimes = 0;
+	UPROPERTY(Replicated) FFTOCareerState Career;
 	UPROPERTY(ReplicatedUsing=OnRep_Mutator) FName Mutator;
 	UFUNCTION() void OnRep_Mutator();
 	/** Every machine: the mutator's world-wide side (gravity). */

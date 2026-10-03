@@ -2,6 +2,7 @@
 #include "Interaction/FTOTalkable.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOCareer.h"
 #include "Audio/FTOAudio.h"
 #include "Components/AudioComponent.h"
 #include "Core/FTOPlayerState.h"
@@ -252,7 +253,7 @@ void AFTOHUD::Dispatch(FName Category, bool bForce)
 	if (USoundBase* Voice = FTOAudio::DispatchSound(Line))
 	{
 		// One voice on the radio at a time: a new line cuts the last one off.
-		if (DispatchVoice)
+		if (IsValid(DispatchVoice))
 		{
 			DispatchVoice->Stop();
 		}
@@ -944,7 +945,9 @@ void AFTOHUD::DrawLobby(const AFTOGameState* GS)
 		? TEXT("Press Esc and choose Start shift when everyone's here")
 		: TEXT("Waiting for the host to start the shift"),
 		CX, Y + 40.f * S, FLinearColor(1.f, 0.85f, 0.35f), GEngine->GetMediumFont(), S);
-	DrawCenteredText(TEXT("Stretch your legs, or grab a cruiser (E)"), CX, Y + 66.f * S, FLinearColor(0.75f, 0.75f, 0.75f), GEngine->GetSmallFont(), S * 1.1f);
+	const FFTOCareerState& Career = GS->GetCareer();
+	DrawCenteredText(FString::Printf(TEXT("Precinct rank: %s  |  %d pts in the bank  |  Level %d  |  Fleet: %s  |  The boards on the wall: outfits, fleet, upgrades (E)"),
+		*FTOCareer::RankFor(Career.Earned), Career.Bank, GS->GetCareerLevel(), *Career.Livery.ToString()), CX, Y + 66.f * S, FLinearColor(0.75f, 0.85f, 1.f), GEngine->GetSmallFont(), S * 1.1f);
 
 	float RowY = Y + 92.f * S;
 	for (const APlayerState* PS : GS->PlayerArray)

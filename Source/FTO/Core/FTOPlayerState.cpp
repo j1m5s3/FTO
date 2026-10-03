@@ -13,6 +13,7 @@ void AFTOPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AFTOPlayerState, BadgeIndex);
+	DOREPLIFETIME(AFTOPlayerState, Outfit);
 	DOREPLIFETIME(AFTOPlayerState, bOnRadio);
 	DOREPLIFETIME(AFTOPlayerState, Callout);
 	DOREPLIFETIME(AFTOPlayerState, Stats);
@@ -48,6 +49,12 @@ FString AFTOPlayerState::CallsignForBadge(int32 Index)
 {
 	static const TCHAR* Names[] = { TEXT("Blue"), TEXT("Red"), TEXT("Green"), TEXT("Yellow") };
 	return Names[FMath::Abs(Index) % UE_ARRAY_COUNT(Names)];
+}
+
+void AFTOPlayerState::SetOutfit(FName InOutfit)
+{
+	Outfit = InOutfit;
+	OnRep_BadgeIndex();
 }
 
 void AFTOPlayerState::OnRep_BadgeIndex()
