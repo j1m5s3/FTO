@@ -35,13 +35,14 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
 - Each active incident adds `ChaosPerSecond` while unresolved (more if it has escalated).
 - Resolving an incident subtracts `ChaosRelief`. Witnessed-in-progress catches give a bonus.
 - Passive decay when the city is calm; the director spawns crimes faster as chaos rises (feedback loop players must break).
+- 100 = shift failed.
 
 ## Pacing
-- A new crime every 12 s or so in a calm city, down to every 4.5 s as chaos climbs (solo a little slower: x1.25; two
-  officers x1.1). The first one comes 2 s after the briefing. Up to 5 + 2 per officer at once.
-- Three in four new crimes land a short run or drive from an officer (15-60 m, else up to 120 m), the squad taking
-  turns, so there's always something close; the rest land anywhere in the city.
-- 100 = shift failed.
+- A new crime every 12 s or so in a calm city, down to every 4.5 s as chaos climbs (solo slower: x1.5; two officers
+  x1.1). The first one comes 2 s after the briefing. Up to 4 + 2 per officer at once.
+- Three in four new crimes land a short run or drive from an officer (25-60 m, just out of sight, else up to 120 m),
+  the squad taking turns (skipping anyone who's down), so there's always something close; the rest land anywhere.
+- Grades are per officer and per ten minutes on the clock (overtime doesn't make an S easier).
 
 ## Incidents (procedural)
 Every incident is built at runtime from a **template** + **modifiers**:

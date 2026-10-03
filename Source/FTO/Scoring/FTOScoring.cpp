@@ -184,14 +184,15 @@ bool FTOScoring::DebriefSpots(const UWorld* World, int32 Count, TArray<FTransfor
 	return true;
 }
 
-FString FTOScoring::Grade(int32 TeamScore, int32 Officers, bool bSurvived, float PeakChaos)
+FString FTOScoring::Grade(int32 TeamScore, int32 Officers, bool bSurvived, float PeakChaos, float MinutesOnDuty)
 {
 	if (!bSurvived)
 	{
 		return TEXT("F");
 	}
-	// Points per officer over a 10-minute shift, nudged by how close the city came to boiling over.
-	const float PerOfficer = TeamScore / float(FMath::Max(1, Officers));
+	// Points per officer per 10 minutes on the clock (overtime earns more, but isn't an easier S), nudged by how close
+	// the city came to boiling over.
+	const float PerOfficer = TeamScore / float(FMath::Max(1, Officers)) * 10.f / FMath::Max(10.f, MinutesOnDuty);
 	const float Value = PerOfficer * (1.25f - 0.5f * FMath::Clamp(PeakChaos / 100.f, 0.f, 1.f));
 	if (Value >= 2200.f) return TEXT("S");
 	if (Value >= 1500.f) return TEXT("A");

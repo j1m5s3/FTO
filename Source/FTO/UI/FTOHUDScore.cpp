@@ -200,7 +200,7 @@ void AFTOHUD::DrawScoreboard(const AFTOGameState* GS)
 	DrawCenteredText(WithCommas(FMath::RoundToInt(TeamScore * Eased)), X + LeftW * 0.5f, BodyTop + 22.f * S, FLinearColor::White, Large, S * 1.8f);
 	if (T >= GradeAt)
 	{
-		const FString Grade = FTOScoring::Grade(TeamScore, Squad.Num(), bSurvived, GS->PeakChaos);
+		const FString Grade = FTOScoring::Grade(TeamScore, Squad.Num(), bSurvived, GS->PeakChaos, 10.f + 5.f * GS->GetOvertimes());
 		const float Stamp = FMath::Lerp(2.2f, 1.f, FMath::Clamp((T - GradeAt) / 0.18f, 0.f, 1.f));
 		const float GY = BodyTop + 84.f * S;
 		DrawCenteredText(TEXT("GRADE"), X + LeftW * 0.5f, GY, FLinearColor(0.7f, 0.8f, 1.f), Small, S * 1.2f);

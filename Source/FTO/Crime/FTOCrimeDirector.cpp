@@ -271,7 +271,9 @@ TArray<FVector> UFTOCrimeDirector::GetOfficerLocations() const
 	TArray<FVector> Out;
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
-		if (const APawn* Pawn = It->Get() ? It->Get()->GetPawn() : nullptr)
+		const APawn* Pawn = It->Get() ? It->Get()->GetPawn() : nullptr;
+		const AFTOCharacter* OnFoot = Cast<AFTOCharacter>(Pawn);
+		if (Pawn && !(OnFoot && OnFoot->IsDowned()))
 		{
 			Out.Add(Pawn->GetActorLocation());
 		}
@@ -296,7 +298,7 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FTransform& OutWhere, int
 		}
 	}
 	// Usually somewhere near one of the officers (each in turn), so nobody spends the shift driving between calls: a
-	// short run away first, a bit further if there's nothing that close.
+	// short run away first, a bit further if there's nothing that close (never closer: they still have to go and look).
 	const TArray<FVector> Officers = GetOfficerLocations();
 	if (Candidates.Num() > 0 && Officers.Num() > 0 && Rng.FRand() < NearOfficerChance)
 	{
@@ -306,7 +308,7 @@ bool UFTOCrimeDirector::PickLocation(FName TemplateId, FTransform& OutWhere, int
 			TArray<AFTOCrimeSpawnPoint*> Near = Candidates.FilterByPredicate([&](const AFTOCrimeSpawnPoint* Point)
 			{
 				const float Dist = FVector::Dist2D(Point->GetActorLocation(), Focus);
-				return Dist >= NearOfficerRange.X / Stretch && Dist <= NearOfficerRange.Y * Stretch;
+				return Dist >= NearOfficerRange.X && Dist <= NearOfficerRange.Y * Stretch;
 			});
 			if (Near.Num() > 0)
 			{

@@ -422,14 +422,15 @@ void AFTOSmokeTest::BuildSteps()
 			if (AFTOIncident* Incident = Director->SpawnIncident(TEXT("LostTourist"), true))
 			{
 				const float Dist = FVector::Dist2D(Incident->GetActorLocation(), Officer->GetActorLocation());
-				Near += Dist <= Director->NearOfficerRange.Y * 2.f ? 1 : 0;
+				Near += Dist >= Director->NearOfficerRange.X && Dist <= Director->NearOfficerRange.Y * 2.f ? 1 : 0;
 				Farthest = FMath::Max(Farthest, Dist);
 				Incident->Destroy();
 			}
 		}
 		Director->NearOfficerChance = Chance;
-		UE_LOG(LogFTO, Display, TEXT("SMOKE: pacing: a %.0f-minute shift (%.0f s left), %d of 4 new crimes near the officer (farthest %.0f m)."),
-			Director->ShiftLengthSeconds / 60.f, GS->GetShiftTimeRemaining(), Near, Farthest / 100.f);
+		UE_LOG(LogFTO, Display, TEXT("SMOKE: pacing: a %.0f-minute shift (%.0f s left), %d of 4 new crimes a short way from the officer (farthest %.0f m)%s."),
+			Director->ShiftLengthSeconds / 60.f, GS->GetShiftTimeRemaining(), Near, Farthest / 100.f,
+			FMath::IsNearlyEqual(Director->ShiftLengthSeconds, 600.f) && Near == 4 ? TEXT("") : TEXT(": FAIL"));
 	});
 
 	// Arrest: across town, catch a shoplifter, cuff them, then bring them home.

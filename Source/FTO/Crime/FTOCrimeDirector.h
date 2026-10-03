@@ -70,14 +70,14 @@ public:
 
 	/** Spawn interval multiplier per officer count (index = officers - 1). */
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
-	TArray<float> OfficerPacing = { 1.25f, 1.1f, 1.05f, 1.0f };
+	TArray<float> OfficerPacing = { 1.5f, 1.1f, 1.05f, 1.0f };
 
 	/** The first crime of the shift (and of overtime) comes this soon after the clock starts. */
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
 	float FirstCrimeDelay = 2.f;
 
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
-	int32 BaseMaxActiveIncidents = 5;
+	int32 BaseMaxActiveIncidents = 4;
 
 	UPROPERTY(EditAnywhere, Category="Director|Pacing")
 	int32 MaxActiveIncidentsPerOfficer = 2;
@@ -101,9 +101,12 @@ public:
 	UPROPERTY(EditAnywhere, Category="Director|Placement")
 	float NearOfficerChance = 0.75f;
 
-	/** How far from that officer (cm): not right on top of them, but a short run or drive away. */
+	/**
+	 * How far from that officer (cm): a short run or drive away, but not right on top of them (the near end is past
+	 * AFTOIncident::WitnessRadius, so they still have to go and look).
+	 */
 	UPROPERTY(EditAnywhere, Category="Director|Placement")
-	FVector2D NearOfficerRange = FVector2D(1500.f, 6000.f);
+	FVector2D NearOfficerRange = FVector2D(2500.f, 6000.f);
 
 	/** Fallback random placement radius when no spawn points exist. */
 	UPROPERTY(EditAnywhere, Category="Director|Placement")
