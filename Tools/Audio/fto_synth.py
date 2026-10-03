@@ -1153,6 +1153,165 @@ def fire_loop(r, v):
     return norm(xfade_loop(x, 0.6), 0.5)
 
 
+
+
+# ------------------------------------------------------------------------------------------
+# The dispatcher: a formant voice that speaks the rhythm, vowels and consonants of each line (no recordings, no
+# text-to-speech engine: a glottal pulse train through vowel formant resonators, noise for the consonants), with
+# a falling intonation (rising for questions), then through the radio. The game shows the words as a subtitle.
+# Lines live in dispatch_lines.json; --dispatch-inl writes the C++ table the game reads them from.
+# ------------------------------------------------------------------------------------------
+import json
+import re
+
+DISPATCH_LINES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dispatch_lines.json")
+
+
+def dispatch_lines():
+    with open(DISPATCH_LINES_PATH, encoding="utf-8") as f:
+        data = json.load(f)
+    return {k: v for k, v in data.items() if not k.startswith("_")}
+
+
+VOWEL_FORMANTS = {
+    "a": (730, 1090, 2440), "e": (530, 1840, 2480), "i": (300, 2250, 3000), "o": (570, 840, 2410),
+    "u": (320, 900, 2240), "ah": (640, 1190, 2390), "er": (490, 1350, 1690),
+}
+FRICATIVES = {"s": (4500, 9000), "z": (4000, 8000), "f": (1500, 8000), "v": (1200, 6000), "h": (500, 3000),
+              "sh": (2000, 5500), "ch": (2000, 6000), "th": (1500, 7000), "x": (3000, 8000), "c": (3000, 7000)}
+PLOSIVES = {"p": (500, 2500), "b": (200, 1500), "t": (3000, 7000), "d": (2000, 5000), "k": (1200, 3500),
+            "g": (800, 2500), "q": (1200, 3500)}
+VOICED = {"m": 250, "n": 280, "l": 360, "r": 420, "w": 330, "j": 300}
+
+
+def _resonator(x, f, bw):
+    rr = np.exp(-np.pi * bw / RATE)
+    th = TAU * f / RATE
+    return signal.lfilter([1 - rr], [1, -2 * rr * np.cos(th), rr * rr], x)
+
+
+def _glottal(r, f0):
+    n = len(f0)
+    drift = 1 + 0.012 * r.standard_normal(n).cumsum() / np.sqrt(np.arange(1, n + 1))
+    ph = np.cumsum(f0 * drift / RATE) % 1.0
+    src = np.diff(np.concatenate([[0.0], 2 * ph - 1]))
+    return signal.lfilter([1], [1, -0.97], -src) + 0.03 * r.standard_normal(n)
+
+
+def _vowel(r, v, f0a, f0b, sec):
+    n = max(8, int(sec * RATE))
+    src = _glottal(r, np.linspace(f0a, f0b, n))
+    f1, f2, f3 = VOWEL_FORMANTS[v]
+    out = _resonator(src, f1, 80) + 0.55 * _resonator(src, f2, 100) + 0.25 * _resonator(src, f3, 140)
+    env = np.ones(n)
+    a, rel = min(n, int(0.015 * RATE)), min(n, int(0.04 * RATE))
+    env[:a] = np.linspace(0, 1, a)
+    env[-rel:] *= np.linspace(1, 0, rel)
+    return out * env
+
+
+def _hiss(r, lo, hi, sec, amp):
+    n = max(8, int(sec * RATE))
+    return bp(r.standard_normal(n), lo, min(hi, RATE / 2 - 200)) * np.hanning(n) * amp
+
+
+def _vowel_for(group):
+    if group in ("ee", "ea", "ie"):
+        return "i"
+    if group in ("oo", "ou", "ue"):
+        return "u"
+    if group in ("ai", "ay", "ei"):
+        return "e"
+    if group in ("au", "aw", "oa"):
+        return "o"
+    return {"a": "ah", "e": "e", "i": "i", "o": "o", "u": "ah", "y": "i"}.get(group[:1], "er")
+
+
+def speak(r, text, base=118.0, rate=1.0):
+    """The line, syllable by syllable: consonants as noise, bursts and hums, then the vowel."""
+    units = []
+    for token in re.findall(r"[a-zA-Z']+|[.,!?;:]", text.lower()):
+        if not token[0].isalpha():
+            units.append(("pause", token))
+            continue
+        for cons, vow in re.findall(r"([^aeiouy]*)([aeiouy]+|$)", token.replace("'", "")):
+            if cons or vow:
+                units.append(("syl", cons, vow))
+        units.append(("gap",))
+    count = max(1, sum(1 for u in units if u[0] == "syl"))
+    question, exclaim = text.strip().endswith("?"), text.strip().endswith("!")
+    parts, k = [], 0
+    for u in units:
+        if u[0] == "pause":
+            parts.append(zeros((0.22 if u[1] in ".!?" else 0.12) / rate))
+            continue
+        if u[0] == "gap":
+            parts.append(zeros(0.03 / rate))
+            continue
+        _, cons, vow = u
+        t = k / count
+        k += 1
+        f0 = base * (1.15 - 0.25 * t) * (1.0 + (1.75 * max(0.0, t - 0.8) if question else 0.0)) * (1.12 if exclaim else 1.0)
+        f0 *= 1.0 + 0.04 * r.standard_normal()
+        seg, i = [], 0
+        while i < len(cons):
+            two, one = cons[i:i + 2], cons[i]
+            if two in FRICATIVES:
+                seg.append(_hiss(r, *FRICATIVES[two], 0.07 / rate, 0.25)); i += 2
+            elif one in FRICATIVES:
+                seg.append(_hiss(r, *FRICATIVES[one], 0.06 / rate, 0.1 if one == "h" else 0.22)); i += 1
+            elif one in PLOSIVES:
+                seg.append(zeros(0.025 / rate)); seg.append(_hiss(r, *PLOSIVES[one], 0.018, 0.5)); i += 1
+            elif one in VOICED:
+                n = max(8, int(0.05 * RATE / rate))
+                seg.append(_resonator(_glottal(r, np.full(n, f0)), VOICED[one], 60) * 0.6 * np.hanning(n)); i += 1
+            else:
+                i += 1
+        seg.append(_vowel(r, _vowel_for(vow), f0 * 1.04, f0 * 0.97, (0.11 + 0.035 * len(vow)) / rate * r.uniform(0.85, 1.2)))
+        parts.append(np.concatenate(seg))
+    return np.concatenate(parts) if parts else zeros(0.25)
+
+
+def over_the_radio(r, x):
+    """Band-limited, driven a little hard, hissing, with a squelch chirp in front and a burst of noise behind."""
+    y = bp(x, 350, 3200, 3)
+    y = y / (np.max(np.abs(y)) + 1e-9)
+    y = np.tanh(y * 2.8) / np.tanh(2.8) + bp(r.standard_normal(len(y)), 350, 3200, 3) * 0.05
+    n = int(0.05 * RATE)
+    tt = np.arange(n) / RATE
+    chirp = 0.35 * np.sin(TAU * (1800 * tt - 600 * tt * tt / (2 * 0.05))) * np.hanning(n)
+    m = int(0.09 * RATE)
+    tail = bp(r.standard_normal(m), 350, 3200, 3) * 0.6 * np.hanning(m)
+    return norm(np.concatenate([chirp, zeros(0.03), y, zeros(0.05), tail]), 0.7)
+
+
+def _dispatch_builder(category):
+    def build_line(r, v):
+        lines = dispatch_lines()[category]
+        text = lines[(v - 1) % len(lines)]
+        return over_the_radio(r, speak(r, text))
+    return build_line
+
+
+try:
+    for _category, _lines in dispatch_lines().items():
+        register(f"SW_Dispatch_{_category}", _dispatch_builder(_category), variants=len(_lines), base=False)
+except (OSError, ValueError) as error:
+    print(f"fto_synth: no dispatcher lines ({error}): check {DISPATCH_LINES_PATH}", file=sys.stderr)
+
+
+def write_dispatch_inl(path):
+    """The game's copy of the lines (subtitles), in take order."""
+    out = ["// Generated by Tools/Audio/fto_synth.py --dispatch-inl from Tools/Audio/dispatch_lines.json: edit the JSON, not this.",
+           "// { Category, Take (SW_Dispatch_<Category>_NN), Line }"]
+    for category, lines in dispatch_lines().items():
+        for i, text in enumerate(lines, 1):
+            escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+            out.append(f'{{ TEXT("{category}"), {i}, TEXT("{escaped}") }},')
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(out) + "\n")
+
+
 # ------------------------------------------------------------------------------------------
 # Rendering
 # ------------------------------------------------------------------------------------------
@@ -1198,7 +1357,13 @@ def main(argv=None):
     ap.add_argument("--only", default="", help="comma-separated SW_* names")
     ap.add_argument("--list", action="store_true", help="print every sound name (and loop flag) and exit")
     ap.add_argument("--jobs", type=int, default=os.cpu_count() or 1)
+    ap.add_argument("--dispatch-inl", default="", help="write the dispatcher's lines as a C++ table to this path and exit")
     args = ap.parse_args(argv)
+
+    if args.dispatch_inl:
+        write_dispatch_inl(args.dispatch_inl)
+        print("wrote " + args.dispatch_inl)
+        return 0
 
     if args.list:
         for name, (_, loops, _) in SOUNDS.items():

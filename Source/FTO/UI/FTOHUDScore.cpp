@@ -9,6 +9,9 @@
 #include "Engine/Font.h"
 #include "Kismet/GameplayStatics.h"
 #include "Scoring/FTOScoring.h"
+#include "Components/SceneCaptureComponent2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Camera/PlayerCameraManager.h"
 
 namespace
 {
@@ -42,6 +45,27 @@ void AFTOHUD::AddScorePopup(const AFTOPlayerState* Officer, int32 Points, EFTOSc
 	Popup.Where = Where;
 	Popup.Start = GetWorld()->GetTimeSeconds();
 	Popup.Text = FString::Printf(TEXT("%s%d %s"), Points >= 0 ? TEXT("+") : TEXT(""), Points, *FTOScoring::Label(Event));
+	// The best bust of the shift gets its photo taken (whoever made it, from wherever this machine's camera is).
+	if ((Event == EFTOScore::Arrest || Event == EFTOScore::Bust || Event == EFTOScore::Teamwork) && PC && PC->PlayerCameraManager)
+	{
+		// (Only what this machine can actually see: our own, or one close by in front of us.)
+		const FVector Cam = PC->PlayerCameraManager->GetCameraLocation();
+		const FVector To = Where - Cam;
+		const bool bInView = To.Size() < 3000.f && FVector::DotProduct(To.GetSafeNormal(), PC->PlayerCameraManager->GetCameraRotation().Vector()) > 0.5f;
+		if (Popup.bMine || bInView)
+		{
+			TakeHighlight(Points, FString::Printf(TEXT("%s: +%d %s"), Officer ? *Officer->GetPlayerName() : TEXT("Officer"), Points, *FTOScoring::Label(Event)), Where);
+		}
+	}
+	// And the dispatcher has a word about the oopses and the teamwork.
+	if (FTOScoring::IsPenalty(Event))
+	{
+		Dispatch(TEXT("Oops"));
+	}
+	else if (Event == EFTOScore::Teamwork)
+	{
+		Dispatch(TEXT("Teamwork"));
+	}
 	if (Combo > 1)
 	{
 		Popup.Text += FString::Printf(TEXT(" x%s"), *FString::SanitizeFloat(FTOScoring::ComboMultiplier(Combo)));
@@ -252,6 +276,63 @@ void AFTOHUD::DrawScoreboard(const AFTOGameState* GS)
 	const FString Footer = FString::Printf(TEXT("Handled %d  |  Caught in the act %d  |  Traffic stops %d  |  Booked %d  |  Went cold %d  |  Citizens bowled over %d  |  Property broken %d, cars %d  |  Peak chaos %d%%"),
 		GS->IncidentsResolved, GS->IncidentsWitnessed, GS->TrafficStops, GS->SuspectsBooked, GS->IncidentsFailed, GS->CiviliansBowledOver, GS->PropertyBroken, GS->CarsWrecked, FMath::RoundToInt(GS->PeakChaos));
 	DrawCenteredText(Footer, CX, Top + H - 32.f * S, FLinearColor(0.75f, 0.75f, 0.75f), Small, S * 1.1f);
+
+	// The shift's highlight, pinned up under the scoreboard like a photo.
+	if (HasHighlight())
+	{
+		const float PW = 384.f * S;
+		const float PH = 216.f * S;
+		const float PX = CX - PW * 0.5f;
+		const float PY = FMath::Min(Top + H + 16.f * S, Canvas->ClipY - PH - 60.f * S);
+		DrawRect(FLinearColor(0.95f, 0.95f, 0.9f), PX - 8.f * S, PY - 8.f * S, PW + 16.f * S, PH + 44.f * S);
+		DrawTexture(Highlight, PX, PY, PW, PH, 0.f, 0.f, 1.f, 1.f, FLinearColor::White, BLEND_Opaque);
+		DrawCenteredText(FString::Printf(TEXT("SHIFT HIGHLIGHT  |  %s"), *HighlightCaption), CX, PY + PH + 8.f * S, FLinearColor(0.1f, 0.1f, 0.1f), Small, S * 1.1f);
+	}
+}
+
+void AFTOHUD::TakeHighlight(int32 Points, const FString& Caption, const FVector& Where)
+{
+	const APlayerController* PC = GetOwningPlayerController();
+	if (Points <= HighlightPoints || !PC || !PC->PlayerCameraManager)
+	{
+		return;
+	}
+	if (!Highlight)
+	{
+		Highlight = NewObject<UTextureRenderTarget2D>(this);
+		Highlight->RenderTargetFormat = RTF_RGBA8_SRGB;
+		Highlight->InitAutoFormat(640, 360);
+		Highlight->UpdateResourceImmediate(true);
+		HighlightCamera = NewObject<USceneCaptureComponent2D>(this);
+		HighlightCamera->bCaptureEveryFrame = false;
+		HighlightCamera->bCaptureOnMovement = false;
+		HighlightCamera->CaptureSource = ESceneCaptureSource::SCS_FinalColorLDR;
+		HighlightCamera->bAlwaysPersistRenderingState = true;
+		HighlightCamera->ShowFlags.SetEyeAdaptation(false); // (a one-off frame: no exposure history to adapt from)
+		HighlightCamera->ShowFlags.SetMotionBlur(false);
+		HighlightCamera->TextureTarget = Highlight;
+		HighlightCamera->SetupAttachment(GetRootComponent());
+		HighlightCamera->RegisterComponent();
+	}
+	HighlightPoints = Points;
+	HighlightCaption = Caption;
+	// A press photographer's angle on the bust: from our side of it, a few metres off and up a little, looking at it.
+	const FVector Cam = PC->PlayerCameraManager->GetCameraLocation();
+	FVector Back = (Cam - Where).GetSafeNormal2D();
+	if (Back.IsNearlyZero())
+	{
+		Back = -PC->PlayerCameraManager->GetCameraRotation().Vector().GetSafeNormal2D();
+	}
+	const FVector Side = FVector::CrossProduct(FVector::UpVector, Back);
+	FVector Shot = Where + Back * 380.f + Side * 160.f + FVector(0.f, 0.f, 60.f);
+	FHitResult Wall;
+	if (GetWorld()->LineTraceSingleByChannel(Wall, Where + FVector(0.f, 0.f, 60.f), Shot, ECC_Visibility))
+	{
+		Shot = Wall.ImpactPoint + (Where - Shot).GetSafeNormal() * 30.f; // (not through a wall)
+	}
+	HighlightCamera->FOVAngle = 60.f;
+	HighlightCamera->SetWorldLocationAndRotation(Shot, (Where + FVector(0.f, 0.f, -60.f) - Shot).Rotation());
+	HighlightCamera->CaptureScene();
 }
 
 void AFTOHUD::DrawOvertimeVote(const AFTOGameState* GS)

@@ -126,6 +126,31 @@ protected:
 	bool bAlarmArmed = true;
 	/** When rush hour started on this machine (-1: not yet), and the last set piece heard about. */
 	float RushHourSince = -1.f;
+
+	// ---- The shift's highlight: a photo of the best bust this machine saw, for the scoreboard ----
+	/** Snap the camera's view now if it's the best bust yet (Points), captioned. */
+	void TakeHighlight(int32 Points, const FString& Caption, const FVector& Where);
+	UPROPERTY(Transient) TObjectPtr<class UTextureRenderTarget2D> Highlight;
+	UPROPERTY(Transient) TObjectPtr<class USceneCaptureComponent2D> HighlightCamera;
+	int32 HighlightPoints = 0;
+	FString HighlightCaption;
+
+	// ---- The dispatcher: a line on the radio for the moments that matter (with a subtitle) ----
+	/** Say something from Category (a random line), unless something was said just now (bForce: say it anyway). */
+	void Dispatch(FName Category, bool bForce = false);
+	float NextDispatchTime = 0.f;
+	/** The last line said from each category (no saying it twice running), and the radio it's playing on. */
+	TMap<FName, FString> LastLineOf;
+	UPROPERTY(Transient) TObjectPtr<class UAudioComponent> DispatchVoice;
+	float LastResolvedTime = 0.f;
+	/** The last line said (tests). */
+	FString LastDispatch;
+
+public:
+	bool HasHighlight() const { return Highlight != nullptr && HighlightPoints > 0; }
+	const FString& GetHighlightCaption() const { return HighlightCaption; }
+	const FString& GetLastDispatch() const { return LastDispatch; }
+protected:
 	FName LastSetPiece;
 	float LastRadioTime = -10.f;
 };

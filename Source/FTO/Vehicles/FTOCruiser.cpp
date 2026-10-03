@@ -1,5 +1,6 @@
 #include "Vehicles/FTOCruiser.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOJuice.h"
 #include "Kismet/GameplayStatics.h"
 #include "City/FTOCityKit.h"
 #include "Audio/FTOAudio.h"
@@ -491,10 +492,29 @@ void AFTOCruiser::ServerHorn_Implementation()
 void AFTOCruiser::ServerBounce_Implementation()
 {
 	++Hops;
-	OnRep_Hops();
+	PlayHop();
 }
 
 void AFTOCruiser::OnRep_Hops()
+{
+	// (Counted from what this machine had when the car turned up: a late joiner's first update isn't a bounce.)
+	const bool bNew = bHopsSeen && Hops != SeenHops;
+	bHopsSeen = true;
+	SeenHops = Hops;
+	if (bNew)
+	{
+		PlayHop();
+	}
+}
+
+void AFTOCruiser::PostNetInit()
+{
+	Super::PostNetInit();
+	SeenHops = Hops;
+	bHopsSeen = true;
+}
+
+void AFTOCruiser::PlayHop()
 {
 	if (GetWorld()->GetTimeSeconds() - HopStart < 0.4f)
 	{
@@ -732,7 +752,7 @@ void AFTOCruiser::Simulate(float DeltaSeconds)
 		Velocity = (Velocity - (bBouncy ? 2.f : 1.4f) * FVector::DotProduct(Velocity, Normal) * Normal) * (bBouncy ? 0.9f : 0.5f);
 		if (bBouncy && Into > 300.f && GetWorld()->GetTimeSeconds() - HopStart > 0.4f)
 		{
-			OnRep_Hops(); // here and now, and everyone else a moment later
+			PlayHop(); // here and now, and everyone else a moment later
 			if (HasAuthority())
 			{
 				++Hops;
@@ -920,6 +940,10 @@ void AFTOCruiser::ServerBreakThrough_Implementation(FName Component, int32 Insta
 		FVector::DistSquared(FVector(Hit), GetActorLocation()) < FMath::Square(2500.f))
 	{
 		Wreckage->Break(Thing, Instance, Hit, FVector(Push).GetClampedToMaxSize(MaxSpeed * 1.2f), GetController());
+		if (AFTODestruction::KindOf(Thing) == EFTOBreakKind::Crumble)
+		{
+			FTOJuice::SlowMo(GetWorld(), 0.3f, 0.7f); // straight through a wall
+		}
 	}
 }
 

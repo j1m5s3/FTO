@@ -28,6 +28,10 @@
 #include "Crime/FTOArrestee.h"
 #include "Crime/FTOBomb.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOJuice.h"
+#include "Audio/FTOAudio.h"
+#include "UI/FTOHUD.h"
+#include "Kismet/GameplayStatics.h"
 #include "Crime/FTOCrimeDirector.h"
 #include "Crime/FTOCrimeExtra.h"
 #include "Crime/FTOGraffitiTag.h"
@@ -2168,14 +2172,10 @@ void AFTOSmokeTest::BuildSteps()
 			}
 			TeamworkBefore = Cop->GetPlayerState<AFTOPlayerState>() ? Cop->GetPlayerState<AFTOPlayerState>()->GetStats().Teamwork : 0;
 			Cop->TeleportTo(Building->DoorOutside + FVector(0.f, 0.f, 100.f), Cop->GetActorRotation());
+			// (Out they come straight away: before the officer at the door gets a look in and finds them first.)
+			TestPerp->FinishDeedNow();
 		});
-		AddStep(TEXT("burglar heads out"), 0.6f, [this]()
-		{
-			if (TestPerp.IsValid())
-			{
-				TestPerp->FinishDeedNow();
-			}
-		});
+		AddStep(TEXT("burglar heads out"), 0.6f, []() {});
 		AddStep(TEXT("door guard result"), 0.f, [this]()
 		{
 			const AFTOPlayerState* PS = GetPawn() ? GetPawn()->GetPlayerState<AFTOPlayerState>() : nullptr;
@@ -2302,6 +2302,45 @@ void AFTOSmokeTest::BuildSteps()
 			const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
 			UE_LOG(LogFTO, Display, TEXT("SMOKE: front page: \"%s\" (%d this shift)."), GS && !GS->GetLatestHeadline().IsEmpty() ? *GS->GetLatestHeadline() : TEXT("NO HEADLINE"),
 				GS ? GS->GetFrontPages().Num() : -1);
+		});
+
+		// Juice. A blast nearby shakes the camera; slow motion has played (the tackle) and plays again on cue; the
+		// dispatcher's had a word; the best bust so far has had its photo taken.
+		AddStep(TEXT("shake"), 0.15f, [this]()
+		{
+			if (const APawn* Cop = GetPawn())
+			{
+				if (AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>())
+				{
+					GS->MulticastPlaySound(FTOAudio::Pick(TEXT("Explosion")), Cop->GetActorLocation() + Cop->GetActorForwardVector() * 600.f, 1.f);
+				}
+			}
+		});
+		AddStep(TEXT("shake result"), 0.f, [this]()
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: shake: a bang 6 m away left the camera at %.2f trauma."), FTOJuice::GetTrauma(GetWorld()));
+			const float Ago = GetWorld()->GetTimeSeconds() - FTOJuice::LastSlowMo(GetWorld());
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: slow motion: last played %.0f s ago (the tackle, a wall, a blast)."), Ago);
+		});
+		AddStep(TEXT("slow-mo"), 15.5f, []() {}); // (the cooldown)
+		AddStep(TEXT("slow-mo now"), 0.1f, [this]()
+		{
+			FTOJuice::SlowMo(GetWorld(), 0.3f, 0.6f);
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: slow motion on: time at x%.2f."), UGameplayStatics::GetGlobalTimeDilation(GetWorld()));
+		});
+		AddStep(TEXT("slow-mo over"), 1.2f, [this]() {});
+		AddStep(TEXT("slow-mo result"), 0.f, [this]()
+		{
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: slow motion over: time back at x%.2f."), UGameplayStatics::GetGlobalTimeDilation(GetWorld()));
+			const AFTOHUD* HUD = GetPC() ? Cast<AFTOHUD>(GetPC()->GetHUD()) : nullptr;
+			int32 Voiced = 0;
+			for (const FTOAudio::FDispatchLine& Line : FTOAudio::DispatchLines())
+			{
+				Voiced += FTOAudio::DispatchSound(Line) ? 1 : 0;
+			}
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: dispatcher: %d of %d lines voiced; last said \"%s\"."), Voiced, FTOAudio::DispatchLines().Num(),
+				HUD && !HUD->GetLastDispatch().IsEmpty() ? *HUD->GetLastDispatch() : TEXT("NOTHING"));
+			UE_LOG(LogFTO, Display, TEXT("SMOKE: highlight: %s."), HUD && HUD->HasHighlight() ? *HUD->GetHighlightCaption() : TEXT("NO PHOTO"));
 		});
 
 		// A word with a passer-by: the conversation panel.
@@ -2926,7 +2965,7 @@ void AFTOSmokeTest::BuildSteps()
 			// (Nobody else's car wandering into the run-up.)
 			for (TActorIterator<AFTOTrafficCar> It(GetWorld()); It; ++It)
 			{
-				if (FMath::PointDistToSegment(It->GetActorLocation(), Start, TestTarget) < 600.f)
+				if (FMath::PointDistToSegment(It->GetActorLocation(), Start, TestTarget) < 2000.f)
 				{
 					It->Destroy();
 				}
@@ -4064,6 +4103,11 @@ void AFTOSmokeTest::BuildSteps()
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: client sees %d broken things in the city."), Wreckage ? Wreckage->NumApplied() : -1);
 				const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: client sees this shift's set piece: %s."), GS && GS->GetSetPiece() != NAME_None ? *GS->GetSetPiece().ToString() : TEXT("NONE"));
+				if (const AFTOHUD* HUD = GetPC() ? Cast<AFTOHUD>(GetPC()->GetHUD()) : nullptr)
+				{
+					UE_LOG(LogFTO, Display, TEXT("SMOKE: client's dispatcher last said \"%s\"; the client's highlight: %s."),
+						HUD->GetLastDispatch().IsEmpty() ? TEXT("NOTHING") : *HUD->GetLastDispatch(), HUD->HasHighlight() ? *HUD->GetHighlightCaption() : TEXT("NO PHOTO"));
+				}
 				UE_LOG(LogFTO, Display, TEXT("SMOKE: client has read %d front page(s); the mutator is %s."), GS ? GS->GetFrontPages().Num() : -1,
 					GS && GS->GetMutator() != NAME_None ? *GS->GetMutator().ToString() : TEXT("none"));
 			});

@@ -1,5 +1,6 @@
 #include "Core/FTOCharacter.h"
 #include "Core/FTOMutators.h"
+#include "Core/FTOJuice.h"
 #include "Interaction/FTOTalkable.h"
 #include "EnhancedInputSubsystems.h"
 #include "Engine/LocalPlayer.h"
@@ -636,6 +637,11 @@ void AFTOCharacter::CheckTackle()
 		{
 			if (Overlap.GetActor() != this && FTOImpact::Tackle(Overlap.GetActor(), Fwd, GetController()))
 			{
+				// The moment of impact, savoured: a suspect brought down (not a citizen or a partner).
+				if (const AFTOPerp* Perp = Cast<AFTOPerp>(Overlap.GetActor()); Perp && Perp->IsCriminal())
+				{
+					FTOJuice::SlowMo(GetWorld(), 0.3f, 0.6f);
+				}
 				GetWorldTimerManager().ClearTimer(TackleTimer);
 				return;
 			}

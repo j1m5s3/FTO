@@ -1,4 +1,5 @@
 #include "Core/FTOPlayerController.h"
+#include "Core/FTOJuice.h"
 #include "Core/FTOInputConfig.h"
 #include "Core/FTOPlayerState.h"
 #include "InputActionValue.h"
@@ -48,6 +49,12 @@ void AFTOPlayerController::BeginPlay()
 	if (!IsLocalPlayerController())
 	{
 		return;
+	}
+
+	// Screen shake for the big moments (FTOJuice).
+	if (PlayerCameraManager)
+	{
+		PlayerCameraManager->AddNewCameraModifier(UFTOShakeModifier::StaticClass());
 	}
 
 	// The city's distant hum under everything.
