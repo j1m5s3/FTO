@@ -42,7 +42,7 @@ free virtual LAN like Tailscale or ZeroTier and join with that IP. (Steam invite
 | `FTOVote Overtime` | Vote at the end of the shift (`Overtime` or `ClockOff`); works for any player |
 | `FTOMutator LowGravity` | Change today's mutator (`LowGravity`, `BouncyCars`, `HotDogs`, `BigHeads`, `None`) |
 | `FTOCareerPoints 5000` | Add career points (earned and banked); `FTOCareerReset` starts a fresh career |
-| `FTOLocker` | Go to the precinct's locker board (any player) |
+| `FTOLocker` | Go to the precinct's locker board (any player; in the lobby only) |
 | `FTOSetPiece Bomb` | Start a set piece now (`Heist`, `Bomb`, `Pursuit`; no argument for this shift's own) |
 
 Launch flags: `-FTOQuickStart` skips the lobby and starts the shift immediately; `-FTOMutator=HotDogs` picks the
@@ -153,9 +153,11 @@ shift's mutator (`None` for none).
   liveries (Interceptor: +12% top speed; Riot Wagon: 1.6x tougher, a bit slower; Ice Cream Patrol). Points in the
   bank buy precinct upgrades: a coffee machine (everyone 12% quicker on foot), better radios (calls in twice as fast,
   crimes spotted from further), a motor pool mechanic (cruisers 1.5x tougher), bigger holding cells (booking calms
-  the city 50% more) and body armour (half the shots that would put an officer down don't). Every shift survived
-  raises the precinct's level (to 10): crimes come 3% faster and do 4% more damage per level. Two boards on the
-  precinct's wall (E) change your outfit and the fleet's livery, and buy upgrades; the lobby shows the precinct's
+  the city 50% more) and body armour (half the shots that would put an officer down don't). A shift counts as
+  survived once its clock runs out (overtime can only add to it), and every second shift survived raises the
+  precinct's level (to 10): crimes come 2% faster and do 3% more damage per level. Two boards on the precinct's wall
+  (E) change your outfit and the fleet's livery, and buy upgrades (the livery and upgrades between shifts only); your
+  outfit is remembered on your own machine and put back on after every map change. The lobby shows the precinct's
   rank, bank and level, and the scoreboard what the shift earned.
 - **End of shift**: when the 10-minute clock runs out the city holds still and everyone votes: Y (left bumper) for 5
   minutes of overtime (chaos carries over; the clock reads OVERTIME), N (view button) to clock off. Most votes win;

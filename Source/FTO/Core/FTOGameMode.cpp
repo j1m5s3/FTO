@@ -355,6 +355,15 @@ void AFTOGameMode::FTOAnimGallery()
 
 void AFTOGameMode::HandleShiftPhase(EFTOShiftPhase NewPhase)
 {
+	// (Once the clock's run out the shift's been survived, whatever overtime brings: overtime is a bonus, never a trap.)
+	if (NewPhase == EFTOShiftPhase::Briefing)
+	{
+		bClockRanOut = false;
+	}
+	else if (NewPhase == EFTOShiftPhase::OvertimeVote)
+	{
+		bClockRanOut = true;
+	}
 	if (NewPhase == EFTOShiftPhase::Survived || NewPhase == EFTOShiftPhase::Overrun)
 	{
 		GatherForDebrief();
@@ -370,7 +379,7 @@ void AFTOGameMode::HandleShiftPhase(EFTOShiftPhase NewPhase)
 				}
 			}
 			FFTOCareerState Career = GS->GetCareer();
-			const bool bSurvived = NewPhase == EFTOShiftPhase::Survived;
+			const bool bSurvived = NewPhase == EFTOShiftPhase::Survived || bClockRanOut;
 			Career.LastEarned = FMath::Max(0, TeamScore / 10) + (bSurvived ? 150 : 0);
 			Career.Earned += Career.LastEarned;
 			Career.Bank += Career.LastEarned;

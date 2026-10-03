@@ -1,5 +1,6 @@
 #include "Core/FTOPlayerController.h"
 #include "Core/FTOPrecinctBoard.h"
+#include "Core/FTOCareer.h"
 #include "Core/FTOJuice.h"
 #include "Core/FTOInputConfig.h"
 #include "Core/FTOPlayerState.h"
@@ -50,6 +51,12 @@ void AFTOPlayerController::BeginPlay()
 	if (!IsLocalPlayerController())
 	{
 		return;
+	}
+
+	// Back into the outfit this officer last chose (it doesn't survive the map change on its own).
+	if (FTOCareer::RememberedOutfit() != TEXT("Classic"))
+	{
+		ServerWearOutfit(FTOCareer::RememberedOutfit());
 	}
 
 	// Screen shake for the big moments (FTOJuice).
@@ -403,7 +410,9 @@ void AFTOPlayerController::FTOLocker()
 
 void AFTOPlayerController::ServerLocker_Implementation()
 {
-	APawn* Officer = GetPawn();
+	// (A shortcut for the lobby only: never a way out of trouble mid-shift.)
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	APawn* Officer = GS && GS->GetShiftPhase() == EFTOShiftPhase::Lobby ? GetPawn() : nullptr;
 	for (TActorIterator<AFTOPrecinctBoard> It(GetWorld()); It && Officer; ++It)
 	{
 		if (It->GetKind() == EFTOBoardKind::Locker)
@@ -413,6 +422,22 @@ void AFTOPlayerController::ServerLocker_Implementation()
 			SetControlRotation((-It->GetActorForwardVector()).Rotation());
 		}
 	}
+}
+
+void AFTOPlayerController::ServerWearOutfit_Implementation(FName Outfit)
+{
+	// (Only what the precinct's rank has unlocked.)
+	const AFTOGameState* GS = GetWorld()->GetGameState<AFTOGameState>();
+	const FTOCareer::FItem* Item = FTOCareer::Find(FTOCareer::Outfits(), Outfit);
+	if (AFTOPlayerState* PS = GetPlayerState<AFTOPlayerState>(); PS && GS && Item && GS->GetCareer().Earned >= Item->Points)
+	{
+		PS->SetOutfit(Outfit);
+	}
+}
+
+void AFTOPlayerController::ClientRememberOutfit_Implementation(FName Outfit)
+{
+	FTOCareer::RememberedOutfit() = Outfit;
 }
 
 void AFTOPlayerController::ServerRideAlong_Implementation()

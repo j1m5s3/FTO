@@ -160,7 +160,7 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 		if (Incident)
 		{
 			// (A higher-level precinct's city is rowdier.)
-		ChaosDelta += Incident->GetChaosRate() * DeltaTime * (1.f + 0.04f * GS->GetCareerLevel());
+		ChaosDelta += Incident->GetChaosRate() * DeltaTime * (1.f + 0.03f * GS->GetCareerLevel());
 		}
 	}
 	GS->AddChaos(ChaosDelta);
@@ -212,7 +212,7 @@ void UFTOCrimeDirector::TickOnDuty(float DeltaTime)
 
 		const float ChaosAlpha = GS->GetChaosAlpha();
 		const float Pacing = OfficerPacing.IsValidIndex(Officers - 1) ? OfficerPacing[Officers - 1] : 1.f;
-		const float Interval = FMath::Lerp(SpawnIntervalRange.X, SpawnIntervalRange.Y, ChaosAlpha) * Pacing * (1.f - 0.03f * GS->GetCareerLevel()) * (bRushHour ? RushHourPacing + 0.05f * FMath::Max(0, 4 - Officers) : 1.f);
+		const float Interval = FMath::Lerp(SpawnIntervalRange.X, SpawnIntervalRange.Y, ChaosAlpha) * Pacing * (1.f - 0.02f * GS->GetCareerLevel()) * (bRushHour ? RushHourPacing + 0.05f * FMath::Max(0, 4 - Officers) : 1.f);
 		NextSpawnTime = Now + Interval * Rng.FRandRange(0.7f, 1.3f);
 	}
 }

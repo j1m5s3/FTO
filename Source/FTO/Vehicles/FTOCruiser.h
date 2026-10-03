@@ -226,6 +226,7 @@ protected:
 	bool bAppliedMotorPool = false;
 	float StockMaxSpeed = 0.f;
 	void ApplyLivery();
+	virtual void PostInitializeComponents() override;
 	bool bWasBouncy = false;
 	/** Bounced off something (bouncy cars): the driver tells the server, which tells everyone. */
 	UFUNCTION(Server, Unreliable) void ServerBounce();

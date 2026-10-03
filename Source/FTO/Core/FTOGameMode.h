@@ -71,5 +71,7 @@ protected:
 
 	/** The shift's over (survived or overrun): the squad lines up outside the precinct for the scoreboard. */
 	UFUNCTION() void HandleShiftPhase(EFTOShiftPhase NewPhase);
+	/** The shift's clock ran out (the overtime vote came): it counts as survived for the career. */
+	bool bClockRanOut = false;
 	void GatherForDebrief();
 };

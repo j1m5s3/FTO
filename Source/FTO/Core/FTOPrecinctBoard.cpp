@@ -189,12 +189,16 @@ bool AFTOPrecinctBoard::TalkChoice(AFTOCharacter* Officer, int32 Index)
 				if (Career.Earned >= Item.Points)
 				{
 					PS->SetOutfit(Item.Id);
+					if (PC)
+					{
+						PC->ClientRememberOutfit(Item.Id);
+					}
 					UE_LOG(LogFTO, Log, TEXT("%s changed into the %s outfit."), *PS->GetPlayerName(), Item.Name);
 					break;
 				}
 			}
 		}
-		else if (Index == 1)
+		else if (Index == 1 && GS->GetShiftPhase() == EFTOShiftPhase::Lobby)
 		{
 			const TConstArrayView<FTOCareer::FItem> Liveries = FTOCareer::Liveries();
 			int32 At = 0;
@@ -215,10 +219,19 @@ bool AFTOPrecinctBoard::TalkChoice(AFTOCharacter* Officer, int32 Index)
 		}
 		return true;
 	}
-	// Buying an upgrade.
+	// Buying an upgrade: between shifts, and not twice from one double-tap (the offer moves up once something's bought).
 	const TArray<FName> Offer = OnOffer();
-	if (!Offer.IsValidIndex(Index))
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (!Offer.IsValidIndex(Index) || Now - LastPurchaseTime < 1.f)
 	{
+		return true;
+	}
+	if (GS->GetShiftPhase() != EFTOShiftPhase::Lobby)
+	{
+		if (PC)
+		{
+			PC->ClientToast(INVTEXT("The quartermaster only takes orders between shifts."), FLinearColor(1.f, 0.6f, 0.3f));
+		}
 		return true;
 	}
 	const FTOCareer::FItem* Item = FTOCareer::Find(FTOCareer::Upgrades(), Offer[Index]);
@@ -230,6 +243,7 @@ bool AFTOPrecinctBoard::TalkChoice(AFTOCharacter* Officer, int32 Index)
 		}
 		return true;
 	}
+	LastPurchaseTime = Now;
 	Career.Bank -= Item->Points;
 	Career.Upgrades.AddUnique(Item->Id);
 	GS->SetCareer(Career, true);

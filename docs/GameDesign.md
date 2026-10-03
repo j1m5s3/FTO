@@ -53,7 +53,7 @@ The job is heavy; the game isn't. Think *Overcooked* meets a toy-box *GTA*: brig
 ## Progression
 - A saved career for the precinct (the host's): career points every shift (more for surviving), a rank that unlocks
   outfits and fleet liveries, a bank that buys precinct upgrades (coffee machine, better radios, motor pool mechanic,
-  bigger holding cells, body armour), and a level that rises with every shift survived (a busier, rowdier city).
+  bigger holding cells, body armour), and a level that rises with every second shift survived (a busier, rowdier city).
 
 ## Juice
 - Screen shake for explosions, crashes, collapses and punches; slow motion for tackles, cars through walls and blasts.

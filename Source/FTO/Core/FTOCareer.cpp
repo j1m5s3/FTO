@@ -2,6 +2,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "FTO.h"
 
 namespace FTOCareer
 {
@@ -68,7 +69,8 @@ namespace FTOCareer
 
 	int32 LevelFor(const FFTOCareerState& State)
 	{
-		return FMath::Clamp(State.ShiftsSurvived, 0, 10);
+		// (Every second shift survived: a gentle climb, so a new squad joining an old precinct isn't thrown in at the deep end.)
+		return FMath::Clamp(State.ShiftsSurvived / 2, 0, 10);
 	}
 
 	FFTOCareerState Load(const FString& Slot)
@@ -89,7 +91,10 @@ namespace FTOCareer
 		if (Saved)
 		{
 			Saved->State = State;
-			UGameplayStatics::SaveGameToSlot(Saved, Slot, 0);
+			if (!UGameplayStatics::SaveGameToSlot(Saved, Slot, 0))
+			{
+				UE_LOG(LogFTO, Warning, TEXT("Career: couldn't save to slot %s."), *Slot);
+			}
 		}
 	}
 
@@ -102,6 +107,12 @@ namespace FTOCareer
 			return Slot;
 		}
 		return FParse::Param(FCommandLine::Get(), TEXT("FTOSmokeTest")) ? FString(TEXT("FTOSmokeCareer")) : FString(TEXT("FTOCareer"));
+	}
+
+	FName& RememberedOutfit()
+	{
+		static FName Outfit = TEXT("Classic");
+		return Outfit;
 	}
 
 	bool OutfitColor(FName Outfit, FLinearColor& OutColor)

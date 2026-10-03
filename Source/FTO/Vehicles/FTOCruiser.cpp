@@ -149,7 +149,8 @@ void AFTOCruiser::BeginPlay()
 	Super::BeginPlay();
 
 	PaintMaterial = FTOArt::ApplyColor(Body, VehicleMaterial ? VehicleMaterial.Get() : BaseMaterial.Get(), StripeColor, 0.f, FTOArt::BodySlot(Body));
-	StockMaxSpeed = MaxSpeed;
+	AppliedLivery = NAME_None; // (now there's paint to put it on)
+	ApplyLivery();
 	const FFTOSoundSet& Sounds = AFTOGameState::Sounds();
 	EngineAudio->SetSound(Sounds.EngineLoop);
 	EngineAudio->AttenuationSettings = Sounds.World;
@@ -173,6 +174,13 @@ void AFTOCruiser::BeginPlay()
 	}
 }
 
+void AFTOCruiser::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+	// (Before any replicated update can arrive: the livery scales from the stock top speed, never from a scaled one.)
+	StockMaxSpeed = MaxSpeed;
+}
+
 void AFTOCruiser::SetStripeColor(const FLinearColor& Color)
 {
 	StripeColor = Color;
@@ -190,7 +198,7 @@ void AFTOCruiser::ApplyLivery()
 	const AFTOGameState* GS = GetWorld() ? GetWorld()->GetGameState<AFTOGameState>() : nullptr;
 	const FName Livery = GS ? GS->GetCareer().Livery : FName(TEXT("Standard"));
 	const bool bMotorPool = GS && GS->HasUpgrade(TEXT("MotorPool"));
-	if (Livery == AppliedLivery && bMotorPool == bAppliedMotorPool)
+	if (!PaintMaterial || (Livery == AppliedLivery && bMotorPool == bAppliedMotorPool))
 	{
 		return;
 	}
@@ -202,7 +210,7 @@ void AFTOCruiser::ApplyLivery()
 	float Toughness = 1.f;
 	FTOCareer::LiveryStats(Livery, Paint, bRepaint, Speed, Toughness);
 	FTOArt::SetColor(PaintMaterial, bRepaint ? Paint : StripeColor);
-	MaxSpeed = (StockMaxSpeed > 0.f ? StockMaxSpeed : MaxSpeed) * Speed;
+	MaxSpeed = StockMaxSpeed * Speed;
 	if (Damage)
 	{
 		Damage->Toughness = Toughness * (bMotorPool ? 1.5f : 1.f);

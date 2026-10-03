@@ -354,8 +354,8 @@ void AFTOCharacter::RefreshOfficerColor()
 		}
 	}
 	FTOArt::SetColor(UniformMaterial, Uniform);
-	// Hot dog suit: undercover.
-	const bool bHotDog = PS->GetOutfit() == TEXT("HotDog");
+	// Hot dog suit: undercover. (Not while they're a ragdoll: the suit's on the capsule, which stays upright; see Tick.)
+	const bool bHotDog = PS->GetOutfit() == TEXT("HotDog") && !(Knockdown && Knockdown->IsDown());
 	if (bHotDog && HotDogSuit.IsEmpty())
 	{
 		FTOArt::BuildHotDogSuit(this, GetCapsuleComponent(), GetCapsuleComponent()->GetScaledCapsuleHalfHeight(), BaseMaterial, HotDogSuit);
@@ -710,6 +710,11 @@ void AFTOCharacter::Tick(float DeltaSeconds)
 	if (HasAuthority() || IsLocallyControlled())
 	{
 		ApplySprint();
+	}
+	// (The hot dog suit off while we're a ragdoll, back on when we're up.)
+	if (!HotDogSuit.IsEmpty() && HotDogSuit[0] && HotDogSuit[0]->IsVisible() == (Knockdown && Knockdown->IsDown()))
+	{
+		RefreshOfficerColor();
 	}
 
 	// A conversation's over if either of us goes (or gets in a car, gets shot, or it's gone quiet for a while).

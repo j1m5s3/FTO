@@ -39,7 +39,8 @@ public:
  * Progression. Every shift banks career points (a tenth of the squad's score, and a bonus for surviving it). Points ever
  * earned raise the precinct's rank, unlocking outfits for the officers and liveries for the fleet; points in the bank
  * buy precinct upgrades. Every shift survived raises the precinct's level: crimes come a little faster and do a little
- * more damage (up to level 10). Saved on the host; everyone in the squad shares it.
+ * more damage (a level for every second shift survived, up to level 10). Saved on the host; everyone in the squad
+ * shares it. Each officer's outfit is their own: remembered on their machine and put back on after every map change.
  */
 namespace FTOCareer
 {
@@ -67,6 +68,8 @@ namespace FTOCareer
 	/** The save slot: -FTOCareerSlot=Name, else "FTOCareer". */
 	FTO_API FString SlotName();
 
+	/** This machine's officer's outfit, as last chosen at the locker (put back on after a map change). */
+	FTO_API FName& RememberedOutfit();
 	/** An outfit's shirt colour (Badge: the officer's badge colour). */
 	FTO_API bool OutfitColor(FName Outfit, FLinearColor& OutColor);
 	/** A livery's paint and how it handles (top speed and toughness multipliers). */

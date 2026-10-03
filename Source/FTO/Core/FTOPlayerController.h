@@ -60,6 +60,10 @@ public:
 	/** Go to the precinct's locker board (any player; for testing). */
 	UFUNCTION(Exec) void FTOLocker();
 	UFUNCTION(Server, Reliable) void ServerLocker();
+	/** Back into the outfit we last chose (after a map change), if the precinct's rank still allows it. */
+	UFUNCTION(Server, Reliable) void ServerWearOutfit(FName Outfit);
+	/** The server tells us what we changed into at the locker, to put back on after the next map change. */
+	UFUNCTION(Client, Reliable) void ClientRememberOutfit(FName Outfit);
 
 	UFUNCTION(Server, Reliable)
 	void ServerRideAlong();

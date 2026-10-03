@@ -136,7 +136,7 @@ bool FTOImpact::Shot(AActor* Victim, const FVector& Velocity, EFTOWeapon Weapon,
 	{
 		// (Body armour: half the time, the vest takes it.)
 		const AFTOGameState* Precinct = Officer->GetWorld()->GetGameState<AFTOGameState>();
-		if (!Spec.bStun && Precinct && Precinct->HasUpgrade(TEXT("BodyArmour")) && FMath::FRand() < 0.5f)
+		if (!Spec.bStun && !Officer->IsDowned() && Precinct && Precinct->HasUpgrade(TEXT("BodyArmour")) && FMath::FRand() < 0.5f)
 		{
 			if (AFTOPlayerController* Hit = Cast<AFTOPlayerController>(Officer->GetController()))
 			{
