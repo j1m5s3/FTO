@@ -66,7 +66,9 @@ public:
 	bool RequestPullOver();
 
 	/** Server: floor it with the police after us (a wanted driver at a traffic stop), a chase incident riding along. */
-	void MakeGetaway();
+	void MakeGetaway(FName ChaseCrime = NAME_None, float Seconds = 120.f, float Toughness = 1.f);
+	/** How badly it's been knocked about. */
+	UFTOVehicleDamage* GetDamage() const { return Damage; }
 	/** Server: the chase is over: stopped, and the driver climbs out with their hands up (the incident's perp now). */
 	void DriverSurrenders();
 	/** On the road just outside the driver's door. */

@@ -152,6 +152,16 @@ public:
 	/** Server: the squad voted to keep going: Seconds more on the clock, chaos as it was. */
 	void StartOvertime(float Seconds);
 
+	// ---- The shape of a shift: a set piece in the middle, rush hour at the end ----
+	/** The last this-many seconds on the clock are rush hour (crimes come thick and fast). */
+	static constexpr float RushHourSeconds = 120.f;
+	bool IsRushHour() const;
+	/** This shift's set piece ("Heist", "Bomb", "Pursuit"), once it's started, and when (server time). */
+	FName GetSetPiece() const { return SetPiece; }
+	float GetSetPieceAge() const;
+	/** Server: the set piece has begun. */
+	void AnnounceSetPiece(FName Which);
+
 	UPROPERTY(BlueprintAssignable, Category="FTO|Shift")
 	FFTOShiftPhaseChanged OnShiftPhaseChanged;
 
@@ -187,6 +197,8 @@ protected:
 	UPROPERTY(Replicated) float VoteDuration = 20.f;
 	UPROPERTY(Replicated) float OvertimeOffer = 300.f;
 	UPROPERTY(Replicated) int32 Overtimes = 0;
+	UPROPERTY(Replicated) FName SetPiece;
+	UPROPERTY(Replicated) float SetPieceTime = -1000.f;
 
 	UPROPERTY(Replicated) TArray<TObjectPtr<AFTOIncident>> Incidents;
 

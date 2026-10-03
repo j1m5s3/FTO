@@ -16,9 +16,9 @@ namespace FTOSpawnTags
 {
 	// Out on the sidewalks...
 	static const TArray<FName> Street     = { "Jaywalking", "Speeding", "IllegalParking", "CarChase", "PettyTheft", "LostTourist", "Graffiti", "Mugging", "Drunk" };
-	static const TArray<FName> Commercial = { "Vandalism", "Riot", "TerrorPlot", "Graffiti" };
+	static const TArray<FName> Commercial = { "Vandalism", "Riot", "TerrorPlot", "Graffiti", "Bomb" };
 	static const TArray<FName> Home       = { "CatInTree", "Vandalism" };
-	static const TArray<FName> Park       = { "CatInTree", "LostTourist", "Graffiti", "NoiseComplaint", "Riot", "PettyTheft", "Mugging", "Drunk" };
+	static const TArray<FName> Park       = { "CatInTree", "LostTourist", "Graffiti", "NoiseComplaint", "Riot", "PettyTheft", "Mugging", "Drunk", "Bomb" };
 	static const TArray<FName> Industrial = { "Vandalism", "Graffiti" };
 
 	// ...and indoors, by what the building is.

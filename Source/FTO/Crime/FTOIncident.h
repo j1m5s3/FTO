@@ -122,6 +122,13 @@ public:
 	void SuspectFound(const FVector& Where, bool bLeaveRoom);
 	/** Server: progress made some other way than standing about (talking a drunk round). */
 	void SetTalkProgress(float Value);
+	/** Server: it's over, badly, right now (a bomb going off): the chaos hit, and it's gone. */
+	void FailNow();
+	/** Server: it's turned into something else (the heist crew have driven off: the getaway's the call now). */
+	void Supersede();
+	bool IsSuperseded() const { return bSuperseded; }
+	/** Server: how many officers it takes (a set piece, scaled down for a small squad). */
+	void SetOfficersRequired(int32 Count) { Info.OfficersRequired = FMath::Max(1, Count); }
 	/** Server: handled without anyone cuffed (a drunk talked round and sent home): whoever's there gets the credit. */
 	void HandledPeacefully();
 	/** Is this one talked down just by officers being there (else it has a twist of its own)? */
@@ -159,6 +166,10 @@ public:
 	/** Officers inside this radius count as on scene. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
 	float SceneRadius = 450.f;
+
+	/** The bomb set piece: how long the squad has to defuse it. */
+	UPROPERTY(EditDefaultsOnly, Category="Incident")
+	float BombFuseSeconds = 150.f;
 
 	/** On-scene radius while following a fleeing car; cruisers count too. */
 	UPROPERTY(EditDefaultsOnly, Category="Incident")
@@ -236,6 +247,8 @@ protected:
 	/** The twists: a pickpocket in a crowd, a burglar hiding in the building. */
 	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bCrowd = false;
 	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bHiddenInside = false;
+	/** Turned into something else (no penalty, no sting). */
+	UPROPERTY(ReplicatedUsing=OnRep_Info) bool bSuperseded = false;
 	/** Server: the twist's been explained to the officers who turned up. */
 	bool bTwistAnnounced = false;
 	/** Server: the scene's been left alone a while: escalate, or go cold. */

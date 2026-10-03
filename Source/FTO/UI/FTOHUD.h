@@ -41,6 +41,8 @@ public:
 protected:
 	void DrawChaosMeter(const AFTOGameState* GS);
 	void DrawShiftClock(const AFTOGameState* GS);
+	/** A big banner across the top for the set piece and rush hour, as they start. */
+	void DrawShiftBanner(const AFTOGameState* GS);
 	void DrawDispatchBoard(const AFTOGameState* GS);
 	void DrawIncidentMarkers(const AFTOGameState* GS);
 	void DrawTeammateMarkers(const AFTOGameState* GS);
@@ -117,5 +119,8 @@ protected:
 	EFTOShiftPhase LastPhase = EFTOShiftPhase::Lobby;
 	bool bPhaseKnown = false;
 	bool bAlarmArmed = true;
+	/** When rush hour started on this machine (-1: not yet), and the last set piece heard about. */
+	float RushHourSince = -1.f;
+	FName LastSetPiece;
 	float LastRadioTime = -10.f;
 };

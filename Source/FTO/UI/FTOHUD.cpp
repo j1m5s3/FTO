@@ -90,6 +90,7 @@ void AFTOHUD::DrawHUD()
 		DrawTeammateMarkers(GS);
 		DrawChaosMeter(GS);
 		DrawShiftClock(GS);
+		DrawShiftBanner(GS);
 		DrawDispatchBoard(GS);
 		DrawOnSceneProgress(GS);
 		DrawInteractPrompt();
@@ -181,13 +182,50 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 	const FString Clock = GS->GetOvertimes() > 0
 		? FString::Printf(TEXT("OVERTIME%s  %s"), GS->GetOvertimes() > 1 ? *FString::Printf(TEXT(" x%d"), GS->GetOvertimes()) : TEXT(""), *FormatClock(GS->GetShiftTimeRemaining()))
 		: FString::Printf(TEXT("SHIFT  %s"), *FormatClock(GS->GetShiftTimeRemaining()));
+	const bool bRush = GS->IsRushHour();
 
 	float W = 0.f, H = 0.f;
 	GetTextSize(Clock, W, H, Font, S);
 	const float X = Canvas->ClipX - W - 40.f * S;
 	const float Y = 24.f * S;
-	DrawPanel(X - 12.f * S, Y - 8.f * S, W + 24.f * S, H + 16.f * S);
-	DrawText(Clock, FLinearColor::White, X, Y, Font, S);
+	DrawPanel(X - 12.f * S, Y - 8.f * S, W + 24.f * S, H + 16.f * S, bRush ? FLinearColor(0.45f, 0.12f, 0.f, 0.8f) : FLinearColor(0.f, 0.f, 0.f, 0.55f));
+	DrawText(Clock, bRush ? FLinearColor(1.f, 0.8f, 0.3f) : FLinearColor::White, X, Y, Font, S);
+	if (bRush)
+	{
+		DrawCenteredText(TEXT("RUSH HOUR"), X + W * 0.5f, Y + H + 12.f * S, FLinearColor(1.f, 0.7f, 0.2f), GEngine->GetMediumFont(), S);
+	}
+}
+
+void AFTOHUD::DrawShiftBanner(const AFTOGameState* GS)
+{
+	// The set piece's first few seconds, or rush hour's: a banner right across the top.
+	FString Line;
+	FLinearColor Color = FLinearColor(1.f, 0.3f, 0.35f);
+	const float Now = GetWorld()->GetRealTimeSeconds();
+	if (GS->GetSetPiece() != NAME_None && GS->GetSetPieceAge() < 6.f)
+	{
+		const FName Piece = GS->GetSetPiece();
+		Line = Piece == TEXT("Heist") ? TEXT("BANK HEIST IN PROGRESS!  ALL UNITS TO THE BANK")
+			: Piece == TEXT("Bomb") ? TEXT("EVIL MASTERPLAN!  A BOMB IS TICKING DOWNTOWN")
+			: TEXT("CITY-WIDE PURSUIT!  STOP THAT CAR");
+	}
+	else if (RushHourSince >= 0.f && Now - RushHourSince < 6.f)
+	{
+		Line = TEXT("RUSH HOUR!  TWO MINUTES TO GO");
+		Color = FLinearColor(1.f, 0.7f, 0.2f);
+	}
+	if (Line.IsEmpty())
+	{
+		return;
+	}
+	const float S = UIScale();
+	UFont* Font = GEngine->GetLargeFont();
+	const float Pulse = 1.f + 0.06f * FMath::Sin(Now * 10.f);
+	float W = 0.f, H = 0.f;
+	GetTextSize(Line, W, H, Font, S * 1.3f * Pulse);
+	const float Y = 90.f * S;
+	DrawPanel(Canvas->ClipX * 0.5f - W * 0.5f - 24.f * S, Y - 10.f * S, W + 48.f * S, H + 20.f * S, FLinearColor(0.f, 0.f, 0.f, 0.75f));
+	DrawCenteredText(Line, Canvas->ClipX * 0.5f, Y, Color, Font, S * 1.3f * Pulse);
 }
 
 void AFTOHUD::DrawDispatchBoard(const AFTOGameState* GS)
@@ -845,7 +883,7 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 			{
 				Play(Sounds.Chime, 0.7f);
 			}
-			else if (State == EFTOIncidentState::Failed)
+			else if (State == EFTOIncidentState::Failed && !Incident->IsSuperseded())
 			{
 				Play(Sounds.Fail, 0.6f);
 			}
@@ -858,6 +896,26 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 		{
 			It.RemoveCurrent();
 		}
+	}
+
+	// The set piece and rush hour get a stinger of their own.
+	if (GS->GetSetPiece() != LastSetPiece)
+	{
+		LastSetPiece = GS->GetSetPiece();
+		if (LastSetPiece != NAME_None && GS->GetSetPieceAge() < 3.f)
+		{
+			Play(Sounds.Alarm, 0.8f);
+		}
+	}
+	const bool bRush = Phase == EFTOShiftPhase::OnDuty && GS->IsRushHour();
+	if (bRush && RushHourSince < 0.f)
+	{
+		RushHourSince = GetWorld()->GetRealTimeSeconds();
+		Play(Sounds.Bugle, 0.9f);
+	}
+	else if (!bRush && Phase == EFTOShiftPhase::OnDuty)
+	{
+		RushHourSince = -1.f;
 	}
 
 	// Chaos alarm, re-armed once things calm down a bit.

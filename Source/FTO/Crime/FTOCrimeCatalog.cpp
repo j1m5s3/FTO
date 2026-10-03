@@ -149,6 +149,19 @@ void UFTOCrimeCatalog::PopulateDefaults()
 		.Flavor({ TEXT("A villain is threatening to release 10,000 bees at City Hall."), TEXT("Suspicious device ticking downtown. It might be a very loud clock.") })
 		.Chaos(0.45f, 35.f, 30.f).Work(15.f, 4).Report(1.f, 0.f, 1.f).Escalate(300.f).Spawn(0.1f, 60.f, true).Crook();
 
+	// ---- Set pieces: one per shift, mid-shift, by the director (never rolled) ------------
+	Add(Templates, "HeistGetaway", TEXT("Heist Getaway"), E::Critical)
+		.Flavor({ TEXT("The heist crew are making off in a borrowed car. With the bank's pens."), TEXT("Getaway driver is wearing a balaclava and sunglasses. At night. Indoors. Somehow.") })
+		.Chaos(0.3f, 25.f, 20.f).Work(8.f, 2).Report(1.f, 0.f, 0.f).Escalate(150.f).Spawn(0.f);
+
+	Add(Templates, "Pursuit", TEXT("City-Wide Pursuit"), E::Critical)
+		.Flavor({ TEXT("The most wanted driver in the city. Has never once used an indicator."), TEXT("Suspect is in a stolen ice cream van, playing Greensleeves at full volume.") })
+		.Chaos(0.25f, 25.f, 20.f).Work(10.f, 2).Report(1.f, 0.f, 0.f).Escalate(150.f).Spawn(0.f);
+
+	Add(Templates, "Bomb", TEXT("Evil Masterplan: Bomb"), E::Critical)
+		.Flavor({ TEXT("A villain's left a ticking box downtown, with a helpful label on every wire."), TEXT("The device has a sign: PLEASE DO NOT CUT THE WRONG WIRE. Thanks.") })
+		.Chaos(0.3f, 30.f, 30.f).Work(1.f, 1).Report(1.f, 0.f, 0.f).Escalate(0.f).Spawn(0.f).NoArrest();
+
 	// ---- Modifiers ---------------------------------------------------------------------
 	auto AddMod = [this](FName Id, const TCHAR* Prefix, const TCHAR* Note, float Chaos, float Resolve, int32 Extra, EFTOCrimeTier MinTier, float Weight)
 	{

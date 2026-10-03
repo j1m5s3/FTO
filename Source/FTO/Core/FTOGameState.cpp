@@ -115,6 +115,8 @@ void AFTOGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AFTOGameState, VoteEndTime);
 	DOREPLIFETIME(AFTOGameState, VoteDuration);
 	DOREPLIFETIME(AFTOGameState, OvertimeOffer);
+	DOREPLIFETIME(AFTOGameState, SetPiece);
+	DOREPLIFETIME(AFTOGameState, SetPieceTime);
 	DOREPLIFETIME(AFTOGameState, Overtimes);
 	DOREPLIFETIME(AFTOGameState, Incidents);
 	DOREPLIFETIME(AFTOGameState, IncidentsResolved);
@@ -193,6 +195,23 @@ void AFTOGameState::BeginOvertimeVote(float Seconds, float Offer)
 	OvertimeOffer = Offer;
 	VoteEndTime = GetServerWorldTimeSeconds() + Seconds;
 	SetShiftPhase(EFTOShiftPhase::OvertimeVote);
+}
+
+bool AFTOGameState::IsRushHour() const
+{
+	return ShiftPhase == EFTOShiftPhase::OnDuty && GetShiftTimeRemaining() > 0.f && GetShiftTimeRemaining() <= RushHourSeconds;
+}
+
+float AFTOGameState::GetSetPieceAge() const
+{
+	return GetServerWorldTimeSeconds() - SetPieceTime;
+}
+
+void AFTOGameState::AnnounceSetPiece(FName Which)
+{
+	check(HasAuthority());
+	SetPiece = Which;
+	SetPieceTime = GetServerWorldTimeSeconds();
 }
 
 void AFTOGameState::StartOvertime(float Seconds)

@@ -35,6 +35,7 @@ void AFTOGameMode::InitGame(const FString& MapName, const FString& Options, FStr
 	Super::InitGame(MapName, Options, ErrorMessage);
 
 	ShiftSeed = UGameplayStatics::GetIntOption(Options, TEXT("Seed"), 0);
+	CrimeDirector->ShiftNumber = UGameplayStatics::GetIntOption(Options, TEXT("Shift"), 0);
 	if (ShiftSeed == 0)
 	{
 		ShiftSeed = FMath::RandRange(1, MAX_int32 - 1);
@@ -120,7 +121,7 @@ void AFTOGameMode::NewShift()
 	const FString Map = UWorld::RemovePIEPrefix(GetWorld()->GetOutermost()->GetName());
 	const bool bListen = GetNetMode() == NM_ListenServer;
 	const int32 NextSeed = FMath::RandRange(1, MAX_int32 - 1);
-	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?Seed=%d%s"), *Map, NextSeed, bListen ? TEXT("?listen") : TEXT("")), true);
+	GetWorld()->ServerTravel(FString::Printf(TEXT("%s?Seed=%d?Shift=%d%s"), *Map, NextSeed, CrimeDirector->ShiftNumber + 1, bListen ? TEXT("?listen") : TEXT("")), true);
 }
 
 void AFTOGameMode::PreLogin(const FString& Options, const FString& Address, const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
@@ -197,6 +198,16 @@ void AFTOGameMode::FTOSpawnCrime(FName TemplateId)
 	{
 		UE_LOG(LogFTO, Warning, TEXT("Couldn't spawn crime '%s'."), *TemplateId.ToString());
 	}
+}
+
+void AFTOGameMode::FTOSetPiece(FName Which)
+{
+	FTOSetPieceNow(Which);
+}
+
+AFTOIncident* AFTOGameMode::FTOSetPieceNow(FName Which)
+{
+	return CrimeDirector->StartSetPiece(Which);
 }
 
 void AFTOGameMode::FTOAddChaos(float Amount)

@@ -1,6 +1,7 @@
 #include "Crime/FTOIncident.h"
 #include "Crime/FTOPerp.h"
 #include "Crime/FTOCrimeExtra.h"
+#include "Crime/FTOBomb.h"
 #include "Core/FTOGameState.h"
 #include "Core/FTOCharacter.h"
 #include "Core/FTOPlayerController.h"
@@ -73,6 +74,7 @@ void AFTOIncident::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AFTOIncident, LastSightingTime);
 	DOREPLIFETIME(AFTOIncident, bCrowd);
 	DOREPLIFETIME(AFTOIncident, bHiddenInside);
+	DOREPLIFETIME(AFTOIncident, bSuperseded);
 }
 
 void AFTOIncident::SetBuilding(int32 Index)
@@ -147,6 +149,23 @@ void AFTOIncident::SpawnExtras()
 	if (Crime == TEXT("PettyTheft") && IsValid(Perp) && Perp->IsCriminal())
 	{
 		SpawnCrowd();
+		return;
+	}
+	if (Crime == TEXT("Bomb"))
+	{
+		// The device, on the pavement in front of the poor soul who found it.
+		FActorSpawnParameters BombParams;
+		BombParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		const FVector At = GetActorLocation() + GetActorForwardVector().GetSafeNormal2D() * 160.f;
+		if (AFTOBomb* Bomb = GetWorld()->SpawnActor<AFTOBomb>(AFTOBomb::StaticClass(), At, GetActorRotation(), BombParams))
+		{
+			Bomb->Arm(this, BombFuseSeconds, GetTypeHash(At));
+			Extras.Add(Bomb);
+		}
+		else
+		{
+			Supersede(); // (no device, no call)
+		}
 		return;
 	}
 	if (Count == 0 || !IsValid(Perp))
@@ -271,6 +290,32 @@ void AFTOIncident::SetTalkProgress(float Value)
 	Progress = FMath::Clamp(Value, 0.f, 1.f);
 }
 
+void AFTOIncident::FailNow()
+{
+	check(HasAuthority());
+	if (!IsActive())
+	{
+		return;
+	}
+	Info.EscalatesTo = NAME_None;
+	SetState(EFTOIncidentState::Failed);
+	OnFailed.Broadcast(this);
+	SetLifeSpan(CleanupDelay);
+}
+
+void AFTOIncident::Supersede()
+{
+	check(HasAuthority());
+	if (!IsActive())
+	{
+		return;
+	}
+	Info.EscalatesTo = NAME_None;
+	bSuperseded = true;
+	SetState(EFTOIncidentState::Failed);
+	SetLifeSpan(0.5f);
+}
+
 void AFTOIncident::HandledPeacefully()
 {
 	check(HasAuthority());
@@ -285,7 +330,7 @@ bool AFTOIncident::IsBrawl() const
 
 bool AFTOIncident::IsTalkedDownByPresence() const
 {
-	return !bCrowd && !bHiddenInside && Info.TemplateId != TEXT("Drunk");
+	return !bCrowd && !bHiddenInside && Info.TemplateId != TEXT("Drunk") && Info.TemplateId != TEXT("Bomb");
 }
 
 FString AFTOIncident::GetTwistHint() const
@@ -297,6 +342,10 @@ FString AFTOIncident::GetTwistHint() const
 	if (bHiddenInside)
 	{
 		return TEXT("The burglar's hiding somewhere in the building, maybe upstairs (lift or outside stairs). Find them!");
+	}
+	if (Info.TemplateId == TEXT("Bomb"))
+	{
+		return TEXT("Defuse it (E): the label says which wire to cut next. A wrong wire takes time off the clock");
 	}
 	if (Info.TemplateId == TEXT("Drunk") && !bSubdued)
 	{
@@ -969,7 +1018,7 @@ void AFTOIncident::RefreshVisuals()
 	{
 	case EFTOIncidentState::Unreported: LabelText = INVTEXT("!"); break;
 	case EFTOIncidentState::Resolved:   LabelText = FText::Format(INVTEXT("{0}\nHANDLED"), Info.Title); break;
-	case EFTOIncidentState::Failed:     LabelText = FText::Format(INVTEXT("{0}\nWENT COLD"), Info.Title); break;
+	case EFTOIncidentState::Failed:     LabelText = FText::Format(bSuperseded ? INVTEXT("{0}\nTHEY'RE OFF!") : INVTEXT("{0}\nWENT COLD"), Info.Title); break;
 	default:
 		if (bSubdued)
 		{
