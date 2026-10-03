@@ -144,7 +144,8 @@ shift's mutator (`None` for none).
   anyone close (a camera modifier; more trauma the closer and the bigger). A tackle that connects, a cruiser going
   through a wall and anything blowing up drop the whole game into slow motion for a moment (once every few seconds at
   most). The dispatcher has a word on the radio for the moments that matter (the shift starting, the set piece, rush
-  hour, the chaos alarm, a big bust, a call gone cold, an oops, teamwork, idling, the end) with the line as a
+  hour, the chaos alarm, a big bust, a call gone cold, an oops, teamwork, idling, the end) and the routine ones (a
+  new call, your own arrest, a booking: each at most every 35-50 s), a line every 12 s at most, with the line as a
   subtitle, and the best bust this machine saw gets its photo taken for the scoreboard (SHIFT HIGHLIGHT).
 - **Progression**: the precinct has a career, saved on the host (`FTOCareer` save slot; `-FTOCareerSlot=Name` for
   another; the smoke test uses its own). Every shift pays a tenth of the squad's score in career points, plus 150 for

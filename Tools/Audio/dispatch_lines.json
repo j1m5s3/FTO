@@ -33,6 +33,20 @@
     "You arrested someone for standing there. Bold choice.",
     "Please stop hurting the citizens. Think of the paperwork."
   ],
+  "NewCall": [
+    "New call on the board. It won't arrest itself.",
+    "Another one for you. Try to look busy.",
+    "Fresh call coming in. Somebody, anybody, please."
+  ],
+  "Arrest": [
+    "Got one. Mark the calendar.",
+    "Cuffs on. Look at you go.",
+    "One in the bag. Only a whole city to go."
+  ],
+  "Booked": [
+    "Another guest for the cells. I'll fluff the pillows.",
+    "Booked and filed. The paperwork's on your desk."
+  ],
   "Teamwork": [
     "Teamwork! I didn't know you lot could do that.",
     "Look at you, working together. I'm almost proud."

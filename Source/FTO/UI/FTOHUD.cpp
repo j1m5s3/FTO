@@ -224,7 +224,8 @@ void AFTOHUD::DrawShiftClock(const AFTOGameState* GS)
 void AFTOHUD::Dispatch(FName Category, bool bForce)
 {
 	const float Now = GetWorld()->GetRealTimeSeconds();
-	if (!bForce && Now < NextDispatchTime)
+	const float* NextOfCategory = NextDispatchOf.Find(Category);
+	if (!bForce && (Now < NextDispatchTime || (NextOfCategory && Now < *NextOfCategory)))
 	{
 		return;
 	}
@@ -248,7 +249,10 @@ void AFTOHUD::Dispatch(FName Category, bool bForce)
 	}
 	const FTOAudio::FDispatchLine& Line = *Lines[FMath::RandRange(0, Lines.Num() - 1)];
 	LastLineOf.Add(Category, Line.Text);
-	NextDispatchTime = Now + 25.f;
+	// A word every 12 s at most; the routine ones less often than that, so they stay funny.
+	NextDispatchTime = Now + 12.f;
+	const float CategoryGap = Category == TEXT("NewCall") ? 50.f : Category == TEXT("Arrest") || Category == TEXT("Booked") ? 35.f : 0.f;
+	NextDispatchOf.Add(Category, Now + CategoryGap);
 	LastDispatch = Line.Text;
 	if (USoundBase* Voice = FTOAudio::DispatchSound(Line))
 	{
@@ -1013,6 +1017,10 @@ void AFTOHUD::UpdateAudioCues(const AFTOGameState* GS)
 		{
 			Play(Sounds.Radio, 0.55f);
 			LastRadioTime = Now;
+			if (Phase == EFTOShiftPhase::OnDuty)
+			{
+				Dispatch(TEXT("NewCall"));
+			}
 		}
 		if (Previous && *Previous != State)
 		{
