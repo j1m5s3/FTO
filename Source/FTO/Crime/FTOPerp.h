@@ -295,6 +295,8 @@ protected:
 	bool bInCrowd = false;
 	float NextShuffle = 0.f;
 	bool bHidingUpstairs = false;
+	/** Found upstairs: there's nowhere to run (they give up instead). */
+	bool bCornered = false;
 
 	FVector Home = FVector::ZeroVector;
 	float HomeYaw = 0.f;

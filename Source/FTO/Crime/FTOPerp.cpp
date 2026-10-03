@@ -165,6 +165,8 @@ void AFTOPerp::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetime
 	DOREPLIFETIME(AFTOPerp, Arrester);
 	DOREPLIFETIME(AFTOPerp, StruggleMeter);
 	DOREPLIFETIME(AFTOPerp, CuffStartTime);
+	DOREPLIFETIME(AFTOPerp, DrunkStage);
+	DOREPLIFETIME(AFTOPerp, DrunkTemper);
 }
 
 void AFTOPerp::Setup(AFTOIncident* InIncident, bool bInCriminal, bool bInArmed, int32 Seed)
@@ -274,6 +276,10 @@ EFTOAnimAction AFTOPerp::GetAnimAction() const
 		return bHandsUp ? EFTOAnimAction::HandsUp : EFTOAnimAction::None; // a whistle stops them for a moment
 	case EFTOPerpArrest::Hiding:
 		// Just another face in the crowd (in a pickpocket's crowd, idling like the rest of them).
+		if (Incident && Incident->IsCrowd() && (bChatting || bHandsUp || bBeingSearched))
+		{
+			return AFTOPedestrian::GetAnimAction(); // talking to the police just like the bystanders do
+		}
 		if (!bHandsUp && !bChatting && Incident && Incident->IsCrowd() && GetCurrentSpeed() < 1.f)
 		{
 			static const EFTOAnimAction Idles[] = { EFTOAnimAction::Phone, EFTOAnimAction::IdleBored, EFTOAnimAction::Talk, EFTOAnimAction::None };
@@ -307,7 +313,11 @@ EFTOAnimAction AFTOPerp::GetAnimAction() const
 	if (IsDrunkCall())
 	{
 		// Swaying about, then rambling at the officers; talked round, off home.
-		if (DrunkStage >= DrunkStages || GetCurrentSpeed() > 1.f)
+		if (DrunkStage >= DrunkStages)
+		{
+			return EFTOAnimAction::Wave;
+		}
+		if (GetCurrentSpeed() > 1.f)
 		{
 			return EFTOAnimAction::None;
 		}
@@ -630,7 +640,7 @@ void AFTOPerp::GetTalkOptions(const AFTOCharacter* Officer, TArray<FText>& OutOp
 		{
 			OutOptions.Add(FText::FromString(Answer == 0 ? Line.Right : Line.Wrong[Answer - 1]));
 		}
-		OutOptions.Add(INVTEXT("Right, that's it: you're under arrest."));
+		OutOptions.Add(INVTEXT("That's all. Stay out of trouble."));
 		return;
 	}
 	Super::GetTalkOptions(Officer, OutOptions);
@@ -641,8 +651,7 @@ bool AFTOPerp::DrunkAnswer(AFTOCharacter* Officer, int32 Index)
 	AFTOPlayerController* PC = PCOf(Officer);
 	if (Index == 3)
 	{
-		TryArrest(Officer);
-		return false;
+		return false; // (walked away: they're still there to talk round)
 	}
 	if (Index < 0 || Index > 2)
 	{
@@ -690,12 +699,11 @@ bool AFTOPerp::DrunkAnswer(AFTOCharacter* Officer, int32 Index)
 
 void AFTOPerp::CalmDown(AFTOCharacter* Officer)
 {
-	ToastOfficersNear(INVTEXT("They've calmed down and are wobbling off home. Nicely handled!"), GoodNews, 2500.f);
+	ToastOfficersNear(INVTEXT("They've calmed down and are waving you off: they'll get a taxi home. Nicely handled!"), GoodNews, 2500.f);
 	bChatting = false;
 	TalkingWith.Reset();
-	const FVector Away = (GetActorLocation() - Officer->GetActorLocation()).GetSafeNormal2D();
+	FaceToward(Officer->GetActorLocation());
 	Incident->HandledPeacefully();
-	MoveTo(GetActorLocation() + (Away.IsNearlyZero() ? GetActorForwardVector() : Away) * 1500.f, 110.f);
 }
 
 bool AFTOPerp::TalkChoice(AFTOCharacter* Officer, int32 Index)
@@ -709,7 +717,7 @@ bool AFTOPerp::TalkChoice(AFTOCharacter* Officer, int32 Index)
 		return false; // (only a suspect lying low is up for a chat)
 	}
 	// Nerves: the questions might be too much for them.
-	if ((Index == 0 || Index == 1) && ForcedResponse == EFTOArrestResponse::Roll && Rng.FRand() < 0.2f)
+	if ((Index == 0 || Index == 1) && ForcedResponse == EFTOArrestResponse::Roll && !bInCrowd && Rng.FRand() < 0.2f)
 	{
 		ToastOfficersNear(FText::Format(INVTEXT("They panicked and ran: that's the {0} suspect! Sprint (Shift) and tackle (F)!"), Incident->GetInfo().Title), Warning, 3000.f);
 		BeginFleeing(Officer);
@@ -789,9 +797,9 @@ void AFTOPerp::TickDeed(float DeltaSeconds)
 		DeedPauseUntil += DeltaSeconds;
 		return;
 	}
-	if (Incident->GetState() == EFTOIncidentState::Responding || Incident->IsSubdued())
+	if ((Incident->GetState() == EFTOIncidentState::Responding && !Incident->IsHiddenInside()) || Incident->IsSubdued())
 	{
-		// The police are here: whatever they were up to stops.
+		// The police are here: whatever they were up to stops (a hidden burglar's still waiting for their moment).
 		if (bDeedWalking)
 		{
 			bDeedWalking = false;
@@ -953,6 +961,10 @@ void AFTOPerp::GoIntoHiding(bool bSeen)
 
 	ArrestState = EFTOPerpArrest::Hiding;
 	bInCrowd = false;
+	if (Incident->IsCrowd())
+	{
+		Incident->SetCrowd(false);
+	}
 	bWandering = false;
 	bOnSidewalks = false;
 	PrevFleeCorner = FIntVector(-1, -1, -1);
@@ -1114,6 +1126,7 @@ void AFTOPerp::Found(AFTOCharacter* Officer)
 	}
 	const bool bUpstairs = bHidingUpstairs;
 	bHidingUpstairs = false;
+	bCornered = bUpstairs;
 	Incident->SuspectFound(GetActorLocation() - FVector(0.f, 0.f, HalfHeight), bUpstairs);
 	FaceToward(Officer->GetActorLocation());
 	ToastOfficersNear(FText::Format(INVTEXT("Found the {0} suspect!"), Incident->GetInfo().Title), ArrestBlue, 3000.f);
@@ -1739,6 +1752,13 @@ void AFTOPerp::EndStruggle(bool bOfficersWon)
 
 void AFTOPerp::BeginFleeing(const AActor* From)
 {
+	if (bCornered)
+	{
+		// Found upstairs: there's no way out but past the police. They give up.
+		ToastOfficersNear(INVTEXT("Nowhere to run up here: they've given up. Cuff them (E)!"), ArrestBlue, 3000.f);
+		GiveUp(nullptr);
+		return;
+	}
 	for (TActorIterator<AFTOCharacter> It(GetWorld()); It; ++It)
 	{
 		if (It->GetTalkingTo() == this)
@@ -1754,6 +1774,10 @@ void AFTOPerp::BeginFleeing(const AActor* From)
 	AimPitch = 0.f;
 	ArrestState = EFTOPerpArrest::Fleeing;
 	bInCrowd = false;
+	if (Incident && Incident->IsCrowd())
+	{
+		Incident->SetCrowd(false);
+	}
 	bHidingUpstairs = false;
 	if (Incident && Incident->IsHiddenInside())
 	{
@@ -2056,12 +2080,12 @@ void AFTOPerp::TickArrest(float DeltaSeconds)
 		if (bInCrowd && !bChatting && !bHandsUp && GetCurrentSpeed() < 1.f && Now >= NextShuffle && !(Knockdown && (Knockdown->IsDown() || Knockdown->IsDazed())))
 		{
 			NextShuffle = Now + Rng.FRandRange(5.f, 12.f);
-			MoveTo(Home + FVector(FMath::RandPointInCircle(140.f), 0.f), 110.f);
+			MoveTo(Home + FVector(FMath::RandPointInCircle(60.f), 0.f), 110.f);
 		}
 		// Lying low. An officer getting too close makes them nervous, and nerves make people run (in a crowd they
 		// keep their cool better: that's the point of a crowd).
-		if (Officer && OfficerDistance < NervousDistance && ForcedResponse == EFTOArrestResponse::Roll && !(Knockdown && Knockdown->IsDown()) &&
-			Rng.FRand() < BoltChancePerSecond * (bInCrowd ? 0.25f : 1.f) * Step && CanSee(Officer))
+		if (Officer && !bInCrowd && OfficerDistance < NervousDistance && ForcedResponse == EFTOArrestResponse::Roll && !(Knockdown && Knockdown->IsDown()) &&
+			Rng.FRand() < BoltChancePerSecond * Step && CanSee(Officer))
 		{
 			ToastOfficersNear(FText::Format(INVTEXT("That's the {0} suspect! They're running! Sprint (Shift) and tackle (F)!"), Incident->GetInfo().Title), Warning, 3000.f);
 			BeginFleeing(Officer);

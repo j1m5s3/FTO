@@ -248,6 +248,8 @@ protected:
 	void SpawnExtras();
 	/** Server: the crowd a pickpocket hides in (the perp joins it). */
 	void SpawnCrowd();
+	/** Somewhere to stand Distance from Center along Dir (or closer, if there's a wall or a kerb in the way). */
+	FVector CrowdSpot(const FVector& Center, const FVector& Dir, float Distance) const;
 	UPROPERTY(Transient) TArray<TObjectPtr<AActor>> Extras;
 	float NextSightingTime = 0.f;
 

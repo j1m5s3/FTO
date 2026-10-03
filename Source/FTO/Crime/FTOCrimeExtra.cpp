@@ -107,7 +107,7 @@ void AFTOCrimeExtra::Tick(float DeltaSeconds)
 		if (Now >= NextShuffle && GetCurrentSpeed() < 1.f)
 		{
 			NextShuffle = Now + Rng.FRandRange(5.f, 12.f);
-			const FVector2D Off = FMath::RandPointInCircle(140.f);
+			const FVector2D Off = FMath::RandPointInCircle(60.f);
 			MoveTo(Spot + FVector(Off, 0.f), 110.f);
 		}
 		return;

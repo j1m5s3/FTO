@@ -173,6 +173,37 @@ void AFTOIncident::SpawnExtras()
 	}
 }
 
+FVector AFTOIncident::CrowdSpot(const FVector& Center, const FVector& Dir, float Distance) const
+{
+	// As far out as Distance, but not through a wall and not off the kerb into the road (or down a step): the ground
+	// there has to be about as high as it is in the middle.
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(FTOCrowdSpot), false, this);
+	Params.AddIgnoredActor(Perp);
+	auto GroundAt = [&](const FVector& P, float& OutZ)
+	{
+		FHitResult Hit;
+		if (!GetWorld()->LineTraceSingleByChannel(Hit, P + FVector(0.f, 0.f, 50.f), P - FVector(0.f, 0.f, 300.f), ECC_Visibility, Params))
+		{
+			return false;
+		}
+		OutZ = Hit.ImpactPoint.Z;
+		return true;
+	};
+	float MiddleZ = Center.Z - AFTOPedestrian::HalfHeight;
+	GroundAt(Center, MiddleZ);
+	for (float Reach = Distance; Reach > 40.f; Reach *= 0.7f)
+	{
+		const FVector Spot = Center + Dir.GetSafeNormal2D() * Reach;
+		FHitResult Wall;
+		float Z = 0.f;
+		if (!GetWorld()->LineTraceSingleByChannel(Wall, Center, Spot, ECC_Visibility, Params) && GroundAt(Spot, Z) && FMath::Abs(Z - MiddleZ) < 8.f)
+		{
+			return FVector(Spot.X, Spot.Y, Z + AFTOPedestrian::HalfHeight);
+		}
+	}
+	return Center;
+}
+
 void AFTOIncident::SpawnCrowd()
 {
 	// A knot of people at the bus stop, any of whom could be the one with the wallet: each looks a bit like the
@@ -187,7 +218,7 @@ void AFTOIncident::SpawnCrowd()
 	for (int32 i = 0; i < Crowd; ++i)
 	{
 		const float Angle = i * 360.f / Crowd + CrowdRng.FRandRange(-15.f, 15.f);
-		const FVector At = Center + Fwd.RotateAngleAxis(Angle, FVector::UpVector) * CrowdRng.FRandRange(170.f, 330.f);
+		const FVector At = CrowdSpot(Center, Fwd.RotateAngleAxis(Angle, FVector::UpVector), CrowdRng.FRandRange(170.f, 330.f));
 		const FVector Face = At + FRotator(0.f, CrowdRng.FRandRange(0.f, 360.f), 0.f).Vector() * 100.f;
 		if (i == PerpSlot)
 		{
@@ -201,7 +232,7 @@ void AFTOIncident::SpawnCrowd()
 		}
 	}
 	// The mark, just outside the crowd, patting their empty pockets.
-	const FVector VictimAt = Center - Fwd * 520.f;
+	const FVector VictimAt = CrowdSpot(Center, -Fwd, 520.f);
 	if (AFTOCrimeExtra* Victim = GetWorld()->SpawnActor<AFTOCrimeExtra>(AFTOCrimeExtra::StaticClass(), VictimAt, Fwd.Rotation(), Params))
 	{
 		Victim->SetupExtra(this, EFTOExtraRole::Victim, VictimAt, Center, GetTypeHash(VictimAt) + 31);
@@ -632,6 +663,17 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 		}
 	}
 
+	// The pickpocket's been found (talked to and caught, or they've bolted): the scene's wherever they are now.
+	if (bCrowd && (!IsValid(Perp) || !Perp->IsHiding()))
+	{
+		bCrowd = false;
+		if (IsValid(Perp))
+		{
+			SetActorLocation(Perp->GetActorLocation() - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight));
+		}
+		RefreshVisuals();
+	}
+
 	// A suspect lying low: citizens phone in sightings till someone finds them, or the trail goes cold.
 	if (bSearch)
 	{
@@ -678,26 +720,16 @@ void AFTOIncident::ServerTick(float DeltaSeconds)
 		return;
 	}
 
-	// The pickpocket's been found (talked to and caught, or they've bolted): the scene's wherever they are now.
-	if (bCrowd && (!IsValid(Perp) || !Perp->IsHiding()))
-	{
-		bCrowd = false;
-		if (IsValid(Perp))
-		{
-			SetActorLocation(Perp->GetActorLocation() - FVector(0.f, 0.f, AFTOPedestrian::HalfHeight));
-		}
-		RefreshVisuals();
-	}
-
 	// A pickpocket in a crowd, a burglar hiding in the building: nobody's talked down by the police just being there,
 	// they have to be found. Officers about the place keep it from going cold.
 	if (bCrowd || bHiddenInside)
 	{
-		const float Near = bCrowd ? SceneRadius * 1.5f : 2500.f;
+		const float Near = bCrowd ? SceneRadius * 1.5f : 4000.f;
 		int32 Count = 0;
 		for (const APlayerState* PS : GetWorld()->GetGameState()->PlayerArray)
 		{
-			const APawn* Pawn = PS ? PS->GetPawn() : nullptr;
+			// (On foot: a drive-by doesn't count.)
+			const APawn* Pawn = PS ? Cast<AFTOCharacter>(PS->GetPawn()) : nullptr;
 			Count += Pawn && FVector::DistSquared2D(Pawn->GetActorLocation(), GetActorLocation()) <= FMath::Square(Near) ? 1 : 0;
 		}
 		OfficersOnScene = Count;
