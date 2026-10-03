@@ -206,8 +206,12 @@ host). Finally the client checks it sees everything the host broke broken too, a
 For play testing without a human at the keyboard (development builds), the local officer can play whole shifts by
 itself through the same inputs a player has: walking and sprinting, E and the conversation options, punches, the
 tackle, the weapons, and driving a cruiser by its throttle and wheel. It reads what a player would (the dispatch
-board, suspect descriptions, the bomb's riddles, what the drunk says), books its suspects at the cells, and walks in
-and out of buildings by their front doors (there's no navmesh in the generated city).
+board, suspect descriptions, the bomb's riddles, what the drunk says), books its suspects at the cells, tasers armed
+suspects, and chases getaway cars in a cruiser (ramming them). It finds its way on foot by a navmesh it has built over
+the city once the city's generated (bot play only: the city's meshes are kept out of navigation otherwise; it's ready
+within a few seconds, agent radius 30 so doorways stay open, `Config/DefaultEngine.ini`), falling back on a building's
+front door or outside stairs, and feeling along walls, where there's no path. It drives by the street grid, a junction
+at a time, keeping right and slowing for corners.
 
 `UnrealEditor.exe FTO.uproject -game -windowed -FTOBotPlay -FTOBotStyle=Careful -FTOBotShifts=1 -FTOBotShots=30 -FTOBotTag=run1`
 
@@ -219,8 +223,11 @@ and out of buildings by their front doors (there's no navmesh in the generated c
 - `-FTOCareerSlot=Name` keeps the bot's career apart from yours.
 
 It logs what it's doing and how the shift's going on `BOT:` lines (a status every 15 s, each call it takes, each
-conversation choice, the results and the scoreboard). With a listen-server host and a client both bot-playing, it's a
-two-player session. It plays like a fair but plain player: it can get stuck on scenery, and it doesn't plan routes.
+conversation choice, the results and the scoreboard). A status line says where it is, what it's doing (driving,
+booking, talking, in a synced move) and how its paths are going; `stuck:` lines (with a screenshot) say when it's gone
+15 s without getting closer, and why there's no path; a call that gets nowhere for 75 s is left for a minute. With a
+listen-server host and a client both bot-playing, it's a two-player session. It plays like a fair but plain player:
+it can still be shot going in through a door, and it walks long distances when there's no cruiser near.
 
 ## Art pipeline
 - **Epic's mannequin content first**: the cast is built on Epic's UE5 mannequin skeleton and plays Epic's engine

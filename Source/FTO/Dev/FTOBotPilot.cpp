@@ -37,6 +37,8 @@ namespace
 {
 	/** Shifts played by this process (bots carry on across New shift's map change). */
 	int32 GShiftsPlayed = 0;
+	/** Shifts whose results this process has seen (a client whose host has gone, back in a world of its own, is done). */
+	int32 GResultsSeen = 0;
 
 	/** Does one description fit another ("red top, bald..." vs "red top, bald..., carrying a sack")? */
 	bool Matches(const FString& Look, const FString& Wanted)
@@ -96,6 +98,12 @@ void AFTOBotPilot::BeginPlay()
 	StartedAt = GetWorld()->GetRealTimeSeconds();
 	NextShot = StartedAt + 8.f;
 	Say(FString::Printf(TEXT("starting: style %s, %d shift(s), a screenshot every %.0f s (shift %d of this run)."), *Style, ShiftsWanted, ShotEvery, GShiftsPlayed + 1));
+	if (GResultsSeen >= ShiftsWanted)
+	{
+		// (The session ended under us after the last shift's results, the host quitting first: that's the run done.)
+		Say(TEXT("done playing (the session's over)."));
+		FPlatformMisc::RequestExit(false, TEXT("FTOBotPlay"));
+	}
 }
 
 AFTOCharacter* AFTOBotPilot::Me() const
@@ -299,6 +307,7 @@ void AFTOBotPilot::TickPhase()
 		if (!bReported && Now - PhaseSince > 6.f)
 		{
 			bReported = true;
+			++GResultsSeen;
 			int32 Team = 0;
 			for (const APlayerState* PS : State->PlayerArray)
 			{
@@ -394,7 +403,8 @@ bool AFTOBotPilot::TakeThemIn()
 	int32 Following = 0;
 	for (TActorIterator<AFTOArrestee> It(GetWorld()); It && Officer; ++It)
 	{
-		Following += It->GetEscort() == Officer && It->GetArrestState() == EFTOArresteeState::Escorted ? 1 : 0;
+		// (In the back of the car counts: they're still ours to book.)
+		Following += It->GetEscort() == Officer && (It->GetArrestState() == EFTOArresteeState::Escorted || It->GetArrestState() == EFTOArresteeState::InCruiser) ? 1 : 0;
 	}
 	// (Straight to the cells, as a player would: a suspect left trailing about the city is a suspect who slips off. Only
 	// a suspect already down on the ground right here comes first.)
